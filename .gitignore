@@ -1,0 +1,24 @@
+# Secrets — never commit these
+.streamlit/secrets.toml
+ai_dashboard.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Empty / scratch folders
+data_cache/
+notebooks/
+utils/

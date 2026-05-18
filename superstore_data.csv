@@ -1,0 +1,1001 @@
+﻿Region,State/Province,Category,Sub-Category,Segment,Average Order Value,Profit Margin,Distinct count of Customer ID,Distinct count of Order ID,Discount,Profit,Quantity,Sales
+Central,Illinois,Furniture,Chairs,Home Office,460.36,-0.16185,9,9,2.7,-670.58,48,"4,143.20"
+Central,Illinois,Furniture,Chairs,Corporate,281.39,-0.03618,7,7,2.1,-71.27,23,"1,969.71"
+Central,Illinois,Furniture,Chairs,Consumer,402.39,-0.09903,20,21,6.6,-836.85,76,"8,450.27"
+Central,Illinois,Furniture,Furnishings,Home Office,75.68,-1.10947,11,11,6.6,-923.59,31,832.47
+Central,Illinois,Furniture,Furnishings,Corporate,32.55,-0.57953,11,11,7.8,-207.52,55,358.08
+Central,Illinois,Furniture,Furnishings,Consumer,58.19,-0.88944,28,29,19.8,"-1,500.87",107,"1,687.43"
+Central,Illinois,Furniture,Bookcases,Home Office,359.06,-0.1,1,1,0.3,-35.91,3,359.06
+Central,Illinois,Furniture,Bookcases,Corporate,483.27,-0.13659,2,2,0.6,-132.02,11,966.55
+Central,Illinois,Furniture,Bookcases,Consumer,492.85,-0.13119,6,6,2.1,-387.95,29,"2,957.09"
+Central,Illinois,Furniture,Tables,Home Office,462.1,-0.62531,3,3,1.5,-866.87,11,"1,386.31"
+Central,Illinois,Furniture,Tables,Corporate,719.1,-0.65815,1,1,1,-473.27,8,719.1
+Central,Illinois,Furniture,Tables,Consumer,341.94,-0.66804,13,13,6.5,"-2,969.61",46,"4,445.27"
+Central,Illinois,Office Supplies,Paper,Home Office,84.99,0.35289,11,13,3,389.88,58,"1,104.83"
+Central,Illinois,Office Supplies,Paper,Corporate,51.94,0.33421,18,18,3.6,312.49,71,935
+Central,Illinois,Office Supplies,Paper,Consumer,59,0.33991,24,24,5.4,481.31,117,"1,415.98"
+Central,Illinois,Office Supplies,Binders,Home Office,85.18,-1.53105,11,12,10.4,"-1,565.01",55,"1,022.18"
+Central,Illinois,Office Supplies,Binders,Corporate,138.54,-1.58757,19,20,17.6,"-4,398.82",101,"2,770.78"
+Central,Illinois,Office Supplies,Binders,Consumer,16.95,-1.66379,41,44,36,"-1,240.50",171,745.58
+Central,Illinois,Office Supplies,Storage,Home Office,217.33,-0.08333,8,8,1.6,-144.88,27,"1,738.63"
+Central,Illinois,Office Supplies,Storage,Corporate,130.85,-0.12147,12,12,2.8,-190.73,50,"1,570.19"
+Central,Illinois,Office Supplies,Storage,Consumer,240.48,0.01354,24,24,5,78.15,74,"5,771.50"
+Central,Illinois,Office Supplies,Appliances,Home Office,70.97,-2.7,1,1,0.8,-191.62,5,70.97
+Central,Illinois,Office Supplies,Appliances,Corporate,40.3,-2.51526,7,7,5.6,-709.55,26,282.1
+Central,Illinois,Office Supplies,Appliances,Consumer,51.8,-2.54363,11,12,9.6,"-1,581.25",45,621.65
+Central,Illinois,Office Supplies,Envelopes,Corporate,9.91,0.325,1,1,0.2,3.22,3,9.91
+Central,Illinois,Office Supplies,Envelopes,Consumer,53.46,0.34557,7,7,1.4,129.31,19,374.19
+Central,Illinois,Office Supplies,Art,Home Office,22.79,0.15403,8,8,1.8,28.08,28,182.34
+Central,Illinois,Office Supplies,Art,Corporate,15.29,0.13896,7,7,1.4,14.87,29,107.02
+Central,Illinois,Office Supplies,Art,Consumer,32.03,0.14984,20,20,4.2,96,92,640.67
+Central,Illinois,Office Supplies,Labels,Home Office,18.1,0.3372,2,2,0.4,12.21,4,36.21
+Central,Illinois,Office Supplies,Labels,Corporate,21.34,0.3536,4,4,0.8,30.19,13,85.38
+Central,Illinois,Office Supplies,Labels,Consumer,14.76,0.33948,7,7,1.4,35.06,31,103.29
+Central,Illinois,Office Supplies,Fasteners,Home Office,16,0.35,1,1,0.2,5.6,4,16
+Central,Illinois,Office Supplies,Fasteners,Corporate,10.67,0.32075,5,5,1,17.11,16,53.35
+Central,Illinois,Office Supplies,Fasteners,Consumer,10.28,0.29565,7,7,1.4,21.28,30,71.98
+Central,Illinois,Office Supplies,Supplies,Corporate,17.18,0.04465,3,3,0.6,2.3,10,51.53
+Central,Illinois,Office Supplies,Supplies,Consumer,31.66,0.08787,4,4,0.8,11.13,16,126.62
+Central,Illinois,Technology,Copiers,Home Office,959.98,0.35,1,1,0.2,335.99,2,959.98
+Central,Illinois,Technology,Copiers,Corporate,"1,759.97",0.28693,2,2,0.4,"1,009.98",8,"3,519.94"
+Central,Illinois,Technology,Copiers,Consumer,"1,439.97",0.3375,1,1,0.2,485.99,4,"1,439.97"
+Central,Illinois,Technology,Phones,Home Office,264.84,0.09935,10,10,2,263.13,26,"2,648.38"
+Central,Illinois,Technology,Phones,Corporate,254.63,0.08951,7,7,1.4,159.53,25,"1,782.38"
+Central,Illinois,Technology,Phones,Consumer,536.57,0.1021,22,23,5,"1,260.03",80,"12,341.02"
+Central,Illinois,Technology,Accessories,Home Office,263.21,0.17758,8,8,1.6,373.93,39,"2,105.67"
+Central,Illinois,Technology,Accessories,Corporate,133.88,0.17503,6,6,1.2,140.59,30,803.26
+Central,Illinois,Technology,Accessories,Consumer,138.25,0.17791,19,19,3.8,467.34,76,"2,626.76"
+Central,Illinois,Technology,Machines,Home Office,598.35,0.14436,4,4,1.2,345.51,9,"2,393.41"
+Central,Illinois,Technology,Machines,Consumer,"1,362.90",-0.01429,1,1,0.3,-19.47,3,"1,362.90"
+Central,Indiana,Furniture,Chairs,Home Office,828.6,0.29,1,1,0,240.29,3,828.6
+Central,Indiana,Furniture,Chairs,Corporate,"1,925.88",0.28,1,1,0,539.25,6,"1,925.88"
+Central,Indiana,Furniture,Chairs,Consumer,741.78,0.21786,5,5,0,808.02,22,"3,708.91"
+Central,Indiana,Furniture,Furnishings,Home Office,190.96,0.08729,3,3,0,50,9,572.87
+Central,Indiana,Furniture,Furnishings,Corporate,20.32,0.34,1,1,0,6.91,4,20.32
+Central,Indiana,Furniture,Furnishings,Consumer,102.37,0.13446,9,9,0,123.88,28,921.29
+Central,Indiana,Furniture,Tables,Home Office,257.94,0.26,1,1,0,67.06,3,257.94
+Central,Indiana,Furniture,Tables,Corporate,"2,678.94",0.09,1,1,0,241.1,6,"2,678.94"
+Central,Indiana,Furniture,Tables,Consumer,581.96,0.18,1,1,0,104.75,2,581.96
+Central,Indiana,Office Supplies,Paper,Home Office,67.45,0.47738,5,5,0,161,29,337.25
+Central,Indiana,Office Supplies,Paper,Corporate,103.3,0.4721,8,8,0,390.15,27,826.41
+Central,Indiana,Office Supplies,Paper,Consumer,89.48,0.47109,8,8,0,337.23,44,715.86
+Central,Indiana,Office Supplies,Binders,Home Office,78.69,0.47012,4,4,0,147.97,13,314.75
+Central,Indiana,Office Supplies,Binders,Corporate,370.49,0.45144,6,6,0,"1,003.53",20,"2,222.93"
+Central,Indiana,Office Supplies,Binders,Consumer,184.28,0.45832,8,8,0,675.66,30,"1,474.20"
+Central,Indiana,Office Supplies,Storage,Home Office,181.02,0.11785,4,4,0,85.33,18,724.09
+Central,Indiana,Office Supplies,Storage,Corporate,514.52,0.14408,5,5,0,370.66,19,"2,572.58"
+Central,Indiana,Office Supplies,Storage,Consumer,205.94,0.12054,4,4,0,99.29,14,823.76
+Central,Indiana,Office Supplies,Appliances,Home Office,209.3,0.27,1,1,0,56.51,2,209.3
+Central,Indiana,Office Supplies,Appliances,Corporate,832.61,0.32837,3,3,0,820.2,13,"2,497.84"
+Central,Indiana,Office Supplies,Appliances,Consumer,242.17,0.26369,5,6,0,383.15,37,"1,453.01"
+Central,Indiana,Office Supplies,Envelopes,Home Office,90.12,0.48696,2,2,0,87.76,11,180.23
+Central,Indiana,Office Supplies,Envelopes,Corporate,177.5,0.4512,3,3,0,240.27,16,532.5
+Central,Indiana,Office Supplies,Envelopes,Consumer,88.42,0.47585,2,2,0,84.15,13,176.83
+Central,Indiana,Office Supplies,Art,Home Office,30.24,0.32561,3,3,0,29.54,10,90.72
+Central,Indiana,Office Supplies,Art,Corporate,47.05,0.29281,5,5,0,68.89,26,235.27
+Central,Indiana,Office Supplies,Art,Consumer,15.8,0.39849,4,4,0,25.18,18,63.2
+Central,Indiana,Office Supplies,Labels,Home Office,51.75,0.48,1,1,0,24.84,5,51.75
+Central,Indiana,Office Supplies,Labels,Consumer,56.12,0.48725,4,4,0,109.37,19,224.46
+Central,Indiana,Office Supplies,Fasteners,Home Office,2.52,0.04,1,1,0,0.1,2,2.52
+Central,Indiana,Office Supplies,Fasteners,Consumer,5.94,0,1,1,0,0,3,5.94
+Central,Indiana,Technology,Copiers,Home Office,999.98,0.45,1,1,0,449.99,2,999.98
+Central,Indiana,Technology,Copiers,Corporate,"17,499.95",0.48,1,1,0,"8,399.98",5,"17,499.95"
+Central,Indiana,Technology,Phones,Home Office,"1,018.87",0.28941,2,2,0,589.73,10,"2,037.74"
+Central,Indiana,Technology,Phones,Corporate,587.97,0.27,1,1,0,158.75,3,587.97
+Central,Indiana,Technology,Phones,Consumer,354.34,0.28558,8,8,0,809.54,39,"2,834.68"
+Central,Indiana,Technology,Accessories,Home Office,171.92,0.42379,1,1,0,72.86,8,171.92
+Central,Indiana,Technology,Accessories,Corporate,62.72,0.2872,3,3,0,54.04,9,188.15
+Central,Indiana,Technology,Accessories,Consumer,274.14,0.23103,7,7,0,443.34,28,"1,918.96"
+Central,Indiana,Technology,Machines,Consumer,83.9,0.27,1,1,0,22.65,2,83.9
+Central,Iowa,Furniture,Chairs,Home Office,"1,408.10",0.28,1,1,0,394.27,10,"1,408.10"
+Central,Iowa,Furniture,Furnishings,Corporate,34.58,0.42,1,1,0,14.52,7,34.58
+Central,Iowa,Furniture,Furnishings,Consumer,14.91,0.31,1,1,0,4.62,3,14.91
+Central,Iowa,Furniture,Tables,Consumer,"1,184.72",0.09,1,1,0,106.62,4,"1,184.72"
+Central,Iowa,Office Supplies,Paper,Home Office,106.32,0.47,1,1,0,49.97,3,106.32
+Central,Iowa,Office Supplies,Paper,Corporate,25.23,0.48208,2,2,0,24.32,8,50.45
+Central,Iowa,Office Supplies,Paper,Consumer,53.01,0.47437,3,3,0,75.44,13,159.04
+Central,Iowa,Office Supplies,Binders,Home Office,15.51,0.47574,3,3,0,22.14,12,46.54
+Central,Iowa,Office Supplies,Binders,Corporate,87.09,0.47783,2,2,0,83.23,16,174.18
+Central,Iowa,Office Supplies,Binders,Consumer,27.24,0.49,1,1,0,13.35,6,27.24
+Central,Iowa,Office Supplies,Storage,Consumer,13.48,0.26,1,1,0,3.5,1,13.48
+Central,Iowa,Office Supplies,Envelopes,Home Office,7.28,0.48,1,1,0,3.49,1,7.28
+Central,Iowa,Office Supplies,Envelopes,Consumer,6.12,0.47,1,1,0,2.88,3,6.12
+Central,Iowa,Office Supplies,Art,Corporate,40.3,0.27,1,1,0,10.88,2,40.3
+Central,Iowa,Office Supplies,Art,Consumer,53.14,0.32568,2,2,0,34.61,6,106.28
+Central,Iowa,Office Supplies,Fasteners,Consumer,45.92,0.47,1,1,0,21.58,4,45.92
+Central,Iowa,Technology,Phones,Corporate,305.97,0.26323,2,2,0,161.08,6,611.94
+Central,Iowa,Technology,Phones,Consumer,271.18,0.29,2,2,0,157.28,7,542.36
+Central,Kansas,Furniture,Furnishings,Home Office,40.56,0.32,1,1,0,12.98,2,40.56
+Central,Kansas,Furniture,Furnishings,Consumer,70.56,0.34,1,1,0,23.99,6,70.56
+Central,Kansas,Office Supplies,Paper,Corporate,13.56,0.46,1,1,0,6.24,2,13.56
+Central,Kansas,Office Supplies,Paper,Consumer,144.72,0.48868,2,2,0,141.44,7,289.44
+Central,Kansas,Office Supplies,Binders,Home Office,229.96,0.45556,2,2,0,209.52,4,459.92
+Central,Kansas,Office Supplies,Binders,Corporate,152,0.46,1,1,0,69.92,5,152
+Central,Kansas,Office Supplies,Storage,Corporate,196.84,0.25831,2,2,0,101.69,3,393.67
+Central,Kansas,Office Supplies,Appliances,Consumer,81.96,0.28,1,1,0,22.95,2,81.96
+Central,Kansas,Office Supplies,Art,Home Office,64.59,0.27137,2,2,0,35.06,6,129.18
+Central,Kansas,Office Supplies,Art,Corporate,27.78,0.33,1,1,0,9.17,6,27.78
+Central,Kansas,Office Supplies,Art,Consumer,5.76,0.3,1,1,0,1.73,2,5.76
+Central,Kansas,Office Supplies,Labels,Consumer,18.9,0.46,1,1,0,8.69,3,18.9
+Central,Kansas,Office Supplies,Fasteners,Corporate,18.24,0.5,1,1,0,9.12,3,18.24
+Central,Kansas,Office Supplies,Fasteners,Consumer,5.81,0.31,1,1,0,1.8,1,5.81
+Central,Kansas,Office Supplies,Supplies,Home Office,357.93,0.02,1,1,0,7.16,3,357.93
+Central,Kansas,Technology,Phones,Home Office,273.96,0.04,1,1,0,10.96,2,273.96
+Central,Kansas,Technology,Phones,Corporate,257.98,0.29,1,1,0,74.81,2,257.98
+Central,Kansas,Technology,Phones,Consumer,224.75,0.28,1,1,0,62.93,5,224.75
+Central,Kansas,Technology,Accessories,Home Office,57.4,0.19,1,1,0,10.91,5,57.4
+Central,Kansas,Technology,Accessories,Corporate,34.95,0.44,1,1,0,15.38,5,34.95
+Central,Manitoba,Furniture,Chairs,Consumer,355.25,0.10998,1,2,0.4,78.14,6,710.5
+Central,Manitoba,Furniture,Furnishings,Consumer,15,-0.31003,1,2,0.8,-9.3,5,29.99
+Central,Manitoba,Office Supplies,Binders,Consumer,284.38,0.07502,2,4,2.8,85.33,19,"1,137.51"
+Central,Manitoba,Office Supplies,Storage,Consumer,26.39,0.09036,1,2,0.4,4.77,10,52.79
+Central,Michigan,Furniture,Chairs,Home Office,487.96,0.3,1,1,0,146.39,2,487.96
+Central,Michigan,Furniture,Chairs,Corporate,"1,323.46",0.21655,6,6,0,"1,719.57",29,"7,940.76"
+Central,Michigan,Furniture,Chairs,Consumer,544.93,0.20841,10,10,0,"1,135.69",46,"5,449.34"
+Central,Michigan,Furniture,Furnishings,Home Office,42.77,0.32391,5,5,0,69.27,28,213.85
+Central,Michigan,Furniture,Furnishings,Corporate,223.37,0.2764,3,3,0,185.22,10,670.1
+Central,Michigan,Furniture,Furnishings,Consumer,129.04,0.17523,8,8,0,180.89,32,"1,032.31"
+Central,Michigan,Furniture,Bookcases,Home Office,227.45,0.21681,2,2,0,98.63,5,454.9
+Central,Michigan,Furniture,Bookcases,Corporate,177.65,0.14641,2,2,0,52.02,5,355.3
+Central,Michigan,Furniture,Tables,Corporate,971.39,0.18929,5,5,0,919.35,21,"4,856.94"
+Central,Michigan,Furniture,Tables,Consumer,429.82,0.19605,2,2,0,168.53,6,859.64
+Central,Michigan,Office Supplies,Paper,Home Office,108.16,0.48862,5,5,0,264.24,20,540.79
+Central,Michigan,Office Supplies,Paper,Corporate,120.81,0.47691,8,9,0,518.55,34,"1,087.31"
+Central,Michigan,Office Supplies,Paper,Consumer,31.89,0.46676,12,12,0,178.6,49,382.64
+Central,Michigan,Office Supplies,Binders,Home Office,683.67,0.49906,6,6,0,"2,047.14",25,"4,101.99"
+Central,Michigan,Office Supplies,Binders,Corporate,97.33,0.47314,7,7,0,322.34,31,681.28
+Central,Michigan,Office Supplies,Binders,Consumer,784.29,0.48285,23,23,0,"8,710.02",136,"18,038.70"
+Central,Michigan,Office Supplies,Storage,Home Office,221.16,0.13221,5,5,0,146.2,15,"1,105.81"
+Central,Michigan,Office Supplies,Storage,Corporate,315.04,0.26048,4,4,0,328.24,15,"1,260.15"
+Central,Michigan,Office Supplies,Storage,Consumer,347.41,0.12193,11,11,0,465.97,53,"3,821.52"
+Central,Michigan,Office Supplies,Appliances,Home Office,401.59,0.26929,3,3,0.3,324.43,9,"1,204.77"
+Central,Michigan,Office Supplies,Appliances,Corporate,176.55,0.27497,7,7,0.7,339.83,26,"1,235.87"
+Central,Michigan,Office Supplies,Appliances,Consumer,313.92,0.22396,6,6,0.6,421.83,20,"1,883.51"
+Central,Michigan,Office Supplies,Envelopes,Home Office,26.81,0.4614,2,2,0,24.74,5,53.62
+Central,Michigan,Office Supplies,Envelopes,Corporate,57.96,0.47,1,1,0,27.24,7,57.96
+Central,Michigan,Office Supplies,Envelopes,Consumer,99.22,0.45176,2,2,0,89.65,4,198.44
+Central,Michigan,Office Supplies,Art,Home Office,28.21,0.27193,4,4,0,30.68,15,112.82
+Central,Michigan,Office Supplies,Art,Corporate,43.25,0.29504,9,9,0,114.84,31,389.25
+Central,Michigan,Office Supplies,Art,Consumer,45.71,0.30995,11,11,0,155.84,45,502.79
+Central,Michigan,Office Supplies,Labels,Home Office,27.72,0.48,1,1,0,13.31,9,27.72
+Central,Michigan,Office Supplies,Labels,Corporate,230.26,0.48989,3,3,0,338.4,8,690.78
+Central,Michigan,Office Supplies,Labels,Consumer,40.52,0.48922,4,4,0,79.28,23,162.06
+Central,Michigan,Office Supplies,Fasteners,Home Office,20.44,0.45,1,1,0,9.2,7,20.44
+Central,Michigan,Office Supplies,Fasteners,Corporate,15.47,0.4759,2,2,0,14.72,8,30.93
+Central,Michigan,Office Supplies,Fasteners,Consumer,29.07,0.32407,2,2,0,18.84,11,58.13
+Central,Michigan,Office Supplies,Supplies,Home Office,70.12,0.3,1,1,0,21.04,4,70.12
+Central,Michigan,Office Supplies,Supplies,Consumer,4.36,0.04,1,1,0,0.17,2,4.36
+Central,Michigan,Technology,Copiers,Home Office,549.99,0.5,1,1,0,275,1,549.99
+Central,Michigan,Technology,Copiers,Consumer,599.98,0.35,1,1,0,209.99,2,599.98
+Central,Michigan,Technology,Phones,Home Office,420.92,0.26642,10,10,0,"1,121.38",33,"4,209.15"
+Central,Michigan,Technology,Phones,Corporate,84.36,0.29008,3,3,0,73.42,10,253.09
+Central,Michigan,Technology,Phones,Consumer,206.28,0.2712,11,11,0,615.37,30,"2,269.04"
+Central,Michigan,Technology,Accessories,Home Office,887.75,0.35762,3,3,0,952.42,19,"2,663.25"
+Central,Michigan,Technology,Accessories,Corporate,273.95,0.22241,3,3,0,182.79,15,821.85
+Central,Michigan,Technology,Accessories,Consumer,180.93,0.35915,8,8,0,519.85,35,"1,447.45"
+Central,Michigan,Technology,Machines,Home Office,350.97,0.43333,1,1,0.1,152.09,3,350.97
+Central,Michigan,Technology,Machines,Corporate,"3,059.98",0.22222,1,1,0.1,680,2,"3,059.98"
+Central,Minnesota,Furniture,Chairs,Home Office,879.21,0.2658,3,3,0,701.09,18,"2,637.64"
+Central,Minnesota,Furniture,Chairs,Corporate,603.92,0.3,1,1,0,181.18,4,603.92
+Central,Minnesota,Furniture,Chairs,Consumer,"1,418.91",0.28954,2,2,0,821.65,11,"2,837.81"
+Central,Minnesota,Furniture,Furnishings,Home Office,29.22,0.44,1,1,0,12.86,3,29.22
+Central,Minnesota,Furniture,Furnishings,Corporate,12.5,0.35942,2,2,0,8.99,5,25
+Central,Minnesota,Furniture,Furnishings,Consumer,88.65,0.15619,2,2,0,27.69,6,177.3
+Central,Minnesota,Furniture,Tables,Home Office,692.94,0.25,1,1,0,173.24,3,692.94
+Central,Minnesota,Furniture,Tables,Consumer,607.52,0.16,1,1,0,97.2,2,607.52
+Central,Minnesota,Office Supplies,Paper,Home Office,39.37,0.48516,3,3,0,57.31,14,118.12
+Central,Minnesota,Office Supplies,Paper,Corporate,38.37,0.4856,2,2,0,37.26,8,76.74
+Central,Minnesota,Office Supplies,Paper,Consumer,25,0.48741,5,5,0,60.94,20,125.02
+Central,Minnesota,Office Supplies,Binders,Home Office,74.76,0.46,1,1,0,34.39,3,74.76
+Central,Minnesota,Office Supplies,Binders,Corporate,261.93,0.45168,3,3,0,354.92,7,785.78
+Central,Minnesota,Office Supplies,Binders,Consumer,"1,289.97",0.48683,9,9,0,"5,651.97",45,"11,609.70"
+Central,Minnesota,Office Supplies,Storage,Home Office,348.93,0.19842,3,3,0,207.7,10,"1,046.78"
+Central,Minnesota,Office Supplies,Storage,Corporate,301.28,0.29443,2,2,0,177.41,8,602.56
+Central,Minnesota,Office Supplies,Storage,Consumer,218.55,0.10078,8,8,0,176.2,30,"1,748.39"
+Central,Minnesota,Office Supplies,Appliances,Home Office,"1,109.45",0.3042,2,2,0,674.98,7,"2,218.89"
+Central,Minnesota,Office Supplies,Appliances,Corporate,77.88,0.29,1,1,0,22.59,6,77.88
+Central,Minnesota,Office Supplies,Appliances,Consumer,182.45,0.30379,3,3,0,166.28,13,547.36
+Central,Minnesota,Office Supplies,Envelopes,Home Office,15.28,0.49,1,1,0,7.49,2,15.28
+Central,Minnesota,Office Supplies,Envelopes,Consumer,15.28,0.49,1,1,0,7.49,2,15.28
+Central,Minnesota,Office Supplies,Art,Home Office,21.85,0.3691,2,2,0,16.13,8,43.69
+Central,Minnesota,Office Supplies,Art,Consumer,14.78,0.34582,4,4,0,20.44,24,59.12
+Central,Minnesota,Office Supplies,Labels,Home Office,44.78,0.48992,2,2,0,43.87,8,89.55
+Central,Minnesota,Office Supplies,Labels,Corporate,50.4,0.46,1,1,0,23.18,8,50.4
+Central,Minnesota,Office Supplies,Labels,Consumer,10.55,0.46584,2,2,0,9.83,5,21.1
+Central,Minnesota,Office Supplies,Fasteners,Consumer,21.45,0.45054,2,2,0,19.33,9,42.9
+Central,Minnesota,Office Supplies,Supplies,Consumer,37.24,0.29,1,1,0,10.8,4,37.24
+Central,Minnesota,Technology,Copiers,Home Office,549.99,0.5,1,1,0,275,1,549.99
+Central,Minnesota,Technology,Phones,Corporate,114.95,0.02,1,1,0,2.3,5,114.95
+Central,Minnesota,Technology,Phones,Consumer,329.97,0.28,2,2,0,184.78,6,659.94
+Central,Minnesota,Technology,Accessories,Corporate,386.94,0.39827,2,2,0,308.21,11,773.88
+Central,Minnesota,Technology,Accessories,Consumer,186.63,0.33291,4,4,0,248.51,15,746.5
+Central,Missouri,Furniture,Chairs,Consumer,60.89,0.25,1,1,0,15.22,1,60.89
+Central,Missouri,Furniture,Furnishings,Home Office,86.62,0.1,1,1,0,8.66,2,86.62
+Central,Missouri,Furniture,Furnishings,Corporate,23.49,0.44558,2,2,0,20.93,4,46.98
+Central,Missouri,Furniture,Furnishings,Consumer,201.87,0.20513,4,4,0,165.64,14,807.48
+Central,Missouri,Furniture,Bookcases,Corporate,212.94,0.25,1,1,0,53.24,3,212.94
+Central,Missouri,Furniture,Tables,Home Office,697.16,0.21,1,1,0,146.4,4,697.16
+Central,Missouri,Furniture,Tables,Consumer,"1,024.38",0.21,1,1,0,215.12,7,"1,024.38"
+Central,Missouri,Office Supplies,Paper,Corporate,38.71,0.4724,4,4,0,73.15,18,154.84
+Central,Missouri,Office Supplies,Paper,Consumer,29.39,0.48214,5,5,0,70.86,24,146.97
+Central,Missouri,Office Supplies,Binders,Home Office,414.15,0.47984,4,4,0,794.9,17,"1,656.59"
+Central,Missouri,Office Supplies,Binders,Corporate,81.96,0.48,1,1,0,39.34,2,81.96
+Central,Missouri,Office Supplies,Binders,Consumer,34.27,0.46815,4,4,0,64.17,18,137.07
+Central,Missouri,Office Supplies,Storage,Home Office,838.38,0.27,1,1,0,226.36,2,838.38
+Central,Missouri,Office Supplies,Storage,Consumer,238.39,0.10059,4,4,0,95.92,15,953.56
+Central,Missouri,Office Supplies,Appliances,Home Office,896.31,0.35885,3,3,0,964.94,15,"2,688.93"
+Central,Missouri,Office Supplies,Appliances,Consumer,327.17,0.26602,3,3,0,261.1,18,981.5
+Central,Missouri,Office Supplies,Envelopes,Consumer,23.73,0.47,2,3,0,33.45,10,71.18
+Central,Missouri,Office Supplies,Art,Corporate,119.81,0.2761,2,2,0,66.16,13,239.62
+Central,Missouri,Office Supplies,Labels,Consumer,14.94,0.46,1,1,0,6.87,3,14.94
+Central,Missouri,Office Supplies,Supplies,Corporate,"2,108.32",0.02349,2,2,0,99.06,8,"4,216.64"
+Central,Missouri,Technology,Copiers,Corporate,"2,749.96",0.46127,2,2,0,"2,536.96",8,"5,499.92"
+Central,Missouri,Technology,Phones,Home Office,282.46,0.39436,2,2,0,222.78,8,564.92
+Central,Missouri,Technology,Accessories,Home Office,21.2,0.43,1,1,0,9.12,2,21.2
+Central,Missouri,Technology,Accessories,Corporate,47.53,0.34,1,1,0,16.16,7,47.53
+Central,Missouri,Technology,Accessories,Consumer,190.59,0.24104,5,5,0,229.7,29,952.95
+Central,Nebraska,Furniture,Chairs,Home Office,563.94,0.2,1,1,0,112.79,3,563.94
+Central,Nebraska,Furniture,Furnishings,Home Office,15.92,0.44,1,1,0,7,2,15.92
+Central,Nebraska,Furniture,Furnishings,Consumer,682.42,0.29208,2,2,0,398.64,16,"1,364.84"
+Central,Nebraska,Office Supplies,Paper,Corporate,61.38,0.48947,2,2,0,60.09,4,122.76
+Central,Nebraska,Office Supplies,Paper,Consumer,42.01,0.47722,5,5,0,100.23,17,210.03
+Central,Nebraska,Office Supplies,Binders,Home Office,34.5,0.45,1,1,0,15.53,3,34.5
+Central,Nebraska,Office Supplies,Binders,Corporate,25.43,0.4831,3,3,0,36.86,9,76.3
+Central,Nebraska,Office Supplies,Binders,Consumer,17.43,0.46,1,1,0,8.02,3,17.43
+Central,Nebraska,Office Supplies,Storage,Corporate,750.68,0.05,1,1,0,37.53,2,750.68
+Central,Nebraska,Office Supplies,Storage,Consumer,413.82,0.2444,1,1,0,101.14,9,413.82
+Central,Nebraska,Office Supplies,Appliances,Corporate,61.29,0.27819,2,2,0,34.1,12,122.57
+Central,Nebraska,Office Supplies,Appliances,Consumer,378,0.36,1,1,0,136.08,2,378
+Central,Nebraska,Office Supplies,Art,Corporate,19.46,0.26,1,1,0,5.06,7,19.46
+Central,Nebraska,Office Supplies,Labels,Consumer,14.4,0.49,1,1,0,7.06,5,14.4
+Central,Nebraska,Office Supplies,Fasteners,Home Office,26.3,0.19359,2,2,0,10.18,10,52.6
+Central,Nebraska,Office Supplies,Fasteners,Corporate,5.04,0.04,1,1,0,0.2,4,5.04
+Central,Nebraska,Office Supplies,Supplies,Consumer,16.9,0.3,1,1,0,5.07,2,16.9
+Central,Nebraska,Technology,Phones,Home Office,269.98,0.27,1,1,0,72.89,2,269.98
+Central,Nebraska,Technology,Phones,Corporate,79.96,0.28,1,1,0,22.39,4,79.96
+Central,Nebraska,Technology,Phones,Consumer,898.62,0.2954,3,3,0,796.35,14,"2,695.86"
+Central,Nebraska,Technology,Accessories,Corporate,89.97,0.21,1,1,0,18.89,3,89.97
+Central,Nebraska,Technology,Accessories,Consumer,149.97,0.34,1,1,0,50.99,3,149.97
+Central,North Dakota,Office Supplies,Binders,Home Office,25.9,0.49,1,1,0,12.69,5,25.9
+Central,North Dakota,Office Supplies,Storage,Consumer,704.76,0.23,1,1,0,162.09,4,704.76
+Central,North Dakota,Office Supplies,Art,Home Office,2.48,0.35,1,1,0,0.87,1,2.48
+Central,North Dakota,Office Supplies,Art,Consumer,179.36,0.28442,1,1,0,51.01,17,179.36
+Central,North Dakota,Office Supplies,Fasteners,Consumer,7.41,0.47,1,1,0,3.48,3,7.41
+Central,Oklahoma,Furniture,Chairs,Home Office,161.96,0.28,1,1,0,45.35,2,161.96
+Central,Oklahoma,Furniture,Chairs,Corporate,368.97,0.22,1,1,0,81.17,3,368.97
+Central,Oklahoma,Furniture,Chairs,Consumer,"1,144.15",0.28559,3,3,0,980.28,14,"3,432.45"
+Central,Oklahoma,Furniture,Furnishings,Corporate,44.03,0.4169,2,2,0,36.71,7,88.05
+Central,Oklahoma,Furniture,Furnishings,Consumer,678.44,0.27693,2,2,0,375.76,14,"1,356.87"
+Central,Oklahoma,Furniture,Bookcases,Consumer,341.96,0.16,1,1,0,54.71,2,341.96
+Central,Oklahoma,Furniture,Tables,Home Office,346.01,0.25242,2,2,0,174.68,6,692.01
+Central,Oklahoma,Furniture,Tables,Corporate,"1,592.85",0.22,1,1,0,350.43,7,"1,592.85"
+Central,Oklahoma,Furniture,Tables,Consumer,248.98,0.22,1,1,0,54.78,2,248.98
+Central,Oklahoma,Office Supplies,Paper,Home Office,22.68,0.48,2,2,0,21.77,7,45.36
+Central,Oklahoma,Office Supplies,Paper,Consumer,30.25,0.46989,5,5,0,71.08,11,151.26
+Central,Oklahoma,Office Supplies,Binders,Home Office,91.03,0.46235,3,3,0,126.26,15,273.08
+Central,Oklahoma,Office Supplies,Binders,Corporate,11.88,0.45,1,1,0,5.35,2,11.88
+Central,Oklahoma,Office Supplies,Binders,Consumer,26.75,0.48697,6,6,0,78.15,25,160.48
+Central,Oklahoma,Office Supplies,Storage,Home Office,568.89,0.05419,2,2,0,61.66,6,"1,137.78"
+Central,Oklahoma,Office Supplies,Storage,Corporate,332.94,0.03,1,1,0,9.99,3,332.94
+Central,Oklahoma,Office Supplies,Storage,Consumer,437.17,0.03286,2,2,0,28.73,7,874.33
+Central,Oklahoma,Office Supplies,Appliances,Home Office,440.85,0.28955,2,2,0,255.3,6,881.7
+Central,Oklahoma,Office Supplies,Appliances,Consumer,304.76,0.35484,2,2,0,216.28,8,609.52
+Central,Oklahoma,Office Supplies,Envelopes,Consumer,203.7,0.462,2,2,0,188.22,5,407.4
+Central,Oklahoma,Office Supplies,Art,Home Office,21.5,0.3239,2,2,0,13.93,6,43
+Central,Oklahoma,Office Supplies,Art,Corporate,12.39,0.28,1,1,0,3.47,3,12.39
+Central,Oklahoma,Office Supplies,Art,Consumer,3.52,0.48,1,1,0,1.69,2,3.52
+Central,Oklahoma,Office Supplies,Labels,Home Office,49.62,0.49,1,1,0,24.31,13,49.62
+Central,Oklahoma,Office Supplies,Labels,Consumer,14.62,0.47,1,1,0,6.87,2,14.62
+Central,Oklahoma,Office Supplies,Supplies,Corporate,21.96,0.28,1,1,0,6.15,2,21.96
+Central,Oklahoma,Technology,Phones,Home Office,755.79,0.25998,3,3,0,589.46,15,"2,267.36"
+Central,Oklahoma,Technology,Phones,Corporate,69.93,0.01,1,1,0,0.7,7,69.93
+Central,Oklahoma,Technology,Phones,Consumer,442.74,0.26881,5,5,0,595.06,19,"2,213.69"
+Central,Oklahoma,Technology,Accessories,Corporate,35.39,0.35978,2,2,0,25.47,5,70.78
+Central,Oklahoma,Technology,Accessories,Consumer,582.23,0.21196,3,3,0,370.22,21,"1,746.69"
+Central,South Dakota,Furniture,Chairs,Corporate,182.94,0.15,1,1,0,27.44,3,182.94
+Central,South Dakota,Furniture,Bookcases,Corporate,141.96,0.28,1,1,0,39.75,2,141.96
+Central,South Dakota,Office Supplies,Binders,Corporate,57.26,0.48594,2,2,0,55.64,14,114.51
+Central,South Dakota,Office Supplies,Appliances,Corporate,416.32,0.27,1,1,0,112.41,2,416.32
+Central,South Dakota,Office Supplies,Labels,Corporate,14.62,0.47,1,1,0,6.87,2,14.62
+Central,South Dakota,Office Supplies,Labels,Consumer,20.23,0.47,1,1,0,9.51,7,20.23
+Central,South Dakota,Office Supplies,Fasteners,Corporate,6.54,0.41,1,1,0,2.68,3,6.54
+Central,South Dakota,Office Supplies,Supplies,Consumer,25.5,0.26,1,1,0,6.63,3,25.5
+Central,South Dakota,Technology,Accessories,Corporate,196.47,0.34076,2,2,0,133.9,6,392.94
+Central,Texas,Furniture,Chairs,Home Office,370.57,-0.1238,10,11,3.3,-504.67,44,"4,076.32"
+Central,Texas,Furniture,Chairs,Corporate,478.09,-0.10545,17,18,5.4,-907.43,77,"8,605.65"
+Central,Texas,Furniture,Chairs,Consumer,478.98,-0.07945,29,29,9.6,"-1,103.55",114,"13,890.47"
+Central,Texas,Furniture,Furnishings,Home Office,48.83,-0.98544,12,12,8.4,-577.4,47,585.94
+Central,Texas,Furniture,Furnishings,Corporate,61.94,-0.88906,23,25,15.6,"-1,376.79",104,"1,548.60"
+Central,Texas,Furniture,Furnishings,Consumer,41.85,-0.83231,36,39,24.6,"-1,358.48",157,"1,632.19"
+Central,Texas,Furniture,Bookcases,Home Office,326.37,-0.17534,4,4,1.28,-228.91,10,"1,305.46"
+Central,Texas,Furniture,Bookcases,Corporate,490.49,-0.16861,10,10,3.2,-827.02,45,"4,904.91"
+Central,Texas,Furniture,Bookcases,Consumer,637.16,-0.1612,13,13,4.16,"-1,335.21",50,"8,283.08"
+Central,Texas,Furniture,Tables,Home Office,290.84,-0.12437,4,4,1.2,-144.69,12,"1,163.36"
+Central,Texas,Furniture,Tables,Corporate,387.82,-0.12171,7,7,2.1,-330.43,24,"2,714.77"
+Central,Texas,Furniture,Tables,Consumer,594.13,-0.14656,20,20,6.6,"-1,741.56",82,"11,882.54"
+Central,Texas,Office Supplies,Paper,Home Office,54.31,0.35171,15,16,3.2,305.61,60,868.93
+Central,Texas,Office Supplies,Paper,Corporate,43.89,0.34789,47,54,11.8,824.47,236,"2,369.91"
+Central,Texas,Office Supplies,Paper,Consumer,62.41,0.34527,56,60,14.4,"1,292.90",276,"3,744.62"
+Central,Texas,Office Supplies,Binders,Home Office,9.85,-1.57752,17,23,20.8,-357.21,117,226.44
+Central,Texas,Office Supplies,Binders,Corporate,37.12,-1.54639,36,38,36,"-2,181.24",182,"1,410.54"
+Central,Texas,Office Supplies,Binders,Consumer,112.21,-1.64287,60,66,65.6,"-12,166.62",327,"7,405.70"
+Central,Texas,Office Supplies,Storage,Home Office,176.86,-0.06604,10,11,2.2,-128.48,52,"1,945.50"
+Central,Texas,Office Supplies,Storage,Corporate,227.77,0.04105,22,22,4.4,205.7,86,"5,010.99"
+Central,Texas,Office Supplies,Storage,Consumer,199.25,-0.09592,40,44,10,-840.93,171,"8,767.10"
+Central,Texas,Office Supplies,Appliances,Home Office,52.89,-2.39995,6,6,4.8,-761.59,28,317.34
+Central,Texas,Office Supplies,Appliances,Corporate,36.36,-2.59767,12,12,10.4,"-1,133.36",43,436.3
+Central,Texas,Office Supplies,Appliances,Consumer,61.27,-2.57062,27,27,22.4,"-4,252.27",88,"1,654.18"
+Central,Texas,Office Supplies,Envelopes,Home Office,86.57,0.33079,8,9,1.8,257.72,31,779.1
+Central,Texas,Office Supplies,Envelopes,Corporate,63.55,0.33505,9,10,2,212.94,31,635.54
+Central,Texas,Office Supplies,Envelopes,Consumer,101.46,0.33828,11,11,2.2,377.52,43,"1,116.01"
+Central,Texas,Office Supplies,Art,Home Office,31.05,0.21728,11,12,2.4,80.97,42,372.64
+Central,Texas,Office Supplies,Art,Corporate,26.97,0.12257,15,15,3.2,49.59,59,404.61
+Central,Texas,Office Supplies,Art,Consumer,40.83,0.11668,39,39,8.6,185.79,158,"1,592.28"
+Central,Texas,Office Supplies,Labels,Home Office,34.25,0.3415,8,8,1.6,93.56,28,273.96
+Central,Texas,Office Supplies,Labels,Corporate,20.55,0.34497,12,12,2.6,85.05,47,246.55
+Central,Texas,Office Supplies,Labels,Consumer,7.01,0.3454,9,9,1.8,21.79,21,63.09
+Central,Texas,Office Supplies,Fasteners,Home Office,15.96,0.15137,2,2,0.4,4.83,11,31.93
+Central,Texas,Office Supplies,Fasteners,Corporate,14.75,0.29423,8,8,1.6,34.72,37,118.01
+Central,Texas,Office Supplies,Fasteners,Consumer,14.04,0.22562,13,13,2.8,41.18,60,182.53
+Central,Texas,Office Supplies,Supplies,Home Office,37.34,-0.21064,2,2,0.4,-15.73,11,74.67
+Central,Texas,Office Supplies,Supplies,Corporate,18.56,-0.06097,5,5,1,-5.66,18,92.8
+Central,Texas,Office Supplies,Supplies,Consumer,395.39,-0.18759,11,11,2.4,-815.89,36,"4,349.29"
+Central,Texas,Technology,Copiers,Corporate,"1,053.31",0.26677,3,3,0.6,842.98,8,"3,159.94"
+Central,Texas,Technology,Copiers,Consumer,"1,239.97",0.31734,2,2,0.4,786.98,8,"2,479.94"
+Central,Texas,Technology,Phones,Home Office,519.66,0.10673,11,11,2.2,610.11,50,"5,716.22"
+Central,Texas,Technology,Phones,Corporate,485.65,0.10801,23,24,5.8,"1,258.92",120,"11,655.71"
+Central,Texas,Technology,Phones,Consumer,287.63,0.12065,39,39,8,"1,353.44",145,"11,217.63"
+Central,Texas,Technology,Accessories,Home Office,185.77,0.10602,12,12,2.4,236.35,42,"2,229.23"
+Central,Texas,Technology,Accessories,Corporate,92.22,0.12432,20,21,4.4,240.75,69,"1,936.54"
+Central,Texas,Technology,Accessories,Consumer,166.58,0.08778,43,43,9.4,628.75,170,"7,162.78"
+Central,Texas,Technology,Machines,Home Office,336.51,0.13333,1,1,0.4,44.87,3,336.51
+Central,Texas,Technology,Machines,Corporate,"1,731.35",-0.12031,5,5,2.4,"-1,041.50",21,"8,656.75"
+Central,Texas,Technology,Machines,Consumer,"1,758.83",-0.15827,6,6,2.4,"-1,670.21",23,"10,552.96"
+Central,Wisconsin,Furniture,Chairs,Corporate,"1,065.29",0.25611,6,6,0,"1,636.98",33,"6,391.72"
+Central,Wisconsin,Furniture,Chairs,Consumer,"1,275.81",0.21564,4,4,0,"1,100.44",23,"5,103.23"
+Central,Wisconsin,Furniture,Furnishings,Home Office,116.49,0.41814,2,2,0,97.42,11,232.98
+Central,Wisconsin,Furniture,Furnishings,Corporate,50.32,0.28864,7,7,0,101.67,28,352.25
+Central,Wisconsin,Furniture,Furnishings,Consumer,144.94,0.23959,3,3,0,104.18,16,434.81
+Central,Wisconsin,Furniture,Bookcases,Home Office,687.4,0.07,1,1,0,48.12,5,687.4
+Central,Wisconsin,Furniture,Bookcases,Corporate,903.92,0.23859,2,2,0,431.32,8,"1,807.84"
+Central,Wisconsin,Furniture,Bookcases,Consumer,459.57,0.12426,3,3,0,171.32,14,"1,378.72"
+Central,Wisconsin,Furniture,Tables,Home Office,867.66,0.17,1,1,0,147.5,6,867.66
+Central,Wisconsin,Office Supplies,Paper,Home Office,427.14,0.4779,2,2,0,408.26,22,854.28
+Central,Wisconsin,Office Supplies,Paper,Corporate,78.76,0.48416,4,4,0,152.52,18,315.02
+Central,Wisconsin,Office Supplies,Paper,Consumer,111.58,0.46877,2,2,0,104.61,8,223.16
+Central,Wisconsin,Office Supplies,Binders,Home Office,37.84,0.49455,3,3,0,56.14,8,113.52
+Central,Wisconsin,Office Supplies,Binders,Corporate,66.23,0.47435,6,6,0,188.51,38,397.4
+Central,Wisconsin,Office Supplies,Binders,Consumer,25.82,0.492,3,3,0,38.12,8,77.47
+Central,Wisconsin,Office Supplies,Storage,Home Office,32.37,0.28,2,2,0,18.12,5,64.73
+Central,Wisconsin,Office Supplies,Storage,Corporate,81.42,0.27032,2,2,0,44.02,9,162.84
+Central,Wisconsin,Office Supplies,Storage,Consumer,259.86,0.05548,3,3,0,43.25,16,779.59
+Central,Wisconsin,Office Supplies,Appliances,Home Office,315.55,0.28867,3,3,0,273.28,17,946.66
+Central,Wisconsin,Office Supplies,Appliances,Corporate,155.88,0.35,1,1,0,54.56,6,155.88
+Central,Wisconsin,Office Supplies,Appliances,Consumer,536.01,0.28,3,3,0,450.25,14,"1,608.03"
+Central,Wisconsin,Office Supplies,Art,Home Office,18.69,0.27767,2,2,0,10.38,11,37.38
+Central,Wisconsin,Office Supplies,Art,Corporate,3.04,0.34,1,1,0,1.03,1,3.04
+Central,Wisconsin,Office Supplies,Art,Consumer,39.79,0.2786,3,3,0,33.26,10,119.37
+Central,Wisconsin,Office Supplies,Labels,Home Office,42.18,0.46957,2,2,0,39.61,14,84.35
+Central,Wisconsin,Office Supplies,Labels,Corporate,7.38,0.47,1,1,0,3.47,2,7.38
+Central,Wisconsin,Office Supplies,Labels,Consumer,43.06,0.46291,2,2,0,39.87,4,86.12
+Central,Wisconsin,Office Supplies,Fasteners,Consumer,1.81,0.36,1,1,0,0.65,1,1.81
+Central,Wisconsin,Office Supplies,Supplies,Home Office,21.81,0.27,1,1,0,5.89,3,21.81
+Central,Wisconsin,Technology,Phones,Home Office,125.99,0.28,1,1,0,35.28,1,125.99
+Central,Wisconsin,Technology,Phones,Corporate,353.38,0.27131,5,5,0,479.38,28,"1,766.88"
+Central,Wisconsin,Technology,Phones,Consumer,703.27,0.2755,3,3,0,581.25,11,"2,109.81"
+Central,Wisconsin,Technology,Accessories,Home Office,362.47,0.26881,4,4,0,389.73,14,"1,449.86"
+Central,Wisconsin,Technology,Accessories,Corporate,172.56,0.31559,6,6,0,326.76,35,"1,035.38"
+Central,Wisconsin,Technology,Accessories,Consumer,577.56,0.33965,4,4,0,784.68,15,"2,310.24"
+East,Connecticut,Furniture,Chairs,Home Office,897.15,0.28,1,1,0,251.2,3,897.15
+East,Connecticut,Furniture,Chairs,Corporate,"1,133.35",0.26,1,1,0,294.67,5,"1,133.35"
+East,Connecticut,Furniture,Chairs,Consumer,751.92,0.2,1,1,0,150.38,4,751.92
+East,Connecticut,Furniture,Furnishings,Home Office,24.83,0.38235,2,2,0,18.99,8,49.66
+East,Connecticut,Furniture,Furnishings,Corporate,103.56,0.22579,2,2,0,46.76,5,207.11
+East,Connecticut,Furniture,Furnishings,Consumer,100.35,0.13557,2,2,0,27.21,6,200.7
+East,Connecticut,Furniture,Bookcases,Corporate,841.37,0.27139,2,2,0,456.68,13,"1,682.74"
+East,Connecticut,Furniture,Tables,Corporate,70.56,-0.05714,1,1,0.3,-4.03,1,70.56
+East,Connecticut,Furniture,Tables,Consumer,181.8,-0.08571,1,1,0.3,-15.58,1,181.8
+East,Connecticut,Office Supplies,Paper,Home Office,16.4,0.48,2,2,0,15.74,5,32.8
+East,Connecticut,Office Supplies,Paper,Corporate,29.75,0.46572,2,2,0,27.71,8,59.5
+East,Connecticut,Office Supplies,Paper,Consumer,99.42,0.48192,7,7,0,335.38,29,695.92
+East,Connecticut,Office Supplies,Binders,Corporate,20.69,0.46883,4,4,0,38.8,14,82.75
+East,Connecticut,Office Supplies,Binders,Consumer,32.12,0.47553,9,9,0,137.48,34,289.12
+East,Connecticut,Office Supplies,Storage,Home Office,162.39,0.25357,2,2,0,82.35,7,324.77
+East,Connecticut,Office Supplies,Storage,Corporate,384.89,0.20159,3,3,0,232.77,21,"1,154.66"
+East,Connecticut,Office Supplies,Storage,Consumer,189.77,0.04267,5,5,0,40.49,18,948.83
+East,Connecticut,Office Supplies,Appliances,Corporate,108.55,0.38143,2,2,0,82.8,5,217.09
+East,Connecticut,Office Supplies,Appliances,Consumer,420.7,0.30827,3,3,0,389.07,12,"1,262.09"
+East,Connecticut,Office Supplies,Envelopes,Consumer,10.86,0.47,1,1,0,5.1,3,10.86
+East,Connecticut,Office Supplies,Art,Home Office,11.12,0.26,1,1,0,2.89,4,11.12
+East,Connecticut,Office Supplies,Art,Corporate,7.2,0.3375,2,2,0,4.86,5,14.4
+East,Connecticut,Office Supplies,Art,Consumer,33.23,0.37759,5,5,0,62.73,17,166.14
+East,Connecticut,Office Supplies,Labels,Corporate,13.05,0.46,1,1,0,6,5,13.05
+East,Connecticut,Office Supplies,Labels,Consumer,10.19,0.47565,2,2,0,9.69,4,20.38
+East,Connecticut,Office Supplies,Supplies,Corporate,19.03,0.21358,2,2,0,8.13,5,38.05
+East,Connecticut,Office Supplies,Supplies,Consumer,38.41,0.29,2,2,0,22.27,10,76.81
+East,Connecticut,Technology,Phones,Corporate,260.61,0.26778,4,4,0,279.14,7,"1,042.43"
+East,Connecticut,Technology,Phones,Consumer,545.46,0.28236,2,2,0,308.03,9,"1,090.91"
+East,Connecticut,Technology,Accessories,Home Office,104.92,0.37093,4,4,0,155.67,11,419.69
+East,Connecticut,Technology,Accessories,Consumer,238,0.16,1,1,0,38.08,2,238
+East,Delaware,Furniture,Chairs,Corporate,291.1,0.26,1,1,0,75.69,5,291.1
+East,Delaware,Furniture,Chairs,Consumer,"1,268.82",0.21,1,1,0,266.45,9,"1,268.82"
+East,Delaware,Furniture,Furnishings,Corporate,118.42,0.16641,3,4,0,78.82,12,473.67
+East,Delaware,Furniture,Furnishings,Consumer,32.74,0.35859,5,5,0,58.71,16,163.72
+East,Delaware,Furniture,Bookcases,Corporate,733.92,0.23,2,2,0,337.6,8,"1,467.84"
+East,Delaware,Furniture,Bookcases,Consumer,291.95,0.23863,2,2,0,139.33,7,583.89
+East,Delaware,Furniture,Tables,Corporate,199.84,-0.18571,1,1,0.3,-37.11,4,199.84
+East,Delaware,Furniture,Tables,Consumer,310.44,-0.15714,1,1,0.3,-48.78,3,310.44
+East,Delaware,Office Supplies,Paper,Home Office,11.54,0.48,1,1,0,5.54,1,11.54
+East,Delaware,Office Supplies,Paper,Corporate,25.09,0.48556,4,4,0,48.73,12,100.36
+East,Delaware,Office Supplies,Paper,Consumer,65.77,0.47669,5,5,0,156.77,31,328.87
+East,Delaware,Office Supplies,Binders,Home Office,420.07,0.47159,3,3,0,594.3,21,"1,260.20"
+East,Delaware,Office Supplies,Binders,Corporate,113.3,0.47484,4,4,0,215.19,22,453.18
+East,Delaware,Office Supplies,Binders,Consumer,102.95,0.48582,7,7,0,350.11,24,720.65
+East,Delaware,Office Supplies,Storage,Corporate,890.65,0.26867,4,4,0,957.17,17,"3,562.58"
+East,Delaware,Office Supplies,Storage,Consumer,205.61,0.26298,3,3,0,162.22,13,616.84
+East,Delaware,Office Supplies,Appliances,Home Office,39.48,0.28,1,1,0,11.05,1,39.48
+East,Delaware,Office Supplies,Appliances,Consumer,100.94,0.33,1,1,0,33.31,7,100.94
+East,Delaware,Office Supplies,Envelopes,Corporate,83.83,0.47,2,2,0,78.8,14,167.65
+East,Delaware,Office Supplies,Envelopes,Consumer,65.79,0.45252,2,2,0,59.54,11,131.58
+East,Delaware,Office Supplies,Art,Home Office,8.64,0.29,1,1,0,2.51,3,8.64
+East,Delaware,Office Supplies,Art,Corporate,82.74,0.29869,4,4,0,98.86,23,330.97
+East,Delaware,Office Supplies,Art,Consumer,39.15,0.29768,5,5,0,58.27,17,195.74
+East,Delaware,Office Supplies,Labels,Corporate,32.46,0.47386,1,1,0,15.38,8,32.46
+East,Delaware,Office Supplies,Labels,Consumer,13.89,0.46454,3,3,0,19.36,12,41.67
+East,Delaware,Office Supplies,Fasteners,Corporate,26.18,0.02,1,1,0,0.52,7,26.18
+East,Delaware,Technology,Copiers,Consumer,"10,499.97",0.48,1,1,0,"5,039.99",3,"10,499.97"
+East,Delaware,Technology,Phones,Home Office,587.97,0.29,1,1,0,170.51,3,587.97
+East,Delaware,Technology,Phones,Corporate,319.65,0.26922,3,3,0,258.17,6,958.96
+East,Delaware,Technology,Phones,Consumer,235.96,0.29861,8,8,0,563.68,27,"1,887.66"
+East,Delaware,Technology,Accessories,Home Office,134.91,0.38998,2,2,0,105.22,6,269.82
+East,Delaware,Technology,Accessories,Corporate,123.44,0.26543,2,2,0,65.53,8,246.87
+East,Delaware,Technology,Accessories,Consumer,45,0.11,1,1,0,4.95,3,45
+East,Delaware,Technology,Machines,Consumer,65.97,0.47,1,1,0,31.01,3,65.97
+East,District of Columbia,Furniture,Chairs,Consumer,"1,267.53",0.25,1,1,0,316.88,3,"1,267.53"
+East,District of Columbia,Furniture,Furnishings,Home Office,37.68,0.42,1,1,0,15.83,2,37.68
+East,District of Columbia,Furniture,Furnishings,Consumer,41.37,0.42,1,1,0,17.38,3,41.37
+East,District of Columbia,Office Supplies,Paper,Home Office,40.08,0.48,1,1,0,19.24,6,40.08
+East,District of Columbia,Office Supplies,Paper,Consumer,32.14,0.4721,1,1,0,15.17,5,32.14
+East,District of Columbia,Office Supplies,Binders,Consumer,9.64,0.46,1,1,0,4.43,2,9.64
+East,District of Columbia,Office Supplies,Art,Home Office,33.92,0.39,1,1,0,13.23,8,33.92
+East,District of Columbia,Office Supplies,Art,Consumer,22.74,0.39,1,1,0,8.87,3,22.74
+East,District of Columbia,Technology,Machines,Consumer,"1,379.92",0.47,1,1,0,648.56,8,"1,379.92"
+East,Maine,Furniture,Furnishings,Corporate,109.48,0.31,1,1,0,33.94,2,109.48
+East,Maine,Office Supplies,Paper,Corporate,259.74,0.48,1,1,0,124.68,13,259.74
+East,Maine,Office Supplies,Binders,Home Office,38.1,0.45434,1,1,0,17.31,4,38.1
+East,Maine,Office Supplies,Appliances,Corporate,101.96,0.27,1,1,0,27.53,2,101.96
+East,Maine,Technology,Phones,Corporate,437.85,0.3,1,1,0,131.36,3,437.85
+East,Maine,Technology,Accessories,Home Office,67.98,0.22,1,1,0,14.96,2,67.98
+East,Maine,Technology,Accessories,Corporate,255.42,0.41,1,1,0,104.72,9,255.42
+East,Maryland,Furniture,Chairs,Home Office,150.98,0.29,1,1,0,43.78,1,150.98
+East,Maryland,Furniture,Chairs,Corporate,619.52,0.20886,5,5,0,646.95,21,"3,097.61"
+East,Maryland,Furniture,Chairs,Consumer,540.66,0.25798,2,2,0,278.96,11,"1,081.32"
+East,Maryland,Furniture,Furnishings,Home Office,402.39,0.2723,3,3,0,328.71,17,"1,207.16"
+East,Maryland,Furniture,Furnishings,Corporate,119.51,0.40246,5,5,0,240.49,22,597.56
+East,Maryland,Furniture,Furnishings,Consumer,268.6,0.24754,5,5,0,332.44,18,"1,343.00"
+East,Maryland,Furniture,Bookcases,Corporate,173.94,0.22,1,1,0,38.27,3,173.94
+East,Maryland,Furniture,Bookcases,Consumer,353.94,0.09513,2,2,0,67.34,6,707.88
+East,Maryland,Furniture,Tables,Consumer,394.9,-0.09004,2,2,0.6,-71.12,5,789.8
+East,Maryland,Office Supplies,Paper,Home Office,153.15,0.48094,2,2,0,147.31,10,306.3
+East,Maryland,Office Supplies,Paper,Corporate,89.94,0.48757,3,3,0,131.55,21,269.81
+East,Maryland,Office Supplies,Paper,Consumer,77.21,0.48798,6,6,0,226.05,24,463.24
+East,Maryland,Office Supplies,Binders,Home Office,37.66,0.49,1,1,0,18.45,7,37.66
+East,Maryland,Office Supplies,Binders,Corporate,25.25,0.47834,4,4,0,48.3,11,100.98
+East,Maryland,Office Supplies,Binders,Consumer,440.92,0.49532,7,7,0,"1,528.75",34,"3,086.41"
+East,Maryland,Office Supplies,Storage,Corporate,860.94,0.23056,4,4,0,793.98,36,"3,443.77"
+East,Maryland,Office Supplies,Storage,Consumer,98.21,0.29,1,1,0,28.48,7,98.21
+East,Maryland,Office Supplies,Appliances,Home Office,355.96,0.29,1,1,0,103.23,2,355.96
+East,Maryland,Office Supplies,Appliances,Corporate,80.13,0.27875,3,3,0,67.01,14,240.39
+East,Maryland,Office Supplies,Appliances,Consumer,496.41,0.32634,2,2,0,323.99,10,992.81
+East,Maryland,Office Supplies,Envelopes,Home Office,137.25,0.46,1,1,0,63.14,9,137.25
+East,Maryland,Office Supplies,Envelopes,Consumer,199.9,0.45,1,1,0,89.96,5,199.9
+East,Maryland,Office Supplies,Art,Home Office,1.64,0.45,1,1,0,0.74,1,1.64
+East,Maryland,Office Supplies,Art,Corporate,81.45,0.28373,4,4,0,92.43,31,325.78
+East,Maryland,Office Supplies,Art,Consumer,26.57,0.37279,4,4,0,39.62,13,106.27
+East,Maryland,Office Supplies,Labels,Home Office,7.83,0.46,1,1,0,3.6,3,7.83
+East,Maryland,Office Supplies,Labels,Corporate,30.94,0.49257,3,3,0,45.72,12,92.81
+East,Maryland,Office Supplies,Labels,Consumer,35.44,0.46825,2,2,0,33.19,11,70.87
+East,Maryland,Office Supplies,Fasteners,Home Office,11.52,0.47,1,1,0,5.41,4,11.52
+East,Maryland,Office Supplies,Fasteners,Consumer,15.8,0.32,1,1,0,5.06,4,15.8
+East,Maryland,Office Supplies,Supplies,Consumer,25.02,0.26,1,1,0,6.51,3,25.02
+East,Maryland,Technology,Phones,Corporate,708.96,0.26391,3,3,0,561.3,11,"2,126.89"
+East,Maryland,Technology,Phones,Consumer,112.59,0.30394,4,4,0,136.88,13,450.37
+East,Maryland,Technology,Accessories,Home Office,49.08,0.1,1,1,0,4.91,3,49.08
+East,Maryland,Technology,Accessories,Corporate,458.3,0.40841,2,2,0,374.34,6,916.59
+East,Maryland,Technology,Accessories,Consumer,79.07,0.22896,2,2,0,36.21,8,158.14
+East,Maryland,Technology,Machines,Consumer,464.97,0.45,1,1,0,209.24,3,464.97
+East,Massachusetts,Furniture,Chairs,Home Office,301.84,0.25899,2,2,0,156.35,4,603.68
+East,Massachusetts,Furniture,Chairs,Corporate,785.88,0.27,1,1,0,212.19,6,785.88
+East,Massachusetts,Furniture,Chairs,Consumer,952.01,0.20784,3,3,0,593.59,18,"2,856.04"
+East,Massachusetts,Furniture,Furnishings,Home Office,67.71,0.24126,5,5,0,81.68,13,338.55
+East,Massachusetts,Furniture,Furnishings,Corporate,60.87,0.3461,2,2,0,42.13,15,121.74
+East,Massachusetts,Furniture,Furnishings,Consumer,124.48,0.3624,3,3,0,135.34,16,373.45
+East,Massachusetts,Furniture,Bookcases,Home Office,215.63,0.16509,3,3,0,106.79,6,646.88
+East,Massachusetts,Furniture,Bookcases,Corporate,221.95,0.23369,2,2,0,103.74,3,443.9
+East,Massachusetts,Furniture,Bookcases,Consumer,782.94,0.26,1,1,0,203.56,3,782.94
+East,Massachusetts,Furniture,Tables,Home Office,486.33,-0.05414,2,2,0.6,-52.66,6,972.65
+East,Massachusetts,Furniture,Tables,Corporate,"1,488.42",-0.2,1,1,0.3,-297.68,7,"1,488.42"
+East,Massachusetts,Furniture,Tables,Consumer,376.23,-0.12954,4,4,1.2,-194.95,9,"1,504.93"
+East,Massachusetts,Office Supplies,Paper,Home Office,75.36,0.46431,5,5,0,174.95,25,376.8
+East,Massachusetts,Office Supplies,Paper,Corporate,95.27,0.46442,8,8,0,353.98,31,762.19
+East,Massachusetts,Office Supplies,Paper,Consumer,70.57,0.47692,9,9,0,302.89,45,635.1
+East,Massachusetts,Office Supplies,Binders,Home Office,155.7,0.48217,4,4,0,300.29,19,622.79
+East,Massachusetts,Office Supplies,Binders,Corporate,109.57,0.47382,6,6,0,311.51,27,657.44
+East,Massachusetts,Office Supplies,Binders,Consumer,137.49,0.47151,6,6,0,388.98,32,824.96
+East,Massachusetts,Office Supplies,Storage,Home Office,581.31,0.27348,2,2,0,317.96,7,"1,162.61"
+East,Massachusetts,Office Supplies,Storage,Corporate,331.6,0.16478,7,7,0,382.49,28,"2,321.21"
+East,Massachusetts,Office Supplies,Storage,Consumer,268.32,0.28915,3,3,0,232.76,13,804.96
+East,Massachusetts,Office Supplies,Appliances,Home Office,245.88,0.28,1,1,0,68.85,6,245.88
+East,Massachusetts,Office Supplies,Appliances,Corporate,899.57,0.28897,2,2,0,519.89,8,"1,799.14"
+East,Massachusetts,Office Supplies,Appliances,Consumer,434.24,0.31549,3,3,0,411,12,"1,302.73"
+East,Massachusetts,Office Supplies,Art,Home Office,17.12,0.29,1,1,0,4.96,4,17.12
+East,Massachusetts,Office Supplies,Art,Corporate,10.78,0.26549,2,2,0,5.72,4,21.56
+East,Massachusetts,Office Supplies,Art,Consumer,26.77,0.29952,7,7,0,56.12,22,187.37
+East,Massachusetts,Office Supplies,Labels,Home Office,14.76,0.47,1,1,0,6.94,4,14.76
+East,Massachusetts,Office Supplies,Labels,Consumer,50.3,0.46212,3,3,0,69.73,9,150.89
+East,Massachusetts,Office Supplies,Fasteners,Home Office,17.28,0.47,1,1,0,8.12,6,17.28
+East,Massachusetts,Office Supplies,Fasteners,Consumer,16.94,0.46311,2,2,0,15.69,9,33.88
+East,Massachusetts,Office Supplies,Supplies,Home Office,25.71,0.26,1,1,0,6.68,3,25.71
+East,Massachusetts,Office Supplies,Supplies,Consumer,4.36,0.04,1,1,0,0.17,2,4.36
+East,Massachusetts,Technology,Copiers,Home Office,"1,199.98",0.39,1,1,0,467.99,2,"1,199.98"
+East,Massachusetts,Technology,Phones,Home Office,450.94,0.2673,2,2,0,241.07,4,901.88
+East,Massachusetts,Technology,Phones,Corporate,309.53,0.27122,4,4,0,335.8,25,"1,238.11"
+East,Massachusetts,Technology,Phones,Consumer,297.95,0.29487,5,5,0,439.28,14,"1,489.75"
+East,Massachusetts,Technology,Accessories,Home Office,174.18,0.33566,4,4,0,233.86,19,696.73
+East,Massachusetts,Technology,Accessories,Consumer,100.09,0.18853,2,2,0,37.74,5,200.18
+East,New Brunswick,Furniture,Furnishings,Corporate,39.96,-0.52492,1,4,2.4,-83.9,20,159.84
+East,New Brunswick,Office Supplies,Art,Corporate,16.46,0.14824,1,4,0.8,9.76,28,65.86
+East,New Hampshire,Furniture,Furnishings,Home Office,322.59,0.2,1,1,0,64.52,3,322.59
+East,New Hampshire,Furniture,Furnishings,Corporate,136.14,0.41168,3,3,0,168.14,19,408.42
+East,New Hampshire,Furniture,Furnishings,Consumer,102.3,0.26,1,1,0,26.6,1,102.3
+East,New Hampshire,Furniture,Tables,Home Office,"1,053.16",-0.1,1,1,0.3,-105.32,4,"1,053.16"
+East,New Hampshire,Office Supplies,Paper,Home Office,107.28,0.46418,2,2,0,99.59,12,214.56
+East,New Hampshire,Office Supplies,Paper,Corporate,35.88,0.45,1,1,0,16.15,6,35.88
+East,New Hampshire,Office Supplies,Paper,Consumer,34.44,0.5,1,1,0,17.22,3,34.44
+East,New Hampshire,Office Supplies,Binders,Corporate,22.92,0.48,1,1,0,11,4,22.92
+East,New Hampshire,Office Supplies,Binders,Consumer,370.28,0.47,2,2,0,348.06,5,740.56
+East,New Hampshire,Office Supplies,Storage,Home Office,67.4,0.26,1,1,0,17.52,5,67.4
+East,New Hampshire,Office Supplies,Storage,Corporate,269.9,0.06,1,1,0,16.19,5,269.9
+East,New Hampshire,Office Supplies,Appliances,Corporate,33.28,0.28,1,1,0,9.32,4,33.28
+East,New Hampshire,Office Supplies,Art,Home Office,227.88,0.3,1,1,0,68.36,6,227.88
+East,New Hampshire,Office Supplies,Art,Corporate,38.52,0.31,1,1,0,11.94,9,38.52
+East,New Hampshire,Office Supplies,Labels,Home Office,24.64,0.48,1,1,0,11.83,8,24.64
+East,New Hampshire,Office Supplies,Labels,Consumer,16.52,0.46,1,1,0,7.6,4,16.52
+East,New Hampshire,Office Supplies,Fasteners,Consumer,14.82,0.47,1,1,0,6.97,6,14.82
+East,New Hampshire,Office Supplies,Supplies,Home Office,27.93,0.29,1,1,0,8.1,3,27.93
+East,New Hampshire,Technology,Phones,Home Office,824.95,0.3,1,1,0,247.49,5,824.95
+East,New Hampshire,Technology,Accessories,Home Office,"1,325.94",0.22536,2,2,0,597.63,13,"2,651.87"
+East,New Hampshire,Technology,Accessories,Corporate,159.98,0.36,1,1,0,57.59,2,159.98
+East,New Jersey,Furniture,Chairs,Corporate,456.71,0.22442,4,4,0,409.97,12,"1,826.82"
+East,New Jersey,Furniture,Chairs,Consumer,278.36,0.14482,3,3,0,120.94,10,835.08
+East,New Jersey,Furniture,Furnishings,Home Office,8.92,0.44,1,1,0,3.92,4,8.92
+East,New Jersey,Furniture,Furnishings,Corporate,65.65,0.33263,9,9,0,196.53,36,590.83
+East,New Jersey,Furniture,Furnishings,Consumer,87.81,0.31565,4,4,0,110.86,13,351.22
+East,New Jersey,Furniture,Bookcases,Consumer,"1,137.94",0.06213,2,2,0,141.39,6,"2,275.88"
+East,New Jersey,Furniture,Tables,Consumer,209.15,-0.12262,2,2,0.6,-51.29,4,418.29
+East,New Jersey,Office Supplies,Paper,Home Office,16.18,0.48164,4,4,0,31.18,10,64.73
+East,New Jersey,Office Supplies,Paper,Corporate,106.8,0.48082,7,7,0,359.45,31,747.58
+East,New Jersey,Office Supplies,Paper,Consumer,152.36,0.48031,4,4,0,292.73,18,609.45
+East,New Jersey,Office Supplies,Binders,Home Office,73.75,0.46492,4,4,0,137.14,16,294.98
+East,New Jersey,Office Supplies,Binders,Corporate,342.41,0.47313,6,6,0,972.03,18,"2,054.47"
+East,New Jersey,Office Supplies,Binders,Consumer,295.02,0.45752,4,4,0,539.91,15,"1,180.07"
+East,New Jersey,Office Supplies,Storage,Home Office,934.76,0.24033,3,3,0,673.95,12,"2,804.27"
+East,New Jersey,Office Supplies,Storage,Corporate,366.15,0.05223,5,5,0,95.63,18,"1,830.76"
+East,New Jersey,Office Supplies,Storage,Consumer,34.05,0.28,1,1,0,9.53,3,34.05
+East,New Jersey,Office Supplies,Appliances,Home Office,76.5,0.26452,2,2,0,40.47,9,152.99
+East,New Jersey,Office Supplies,Appliances,Corporate,69.23,0.28191,4,4,0,78.07,8,276.92
+East,New Jersey,Office Supplies,Appliances,Consumer,629.08,0.28743,6,6,0,"1,084.90",31,"3,774.45"
+East,New Jersey,Office Supplies,Envelopes,Home Office,52.34,0.47,1,1,0,24.6,2,52.34
+East,New Jersey,Office Supplies,Envelopes,Corporate,37.24,0.46568,2,2,0,34.68,6,74.48
+East,New Jersey,Office Supplies,Envelopes,Consumer,26.88,0.48,1,1,0,12.9,6,26.88
+East,New Jersey,Office Supplies,Art,Home Office,146.93,0.29,2,2,0,85.22,8,293.86
+East,New Jersey,Office Supplies,Art,Corporate,9.76,0.25991,3,3,0,7.61,10,29.27
+East,New Jersey,Office Supplies,Art,Consumer,69.95,0.26322,6,6,0,110.47,19,419.67
+East,New Jersey,Office Supplies,Labels,Home Office,31.05,0.48,1,1,0,14.9,3,31.05
+East,New Jersey,Office Supplies,Labels,Corporate,14.4,0.49,1,1,0,7.06,5,14.4
+East,New Jersey,Office Supplies,Labels,Consumer,6.96,0.48705,3,3,0,10.17,5,20.89
+East,New Jersey,Office Supplies,Fasteners,Home Office,7.16,0.5,1,1,0,3.58,2,7.16
+East,New Jersey,Office Supplies,Fasteners,Corporate,6.54,0.33,1,1,0,2.16,3,6.54
+East,New Jersey,Office Supplies,Fasteners,Consumer,13.47,0.23188,3,3,0,9.37,15,40.42
+East,New Jersey,Office Supplies,Supplies,Home Office,27.93,0.29,1,1,0,8.1,3,27.93
+East,New Jersey,Office Supplies,Supplies,Consumer,43.25,0.2841,2,2,0,24.58,7,86.5
+East,New Jersey,Technology,Phones,Home Office,104.98,0.5,1,1,0,52.49,2,104.98
+East,New Jersey,Technology,Phones,Corporate,396.97,0.37026,3,3,0,440.95,12,"1,190.91"
+East,New Jersey,Technology,Phones,Consumer,570.47,0.27047,4,4,0,617.18,19,"2,281.86"
+East,New Jersey,Technology,Accessories,Home Office,159.47,0.34997,2,2,0,111.62,7,318.93
+East,New Jersey,Technology,Accessories,Corporate,102.68,0.39932,2,2,0,82,8,205.36
+East,New Jersey,Technology,Accessories,Consumer,99.85,0.31247,5,5,0,156.01,19,499.27
+East,New Jersey,Technology,Machines,Corporate,"4,709.93",0.26374,2,2,0,"2,484.35",15,"9,419.85"
+East,New Jersey,Technology,Machines,Consumer,480,0.47,1,1,0,225.6,4,480
+East,New York,Furniture,Chairs,Home Office,576.26,0.17013,12,12,1.3,"1,176.48",53,"6,915.14"
+East,New York,Furniture,Chairs,Corporate,568.58,0.15504,16,19,1.9,"1,674.85",70,"10,803.07"
+East,New York,Furniture,Chairs,Consumer,722.9,0.14731,40,40,4.4,"4,259.68",190,"28,916.04"
+East,New York,Furniture,Furnishings,Home Office,74.08,0.3042,9,9,0,202.83,41,666.75
+East,New York,Furniture,Furnishings,Corporate,128.55,0.24614,31,33,0,"1,044.12",133,"4,242.06"
+East,New York,Furniture,Furnishings,Consumer,107.62,0.31942,48,49,0,"1,684.48",182,"5,273.51"
+East,New York,Furniture,Bookcases,Home Office,638.34,0.07008,3,3,0.8,134.2,12,"1,915.01"
+East,New York,Furniture,Bookcases,Corporate,534.61,0.08831,5,5,1,236.07,19,"2,673.03"
+East,New York,Furniture,Bookcases,Consumer,826.78,-0.00107,22,22,4.6,-19.39,82,"18,189.10"
+East,New York,Furniture,Tables,Home Office,212.1,-0.31257,2,2,0.8,-132.59,5,424.19
+East,New York,Furniture,Tables,Corporate,597.86,-0.34658,12,12,5.6,"-2,486.49",37,"7,174.27"
+East,New York,Furniture,Tables,Consumer,515.05,-0.31009,12,12,4.8,"-1,916.56",53,"6,180.56"
+East,New York,Office Supplies,Paper,Home Office,96.06,0.47584,20,23,0,"1,051.33",108,"2,209.42"
+East,New York,Office Supplies,Paper,Corporate,67.47,0.47971,29,32,0,"1,035.74",132,"2,159.12"
+East,New York,Office Supplies,Paper,Consumer,51.11,0.4735,72,80,0,"1,936.01",325,"4,088.72"
+East,New York,Office Supplies,Binders,Home Office,293.35,0.32792,18,19,4.4,"1,827.73",101,"5,573.73"
+East,New York,Office Supplies,Binders,Corporate,164.88,0.33761,38,43,9.8,"2,393.63",193,"7,089.99"
+East,New York,Office Supplies,Binders,Consumer,208.35,0.34732,87,95,21.6,"6,874.66",402,"19,793.19"
+East,New York,Office Supplies,Storage,Home Office,285.1,0.09405,14,14,0,375.4,52,"3,991.38"
+East,New York,Office Supplies,Storage,Corporate,355.62,0.21179,26,26,0,"1,958.21",116,"9,246.15"
+East,New York,Office Supplies,Storage,Consumer,279.4,0.14642,48,49,0,"2,004.61",188,"13,690.82"
+East,New York,Office Supplies,Appliances,Home Office,216.71,0.28464,6,6,0,370.09,24,"1,300.24"
+East,New York,Office Supplies,Appliances,Corporate,398.93,0.27155,13,14,0,"1,516.60",58,"5,585.04"
+East,New York,Office Supplies,Appliances,Consumer,266.3,0.30059,24,24,0,"1,921.07",84,"6,391.10"
+East,New York,Office Supplies,Envelopes,Home Office,30.75,0.46167,3,3,0,42.58,8,92.24
+East,New York,Office Supplies,Envelopes,Corporate,58.99,0.47919,11,11,0,310.95,39,648.92
+East,New York,Office Supplies,Envelopes,Consumer,57.54,0.46104,17,18,0,477.49,58,"1,035.67"
+East,New York,Office Supplies,Art,Home Office,22.44,0.31299,17,19,0,133.44,62,426.36
+East,New York,Office Supplies,Art,Corporate,43.08,0.29666,21,22,0,281.13,105,947.67
+East,New York,Office Supplies,Art,Consumer,41.27,0.30288,38,39,0,487.51,169,"1,609.57"
+East,New York,Office Supplies,Labels,Home Office,20.78,0.47093,6,6,0,58.73,22,124.7
+East,New York,Office Supplies,Labels,Corporate,21.97,0.47452,8,8,0,83.39,32,175.73
+East,New York,Office Supplies,Labels,Consumer,36.67,0.47373,27,27,0,469.06,124,990.14
+East,New York,Office Supplies,Fasteners,Home Office,7.56,0.04,1,1,0,0.3,6,7.56
+East,New York,Office Supplies,Fasteners,Corporate,13.83,0.40433,7,7,0,39.13,33,96.78
+East,New York,Office Supplies,Fasteners,Consumer,14.01,0.42396,13,13,0,77.23,47,182.17
+East,New York,Office Supplies,Supplies,Home Office,123.84,0.03796,2,2,0,9.4,3,247.67
+East,New York,Office Supplies,Supplies,Corporate,65.88,0.12751,8,8,0,67.21,26,527.04
+East,New York,Office Supplies,Supplies,Consumer,127.78,0.10701,14,14,0,191.43,68,"1,788.92"
+East,New York,Technology,Copiers,Home Office,"5,999.98",0.3475,2,2,0.4,"4,169.98",6,"11,999.95"
+East,New York,Technology,Copiers,Corporate,479.98,0.1875,1,1,0.2,90,2,479.98
+East,New York,Technology,Copiers,Consumer,"1,179.98",0.33475,4,4,0.8,"1,579.97",12,"4,719.90"
+East,New York,Technology,Phones,Home Office,558.66,0.2674,14,14,0,"2,091.38",56,"7,821.21"
+East,New York,Technology,Phones,Corporate,361.1,0.28066,31,33,0,"3,344.38",110,"11,916.26"
+East,New York,Technology,Phones,Consumer,533.95,0.28681,51,52,0,"7,963.43",227,"27,765.15"
+East,New York,Technology,Accessories,Home Office,245.47,0.31045,10,10,0,762.06,41,"2,454.67"
+East,New York,Technology,Accessories,Corporate,189.88,0.32501,16,17,0,"1,049.12",72,"3,227.98"
+East,New York,Technology,Accessories,Consumer,339.39,0.27427,39,41,0,"3,816.39",163,"13,914.89"
+East,New York,Technology,Machines,Home Office,"1,924.28",0.48504,6,6,0,"5,600.13",25,"11,545.70"
+East,New York,Technology,Machines,Corporate,"2,739.56",0.35467,4,4,0,"3,886.51",18,"10,958.22"
+East,New York,Technology,Machines,Consumer,"3,446.60",0.3788,6,6,0,"7,833.45",30,"20,679.58"
+East,Newfoundland and Labrador,Furniture,Furnishings,Corporate,103.04,0.36234,1,5,0,186.68,45,515.2
+East,Nova Scotia,Furniture,Furnishings,Home Office,58.36,-0.425,1,4,2.4,-99.21,20,233.44
+East,Nova Scotia,Office Supplies,Paper,Home Office,74.35,0.3125,1,2,0.4,46.47,6,148.7
+East,Ohio,Furniture,Chairs,Home Office,420.31,-0.05231,4,4,1.5,-87.95,12,"1,681.23"
+East,Ohio,Furniture,Chairs,Corporate,549.02,-0.12556,5,5,1.5,-344.69,20,"2,745.12"
+East,Ohio,Furniture,Chairs,Consumer,519.94,-0.03789,9,11,3.9,-216.72,47,"5,719.35"
+East,Ohio,Furniture,Furnishings,Home Office,52.2,0.20882,9,10,2,109,54,521.99
+East,Ohio,Furniture,Furnishings,Corporate,88.02,0.00917,9,9,1.8,7.27,31,792.22
+East,Ohio,Furniture,Furnishings,Consumer,110.98,0.14459,24,25,5.4,401.15,99,"2,774.41"
+East,Ohio,Furniture,Bookcases,Home Office,86.97,-0.56,1,1,0.5,-48.7,3,86.97
+East,Ohio,Furniture,Bookcases,Corporate,338.45,-0.65414,4,4,2,-885.57,20,"1,353.80"
+East,Ohio,Furniture,Bookcases,Consumer,212.31,-0.66691,3,3,1.5,-424.78,9,636.94
+East,Ohio,Furniture,Tables,Home Office,310.22,-0.38752,5,5,2,-601.09,12,"1,551.10"
+East,Ohio,Furniture,Tables,Corporate,882.19,-0.32575,6,6,2.4,"-1,724.22",29,"5,293.13"
+East,Ohio,Furniture,Tables,Consumer,208.58,-0.37399,5,5,2,-390.02,8,"1,042.88"
+East,Ohio,Office Supplies,Paper,Home Office,63.49,0.34598,15,16,4.2,351.47,74,"1,015.86"
+East,Ohio,Office Supplies,Paper,Corporate,44.47,0.35556,7,8,1.8,126.5,26,355.78
+East,Ohio,Office Supplies,Paper,Consumer,32.28,0.34349,24,24,5.2,266.08,94,774.64
+East,Ohio,Office Supplies,Binders,Home Office,28.65,-0.74798,14,14,9.8,-300.02,67,401.11
+East,Ohio,Office Supplies,Binders,Corporate,28.99,-0.73962,12,14,11.9,-300.13,83,405.79
+East,Ohio,Office Supplies,Binders,Consumer,30.01,-0.72106,35,37,29.4,-800.51,142,"1,110.19"
+East,Ohio,Office Supplies,Storage,Home Office,283.96,0.00876,4,4,0.8,9.95,18,"1,135.82"
+East,Ohio,Office Supplies,Storage,Corporate,178.58,-0.01957,8,8,2,-27.97,29,"1,428.61"
+East,Ohio,Office Supplies,Storage,Consumer,235,-0.05496,20,20,4.6,-258.32,76,"4,700.01"
+East,Ohio,Office Supplies,Appliances,Home Office,294.27,0.11019,4,4,0.8,129.7,16,"1,177.09"
+East,Ohio,Office Supplies,Appliances,Corporate,241.5,0.09161,8,8,1.8,176.99,43,"1,932.03"
+East,Ohio,Office Supplies,Appliances,Consumer,169.84,0.10573,10,10,2,179.57,37,"1,698.42"
+East,Ohio,Office Supplies,Envelopes,Home Office,37.86,0.33883,3,3,0.6,38.49,6,113.59
+East,Ohio,Office Supplies,Envelopes,Corporate,33.97,0.36469,3,3,0.6,37.16,10,101.9
+East,Ohio,Office Supplies,Envelopes,Consumer,69.3,0.3433,5,5,1.2,118.96,22,346.51
+East,Ohio,Office Supplies,Art,Home Office,12.11,0.10694,4,4,0.8,5.18,14,48.42
+East,Ohio,Office Supplies,Art,Corporate,22.56,0.11536,9,9,1.8,23.42,34,203.01
+East,Ohio,Office Supplies,Art,Consumer,24.53,0.1268,24,24,5.2,74.64,92,588.67
+East,Ohio,Office Supplies,Labels,Home Office,13.86,0.34581,2,2,0.4,9.58,12,27.71
+East,Ohio,Office Supplies,Labels,Corporate,15.24,0.35657,3,3,0.6,16.3,8,45.71
+East,Ohio,Office Supplies,Labels,Consumer,11.05,0.33523,8,8,1.6,29.64,23,88.42
+East,Ohio,Office Supplies,Fasteners,Home Office,14.5,0.33627,3,3,0.6,14.63,15,43.5
+East,Ohio,Office Supplies,Fasteners,Corporate,13.79,0.19124,3,3,0.8,7.91,22,41.36
+East,Ohio,Office Supplies,Fasteners,Consumer,17.15,0.32142,7,7,1.4,38.58,46,120.04
+East,Ohio,Office Supplies,Supplies,Corporate,199.06,-0.20104,2,2,0.4,-80.04,4,398.11
+East,Ohio,Office Supplies,Supplies,Consumer,16.14,-0.03553,5,5,1,-2.87,18,80.7
+East,Ohio,Technology,Copiers,Corporate,869.99,0.08333,2,2,0.8,145,5,"1,739.97"
+East,Ohio,Technology,Copiers,Consumer,"1,049.98",0.14381,2,2,0.8,301.99,6,"2,099.96"
+East,Ohio,Technology,Phones,Home Office,241.84,-0.21331,9,9,3.6,-464.28,35,"2,176.57"
+East,Ohio,Technology,Phones,Corporate,281.32,-0.21177,11,11,6,-655.32,43,"3,094.48"
+East,Ohio,Technology,Phones,Consumer,445.9,-0.1772,21,21,9.2,"-1,659.27",101,"9,363.90"
+East,Ohio,Technology,Accessories,Home Office,145.53,0.09724,6,6,1.2,84.91,22,873.17
+East,Ohio,Technology,Accessories,Corporate,174.14,0.17077,14,14,2.8,416.33,59,"2,437.94"
+East,Ohio,Technology,Accessories,Consumer,233.89,0.19375,21,21,4.6,951.63,74,"4,911.76"
+East,Ohio,Technology,Machines,Corporate,920.5,-1.02464,2,2,1.4,"-1,886.36",16,"1,841.00"
+East,Ohio,Technology,Machines,Consumer,"1,189.54",-1.38493,6,6,4.2,"-9,884.59",23,"7,137.24"
+East,Ontario,Furniture,Chairs,Consumer,311.43,0.29076,1,3,0,271.66,15,934.3
+East,Ontario,Furniture,Furnishings,Corporate,65.18,0.42083,1,4,0,109.72,44,260.72
+East,Ontario,Furniture,Tables,Home Office,285.14,-0.05632,1,2,0.3,-32.12,7,570.28
+East,Ontario,Furniture,Tables,Consumer,72.02,-0.13258,1,3,0.3,-28.65,8,216.06
+East,Ontario,Office Supplies,Paper,Corporate,6.48,0.47994,1,4,0,12.44,4,25.92
+East,Ontario,Office Supplies,Binders,Consumer,152.92,0.42627,3,11,1.1,717.05,54,"1,682.13"
+East,Ontario,Office Supplies,Storage,Home Office,300.22,-0.084,1,2,0.3,-50.44,3,600.43
+East,Ontario,Office Supplies,Appliances,Consumer,87.26,0.2918,1,4,0.2,101.85,8,349.04
+East,Ontario,Office Supplies,Art,Consumer,25.81,0.10832,2,7,0.8,19.57,17,180.67
+East,Ontario,Office Supplies,Fasteners,Home Office,41.12,0.37519,1,2,0.2,30.86,20,82.24
+East,Ontario,Office Supplies,Supplies,Home Office,25.98,0.34074,1,2,0,17.71,6,51.96
+East,Ontario,Technology,Copiers,Home Office,608.63,0.39113,1,2,0,476.11,8,"1,217.26"
+East,Ontario,Technology,Phones,Corporate,209.5,0.28,1,4,0,234.64,40,838
+East,Pennsylvania,Furniture,Chairs,Home Office,424.32,-0.18173,3,3,0.9,-231.34,16,"1,272.96"
+East,Pennsylvania,Furniture,Chairs,Corporate,282.23,-0.08824,10,10,3,-249.05,50,"2,822.28"
+East,Pennsylvania,Furniture,Chairs,Consumer,696.62,-0.10343,21,21,6.9,"-1,513.03",87,"14,628.94"
+East,Pennsylvania,Furniture,Furnishings,Home Office,298.36,0.02036,9,9,2.4,54.67,45,"2,685.26"
+East,Pennsylvania,Furniture,Furnishings,Corporate,121.92,0.01493,18,18,4.2,32.76,60,"2,194.55"
+East,Pennsylvania,Furniture,Furnishings,Consumer,82.27,0.07893,30,30,6.2,194.79,120,"2,468.00"
+East,Pennsylvania,Furniture,Bookcases,Home Office,352.45,-0.6,1,1,0.5,-211.47,5,352.45
+East,Pennsylvania,Furniture,Bookcases,Corporate,249.27,-0.51587,3,3,1.5,-385.77,12,747.8
+East,Pennsylvania,Furniture,Bookcases,Consumer,688.42,-0.55672,6,6,3,"-2,299.52",27,"4,130.51"
+East,Pennsylvania,Furniture,Tables,Home Office,700.93,-0.3212,5,5,2,"-1,125.72",29,"3,504.67"
+East,Pennsylvania,Furniture,Tables,Corporate,390.56,-0.2973,5,5,2.4,-580.55,17,"1,952.78"
+East,Pennsylvania,Furniture,Tables,Consumer,648.68,-0.3401,4,4,1.6,-882.48,19,"2,594.74"
+East,Pennsylvania,Office Supplies,Paper,Home Office,38.68,0.34903,14,15,3.4,202.53,65,580.26
+East,Pennsylvania,Office Supplies,Paper,Corporate,47.55,0.33462,20,21,4.6,334.11,84,998.47
+East,Pennsylvania,Office Supplies,Paper,Consumer,33.32,0.34566,24,24,5.2,276.38,87,799.57
+East,Pennsylvania,Office Supplies,Binders,Home Office,109.99,-0.68687,13,13,11.2,-982.14,57,"1,429.87"
+East,Pennsylvania,Office Supplies,Binders,Corporate,39.14,-0.77546,26,29,25.2,-880.21,116,"1,135.08"
+East,Pennsylvania,Office Supplies,Binders,Consumer,94.9,-0.73184,37,39,32.2,"-2,708.63",158,"3,701.11"
+East,Pennsylvania,Office Supplies,Storage,Home Office,252.29,-0.0888,7,7,1.4,-156.82,29,"1,766.03"
+East,Pennsylvania,Office Supplies,Storage,Corporate,315.91,-0.16881,18,19,4.2,"-1,013.22",67,"6,002.27"
+East,Pennsylvania,Office Supplies,Storage,Consumer,191.25,-0.0658,21,21,4.2,-264.26,73,"4,016.32"
+East,Pennsylvania,Office Supplies,Appliances,Home Office,272.9,0.09522,2,2,0.4,51.97,9,545.81
+East,Pennsylvania,Office Supplies,Appliances,Corporate,132.2,0.1619,6,6,1.2,128.42,19,793.19
+East,Pennsylvania,Office Supplies,Appliances,Consumer,332.43,0.15457,10,10,3,513.82,49,"3,324.28"
+East,Pennsylvania,Office Supplies,Envelopes,Home Office,152.83,0.32106,2,2,0.4,98.14,12,305.66
+East,Pennsylvania,Office Supplies,Envelopes,Corporate,83.76,0.34451,7,7,1.4,201.99,28,586.32
+East,Pennsylvania,Office Supplies,Envelopes,Consumer,38.01,0.34194,9,9,1.8,116.97,27,342.08
+East,Pennsylvania,Office Supplies,Art,Home Office,41.6,0.09675,7,7,1.6,28.17,32,291.2
+East,Pennsylvania,Office Supplies,Art,Corporate,21.13,0.1043,17,17,3.4,37.46,60,359.18
+East,Pennsylvania,Office Supplies,Art,Consumer,35.84,0.14373,14,14,3,72.12,63,501.78
+East,Pennsylvania,Office Supplies,Labels,Home Office,30.12,0.33929,7,7,1.6,71.54,31,210.86
+East,Pennsylvania,Office Supplies,Labels,Corporate,26.88,0.33317,5,5,1,44.79,28,134.42
+East,Pennsylvania,Office Supplies,Labels,Consumer,25.3,0.3363,10,10,2,85.09,47,253.02
+East,Pennsylvania,Office Supplies,Fasteners,Home Office,5.73,0.27507,4,4,0.8,6.3,13,22.91
+East,Pennsylvania,Office Supplies,Fasteners,Corporate,14.4,0.23212,8,8,1.6,26.75,51,115.23
+East,Pennsylvania,Office Supplies,Fasteners,Consumer,8.28,-0.225,2,2,0.4,-3.73,9,16.57
+East,Pennsylvania,Office Supplies,Supplies,Home Office,6.9,-0.20934,2,2,0.4,-2.89,3,13.79
+East,Pennsylvania,Office Supplies,Supplies,Corporate,190.9,-0.225,1,1,0.2,-42.95,2,190.9
+East,Pennsylvania,Office Supplies,Supplies,Consumer,722.84,-0.21731,9,9,1.8,"-1,413.73",29,"6,505.52"
+East,Pennsylvania,Technology,Copiers,Consumer,"2,615.97",0.13272,5,5,2,"1,735.98",22,"13,079.87"
+East,Pennsylvania,Technology,Phones,Home Office,476.62,-0.20954,10,10,4.8,-998.73,46,"4,766.22"
+East,Pennsylvania,Technology,Phones,Corporate,430.76,-0.20213,17,18,7.2,"-1,567.23",85,"7,753.75"
+East,Pennsylvania,Technology,Phones,Consumer,247.67,-0.14493,28,29,12.8,"-1,040.97",104,"7,182.44"
+East,Pennsylvania,Technology,Accessories,Home Office,91.83,0.16979,8,8,1.6,124.73,18,734.6
+East,Pennsylvania,Technology,Accessories,Corporate,407.87,0.15668,9,9,2,575.16,43,"3,670.86"
+East,Pennsylvania,Technology,Accessories,Consumer,120.58,0.06879,24,24,5.4,199.07,80,"2,893.82"
+East,Pennsylvania,Technology,Machines,Corporate,418.24,-1.11173,4,4,2.8,"-1,859.90",14,"1,672.97"
+East,Pennsylvania,Technology,Machines,Consumer,230.37,-0.77993,2,2,2.1,-359.35,6,460.75
+East,Prince Edward Island,Furniture,Chairs,Consumer,160.35,0.38509,2,2,0.4,123.5,16,320.7
+East,Prince Edward Island,Office Supplies,Binders,Consumer,156.57,0.25556,2,4,0.4,160.05,10,626.29
+East,Prince Edward Island,Office Supplies,Art,Consumer,70.46,0.325,1,2,0.4,45.8,12,140.93
+East,Quebec,Furniture,Furnishings,Corporate,70.97,0.05923,1,2,0.4,8.41,5,141.94
+East,Quebec,Furniture,Furnishings,Consumer,88.68,0.31596,1,5,0,140.1,18,443.42
+East,Quebec,Furniture,Bookcases,Consumer,72.29,-1.36667,1,2,1.4,-197.6,2,144.59
+East,Quebec,Office Supplies,Paper,Home Office,15.97,0.07798,1,2,0.6,2.49,7,31.94
+East,Quebec,Office Supplies,Paper,Corporate,9.99,0.45,1,2,0,8.99,2,19.98
+East,Quebec,Office Supplies,Paper,Consumer,387.99,0.47001,1,2,0,364.72,2,775.98
+East,Quebec,Office Supplies,Binders,Home Office,228.67,0.48813,1,2,0,223.24,8,457.34
+East,Quebec,Office Supplies,Binders,Corporate,19.44,0.47997,1,2,0,18.66,6,38.88
+East,Quebec,Office Supplies,Storage,Corporate,24.62,0.35168,2,6,0.4,51.95,20,147.73
+East,Quebec,Office Supplies,Appliances,Home Office,126.18,0.28513,1,2,0,71.96,7,252.36
+East,Quebec,Office Supplies,Art,Corporate,7.4,0.29487,2,6,0,13.09,11,44.38
+East,Quebec,Office Supplies,Labels,Consumer,104.37,0.12707,1,2,1.1,26.52,10,208.73
+East,Quebec,Office Supplies,Fasteners,Consumer,30.12,0.42408,2,7,0,89.42,37,210.86
+East,Quebec,Technology,Phones,Corporate,454.42,0.29597,1,2,0,268.99,15,908.83
+East,Rhode Island,Furniture,Chairs,Home Office,529.73,0.25879,3,3,0,411.26,11,"1,589.18"
+East,Rhode Island,Furniture,Chairs,Consumer,"1,604.90",0.3,1,1,0,481.47,5,"1,604.90"
+East,Rhode Island,Furniture,Furnishings,Home Office,72.42,0.33,1,1,0,23.9,6,72.42
+East,Rhode Island,Furniture,Furnishings,Corporate,245.68,0.26564,1,1,0,65.26,6,245.68
+East,Rhode Island,Furniture,Furnishings,Consumer,42.7,0.37686,2,2,0,32.18,7,85.39
+East,Rhode Island,Furniture,Bookcases,Home Office,341.96,0.23,1,1,0,78.65,2,341.96
+East,Rhode Island,Furniture,Bookcases,Corporate,220.98,0.23,1,1,0,50.83,1,220.98
+East,Rhode Island,Furniture,Tables,Corporate,686.28,-0.12354,2,2,0.9,-169.56,14,"1,372.56"
+East,Rhode Island,Furniture,Tables,Consumer,385.69,-0.15714,1,1,0.3,-60.61,1,385.69
+East,Rhode Island,Office Supplies,Paper,Home Office,78.67,0.46927,3,3,0,110.76,12,236.02
+East,Rhode Island,Office Supplies,Paper,Corporate,45.34,0.48686,5,5,0,110.36,21,226.68
+East,Rhode Island,Office Supplies,Paper,Consumer,35.66,0.46095,3,3,0,49.31,13,106.98
+East,Rhode Island,Office Supplies,Binders,Home Office,39.97,0.47239,2,2,0,37.76,4,79.93
+East,Rhode Island,Office Supplies,Binders,Corporate,45.78,0.5,1,1,0,22.89,3,45.78
+East,Rhode Island,Office Supplies,Binders,Consumer,55.57,0.46439,3,3,0,77.42,10,166.71
+East,Rhode Island,Office Supplies,Storage,Home Office,"1,099.37",0.28623,4,4,0,"1,258.68",23,"4,397.47"
+East,Rhode Island,Office Supplies,Storage,Corporate,48.06,0.23931,3,3,0,34.5,6,144.17
+East,Rhode Island,Office Supplies,Storage,Consumer,42.21,0.21823,2,2,0,18.42,7,84.42
+East,Rhode Island,Office Supplies,Appliances,Corporate,2.22,0.3,1,1,0,0.67,1,2.22
+East,Rhode Island,Office Supplies,Art,Consumer,49.25,0.38,1,1,0,18.72,5,49.25
+East,Rhode Island,Office Supplies,Supplies,Corporate,695.16,0.05,1,1,0,34.76,6,695.16
+East,Rhode Island,Technology,Copiers,Home Office,"5,399.91",0.48,1,1,0,"2,591.96",9,"5,399.91"
+East,Rhode Island,Technology,Copiers,Corporate,"1,999.96",0.45,1,1,0,899.98,4,"1,999.96"
+East,Rhode Island,Technology,Phones,Home Office,379.4,0.23755,2,2,0,180.25,8,758.8
+East,Rhode Island,Technology,Phones,Corporate,105.98,0.01,1,1,0,1.06,2,105.98
+East,Rhode Island,Technology,Accessories,Home Office,943.89,0.43788,2,2,0,826.62,6,"1,887.78"
+East,Rhode Island,Technology,Accessories,Corporate,160.99,0.3048,2,2,0,98.14,6,321.98
+East,Vermont,Furniture,Chairs,Consumer,715.2,0.25,1,1,0,178.8,3,715.2
+East,Vermont,Furniture,Bookcases,Corporate,"4,404.90",0.23,1,1,0,"1,013.13",5,"4,404.90"
+East,Vermont,Office Supplies,Paper,Consumer,92.2,0.47,1,1,0,43.33,5,92.2
+East,Vermont,Office Supplies,Storage,Corporate,"1,564.29",0.26,1,1,0,406.72,13,"1,564.29"
+East,Vermont,Office Supplies,Appliances,Consumer,542.94,0.28,1,1,0,152.02,3,542.94
+East,Vermont,Office Supplies,Envelopes,Consumer,2.04,0.47,1,1,0,0.96,1,2.04
+East,Vermont,Office Supplies,Art,Corporate,8.04,0.34,1,1,0,2.73,6,8.04
+East,Vermont,Technology,Phones,Home Office,"1,294.75",0.26,1,1,0,336.64,5,"1,294.75"
+East,Vermont,Technology,Accessories,Corporate,152.51,0.36278,2,2,0,110.65,9,305.01
+East,West Virginia,Furniture,Tables,Consumer,673.34,-0.11429,1,1,0.3,-76.95,3,673.34
+East,West Virginia,Office Supplies,Paper,Home Office,447.84,0.49,1,1,0,219.44,8,447.84
+East,West Virginia,Office Supplies,Binders,Home Office,88.64,0.49,1,1,0,43.43,7,88.64
+South,Alabama,Furniture,Chairs,Home Office,141.96,0.25,1,1,0,35.49,2,141.96
+South,Alabama,Furniture,Chairs,Corporate,545.88,0.13,1,1,0,70.96,6,545.88
+South,Alabama,Furniture,Chairs,Consumer,"1,075.90",0.1718,3,3,0,554.51,22,"3,227.70"
+South,Alabama,Furniture,Furnishings,Corporate,15.76,0.36711,2,2,0,11.57,10,31.52
+South,Alabama,Furniture,Furnishings,Consumer,8.96,0.31,1,1,0,2.78,2,8.96
+South,Alabama,Furniture,Tables,Corporate,787.25,0.22584,2,2,0,355.58,10,"1,574.50"
+South,Alabama,Furniture,Tables,Consumer,801.96,0.25,1,1,0,200.49,2,801.96
+South,Alabama,Office Supplies,Paper,Home Office,365.08,0.48007,2,2,0,350.53,9,730.16
+South,Alabama,Office Supplies,Paper,Corporate,42.43,0.48745,3,3,0,62.05,16,127.3
+South,Alabama,Office Supplies,Paper,Consumer,12.78,0.45512,2,2,0,11.63,4,25.56
+South,Alabama,Office Supplies,Binders,Home Office,33.74,0.46,1,1,0,15.52,7,33.74
+South,Alabama,Office Supplies,Binders,Corporate,38.93,0.49227,5,5,0,95.81,20,194.63
+South,Alabama,Office Supplies,Binders,Consumer,79.48,0.48831,3,3,0,116.44,14,238.45
+South,Alabama,Office Supplies,Storage,Corporate,275.97,0.04,1,1,0,11.04,3,275.97
+South,Alabama,Office Supplies,Storage,Consumer,486.72,0.14055,2,2,0,136.82,11,973.44
+South,Alabama,Office Supplies,Appliances,Corporate,208.16,0.27,1,1,0,56.2,1,208.16
+South,Alabama,Office Supplies,Envelopes,Corporate,98.46,0.5,1,1,0,49.23,9,98.46
+South,Alabama,Office Supplies,Envelopes,Consumer,7.38,0.46,1,1,0,3.39,2,7.38
+South,Alabama,Office Supplies,Art,Home Office,3.76,0.29,1,1,0,1.09,2,3.76
+South,Alabama,Office Supplies,Art,Corporate,64.22,0.29474,4,4,0,75.71,24,256.86
+South,Alabama,Office Supplies,Art,Consumer,20.3,0.28916,2,2,0,11.74,12,40.59
+South,Alabama,Office Supplies,Labels,Consumer,253.25,0.48912,2,2,0,247.73,8,506.49
+South,Alabama,Office Supplies,Fasteners,Home Office,3.62,0.33,1,1,0,1.19,2,3.62
+South,Alabama,Office Supplies,Supplies,Corporate,477.24,0.02,1,1,0,9.54,4,477.24
+South,Alabama,Office Supplies,Supplies,Consumer,7.27,0.27,1,1,0,1.96,1,7.27
+South,Alabama,Technology,Copiers,Corporate,899.97,0.35,1,1,0,314.99,3,899.97
+South,Alabama,Technology,Phones,Home Office,90.48,0.26,1,1,0,23.52,2,90.48
+South,Alabama,Technology,Phones,Corporate,"1,394.95",0.26,1,1,0,362.69,5,"1,394.95"
+South,Alabama,Technology,Phones,Consumer,406.95,0.2629,3,3,0,320.97,11,"1,220.85"
+South,Alabama,Technology,Accessories,Corporate,614.65,0.38711,3,3,0,713.8,11,"1,843.94"
+South,Alabama,Technology,Accessories,Consumer,159.63,0.21431,3,3,0,102.63,13,478.89
+South,Alabama,Technology,Machines,Corporate,"3,040.00",0.48,1,1,0,"1,459.20",8,"3,040.00"
+South,Arkansas,Furniture,Chairs,Corporate,605.34,0.24,1,1,0,145.28,6,605.34
+South,Arkansas,Furniture,Chairs,Consumer,"1,067.94",0.21,1,1,0,224.27,3,"1,067.94"
+South,Arkansas,Furniture,Furnishings,Home Office,159.92,0.2,1,1,0,31.98,4,159.92
+South,Arkansas,Furniture,Furnishings,Corporate,8.92,0.44,1,1,0,3.92,4,8.92
+South,Arkansas,Furniture,Furnishings,Consumer,134.88,0.39101,3,3,0,158.22,15,404.65
+South,Arkansas,Furniture,Bookcases,Consumer,638.82,0.27,1,1,0,172.48,9,638.82
+South,Arkansas,Furniture,Tables,Consumer,301.96,0.15,1,1,0,45.29,2,301.96
+South,Arkansas,Office Supplies,Paper,Home Office,22.68,0.48571,2,2,0,22.03,7,45.36
+South,Arkansas,Office Supplies,Paper,Corporate,79.58,0.46,2,2,0,73.21,7,159.16
+South,Arkansas,Office Supplies,Paper,Consumer,100.17,0.4784,6,6,0,287.52,22,601
+South,Arkansas,Office Supplies,Binders,Home Office,61.93,0.49642,2,2,0,61.49,12,123.86
+South,Arkansas,Office Supplies,Binders,Corporate,17.96,0.46,1,1,0,8.26,4,17.96
+South,Arkansas,Office Supplies,Binders,Consumer,549.6,0.46814,5,5,0,"1,286.46",26,"2,748.01"
+South,Arkansas,Office Supplies,Storage,Corporate,430,0.07463,1,1,0,32.09,8,430
+South,Arkansas,Office Supplies,Envelopes,Corporate,182.94,0.47,1,1,0,85.98,3,182.94
+South,Arkansas,Office Supplies,Envelopes,Consumer,64.38,0.48637,2,2,0,62.63,5,128.76
+South,Arkansas,Office Supplies,Art,Home Office,4.3,0.33,1,1,0,1.42,2,4.3
+South,Arkansas,Office Supplies,Art,Consumer,18.5,0.30152,4,4,0,22.31,25,74
+South,Arkansas,Office Supplies,Labels,Corporate,7.31,0.47,1,1,0,3.44,1,7.31
+South,Arkansas,Office Supplies,Fasteners,Home Office,30,0.48,1,1,0,14.4,6,30
+South,Arkansas,Office Supplies,Fasteners,Corporate,12.67,0.36,1,1,0,4.56,7,12.67
+South,Arkansas,Technology,Phones,Corporate,494.97,0.3,1,1,0,148.49,3,494.97
+South,Arkansas,Technology,Phones,Consumer,547.28,0.26146,3,3,0,429.28,16,"1,641.84"
+South,Arkansas,Technology,Accessories,Home Office,48.9,0.37,1,1,0,18.09,5,48.9
+South,Arkansas,Technology,Accessories,Corporate,272.26,0.36951,2,2,0,201.2,13,544.51
+South,Arkansas,Technology,Accessories,Consumer,239.01,0.38859,5,5,0,464.38,25,"1,195.03"
+South,Florida,Furniture,Chairs,Home Office,756.67,0.05127,3,3,0.6,116.39,12,"2,270.01"
+South,Florida,Furniture,Chairs,Corporate,495.34,-0.05924,8,8,1.8,-234.77,39,"3,962.75"
+South,Florida,Furniture,Chairs,Consumer,705.15,0.01637,7,7,1.4,80.82,24,"4,936.06"
+South,Florida,Furniture,Furnishings,Home Office,144.63,0.04137,5,5,1.2,29.92,19,723.16
+South,Florida,Furniture,Furnishings,Corporate,80.49,0.13962,14,14,3.6,157.33,65,"1,126.85"
+South,Florida,Furniture,Furnishings,Consumer,99.8,0.10785,18,19,4.6,204.51,66,"1,896.18"
+South,Florida,Furniture,Bookcases,Home Office,339.92,0.025,1,1,0.2,8.5,5,339.92
+South,Florida,Furniture,Bookcases,Corporate,260.74,0.03194,2,2,0.4,16.66,7,521.49
+South,Florida,Furniture,Bookcases,Consumer,345.13,-0.08184,5,5,1,-141.23,17,"1,725.65"
+South,Florida,Furniture,Tables,Home Office,854.47,-0.40995,1,1,0.9,-350.29,5,854.47
+South,Florida,Furniture,Tables,Corporate,555.87,-0.50546,3,3,1.35,-842.91,17,"1,667.61"
+South,Florida,Furniture,Tables,Consumer,493.82,-0.43873,6,6,2.7,"-1,299.91",23,"2,962.89"
+South,Florida,Office Supplies,Paper,Home Office,40.69,0.34522,8,8,1.8,112.37,40,325.51
+South,Florida,Office Supplies,Paper,Corporate,60.04,0.33319,12,12,3,240.05,75,720.46
+South,Florida,Office Supplies,Paper,Consumer,55.18,0.34835,24,25,5.4,480.58,83,"1,379.58"
+South,Florida,Office Supplies,Binders,Home Office,51.43,-0.80301,11,11,8.4,-454.28,46,565.72
+South,Florida,Office Supplies,Binders,Corporate,106.2,-0.75237,19,19,17.5,"-1,518.13",115,"2,017.79"
+South,Florida,Office Supplies,Binders,Consumer,42.58,-0.71213,26,26,21,-788.32,101,"1,106.99"
+South,Florida,Office Supplies,Storage,Home Office,213.77,0.01309,3,3,0.6,8.39,10,641.32
+South,Florida,Office Supplies,Storage,Corporate,403.07,0.03526,10,10,2.2,142.12,43,"4,030.71"
+South,Florida,Office Supplies,Storage,Consumer,274.72,-0.12872,10,10,2.2,-353.62,34,"2,747.22"
+South,Florida,Office Supplies,Appliances,Home Office,308.39,0.07615,3,3,0.6,70.45,11,925.18
+South,Florida,Office Supplies,Appliances,Corporate,265.37,0.11851,7,7,1.4,220.15,19,"1,857.58"
+South,Florida,Office Supplies,Appliances,Consumer,110.81,0.07627,6,7,1.6,59.16,38,775.68
+South,Florida,Office Supplies,Envelopes,Corporate,5.79,0.3375,2,2,0.4,3.91,4,11.58
+South,Florida,Office Supplies,Envelopes,Consumer,28.49,0.3443,7,7,1.4,68.66,22,199.42
+South,Florida,Office Supplies,Art,Home Office,19.79,0.12979,6,6,1.2,15.41,22,118.74
+South,Florida,Office Supplies,Art,Corporate,31.62,0.09062,11,12,2.4,34.39,36,379.48
+South,Florida,Office Supplies,Art,Consumer,19.34,0.13229,11,11,2.2,28.14,33,212.7
+South,Florida,Office Supplies,Labels,Home Office,10.4,0.3364,3,3,0.8,10.5,8,31.21
+South,Florida,Office Supplies,Labels,Corporate,9.26,0.3453,7,7,1.4,22.39,26,64.85
+South,Florida,Office Supplies,Labels,Consumer,41.39,0.35782,7,7,1.4,103.68,16,289.75
+South,Florida,Office Supplies,Fasteners,Home Office,13.02,0.31932,2,2,0.4,8.32,5,26.04
+South,Florida,Office Supplies,Fasteners,Corporate,1.98,0.3375,1,1,0.2,0.67,2,1.98
+South,Florida,Office Supplies,Fasteners,Consumer,10.62,0.35436,2,2,0.4,7.52,8,21.23
+South,Florida,Office Supplies,Supplies,Home Office,5.55,-0.1875,1,1,0.2,-1.04,2,5.55
+South,Florida,Office Supplies,Supplies,Corporate,349.48,-0.18554,3,3,0.6,-194.53,15,"1,048.44"
+South,Florida,Office Supplies,Supplies,Consumer,4.63,-0.14809,3,3,0.6,-2.06,6,13.9
+South,Florida,Technology,Copiers,Consumer,719.98,0.27917,2,2,0.4,401.99,4,"1,439.97"
+South,Florida,Technology,Phones,Home Office,251.69,0.08714,6,6,1.2,131.59,20,"1,510.14"
+South,Florida,Technology,Phones,Corporate,244.76,0.10551,14,15,3,387.39,50,"3,671.41"
+South,Florida,Technology,Phones,Consumer,825.89,0.08433,12,12,2.6,835.78,60,"9,910.63"
+South,Florida,Technology,Accessories,Home Office,356.88,0.1109,7,7,1.4,277.05,32,"2,498.17"
+South,Florida,Technology,Accessories,Corporate,225.83,0.22938,5,5,1,259,22,"1,129.13"
+South,Florida,Technology,Accessories,Consumer,171.9,0.09577,13,13,3,214.02,54,"2,234.65"
+South,Florida,Technology,Machines,Home Office,"23,459.78",-0.0779,1,1,1,"-1,827.50",10,"23,459.78"
+South,Florida,Technology,Machines,Corporate,265.48,-0.42,1,1,0.5,-111.5,1,265.48
+South,Florida,Technology,Machines,Consumer,282.9,-0.04361,3,3,1.5,-37.01,7,848.69
+South,Georgia,Furniture,Chairs,Home Office,422.85,0.25856,2,2,0,218.66,6,845.7
+South,Georgia,Furniture,Chairs,Corporate,287.81,0.16712,2,2,0,96.2,6,575.61
+South,Georgia,Furniture,Chairs,Consumer,218.43,0.22777,2,2,0,99.5,5,436.85
+South,Georgia,Furniture,Furnishings,Home Office,31.94,0.37597,4,4,0,48.03,15,127.76
+South,Georgia,Furniture,Furnishings,Corporate,151.91,0.46021,5,5,0,349.56,24,759.56
+South,Georgia,Furniture,Furnishings,Consumer,101.97,0.23567,9,9,0,216.29,29,917.76
+South,Georgia,Furniture,Bookcases,Home Office,239.98,0.22,1,1,0,52.8,2,239.98
+South,Georgia,Furniture,Bookcases,Corporate,302.94,0.25,1,1,0,75.74,3,302.94
+South,Georgia,Furniture,Bookcases,Consumer,"1,083.53",0.23218,3,3,0,754.73,21,"3,250.58"
+South,Georgia,Furniture,Tables,Home Office,432.37,0.15952,2,2,0,137.95,5,864.74
+South,Georgia,Office Supplies,Paper,Home Office,236.57,0.47707,5,5,0,564.3,40,"1,182.84"
+South,Georgia,Office Supplies,Paper,Corporate,67.49,0.47383,6,6,0,191.88,30,404.95
+South,Georgia,Office Supplies,Paper,Consumer,105.34,0.48319,13,13,0,661.7,69,"1,369.45"
+South,Georgia,Office Supplies,Binders,Home Office,377.9,0.49344,4,4,0,745.87,8,"1,511.59"
+South,Georgia,Office Supplies,Binders,Corporate,432.53,0.4717,8,8,0,"1,632.21",27,"3,460.25"
+South,Georgia,Office Supplies,Binders,Consumer,609.13,0.49836,11,11,0,"3,339.22",41,"6,700.48"
+South,Georgia,Office Supplies,Storage,Home Office,411.93,0.14616,5,5,0,301.04,19,"2,059.66"
+South,Georgia,Office Supplies,Storage,Corporate,"1,367.12",0.13988,2,2,0,382.47,12,"2,734.23"
+South,Georgia,Office Supplies,Storage,Consumer,431.23,0.1648,6,6,0,426.41,22,"2,587.40"
+South,Georgia,Office Supplies,Appliances,Corporate,525.59,0.31789,5,5,0,835.42,23,"2,627.97"
+South,Georgia,Office Supplies,Appliances,Consumer,268.06,0.27751,3,3,0,223.16,12,804.18
+South,Georgia,Office Supplies,Envelopes,Home Office,146.66,0.47,2,2,0,137.86,10,293.32
+South,Georgia,Office Supplies,Envelopes,Corporate,22.77,0.48501,2,2,0,22.08,8,45.53
+South,Georgia,Office Supplies,Envelopes,Consumer,35.91,0.4745,3,3,0,51.11,15,107.72
+South,Georgia,Office Supplies,Art,Home Office,67.72,0.31676,3,3,0,64.35,17,203.15
+South,Georgia,Office Supplies,Art,Corporate,46.52,0.30915,3,3,0,43.15,9,139.56
+South,Georgia,Office Supplies,Art,Consumer,20.44,0.28383,9,9,0,52.22,29,183.97
+South,Georgia,Office Supplies,Labels,Home Office,15.75,0.48,1,1,0,7.56,5,15.75
+South,Georgia,Office Supplies,Labels,Corporate,14.3,0.47651,3,3,0,20.45,7,42.91
+South,Georgia,Office Supplies,Labels,Consumer,62.09,0.47251,3,3,0,88.01,19,186.26
+South,Georgia,Office Supplies,Fasteners,Home Office,9.45,0.02,1,1,0,0.19,5,9.45
+South,Georgia,Office Supplies,Fasteners,Consumer,5.67,0.02,1,1,0,0.11,3,5.67
+South,Georgia,Office Supplies,Supplies,Corporate,34.48,0.29,1,1,0,10,2,34.48
+South,Georgia,Office Supplies,Supplies,Consumer,5.04,0.03,1,1,0,0.15,2,5.04
+South,Georgia,Technology,Copiers,Corporate,"2,999.95",0.48,1,1,0,"1,439.98",5,"2,999.95"
+South,Georgia,Technology,Phones,Home Office,293.52,0.26095,3,3,0,229.78,11,880.55
+South,Georgia,Technology,Phones,Corporate,273.12,0.28466,4,4,0,310.98,25,"1,092.46"
+South,Georgia,Technology,Phones,Consumer,838.62,0.26651,6,6,0,"1,341.00",24,"5,031.72"
+South,Georgia,Technology,Accessories,Home Office,215.99,0.33501,2,2,0,144.72,6,431.98
+South,Georgia,Technology,Accessories,Corporate,108.84,0.19901,6,7,0,151.61,26,761.85
+South,Georgia,Technology,Accessories,Consumer,273.78,0.24006,9,9,0,591.52,54,"2,464.04"
+South,Georgia,Technology,Machines,Consumer,396,0.48,1,1,0,190.08,4,396
+South,Kentucky,Furniture,Chairs,Home Office,"1,303.88",0.28974,2,2,0,755.57,10,"2,607.76"
+South,Kentucky,Furniture,Chairs,Corporate,606.23,0.27529,3,3,0,500.67,7,"1,818.69"
+South,Kentucky,Furniture,Chairs,Consumer,534.12,0.2696,9,9,0,"1,296.02",36,"4,807.12"
+South,Kentucky,Furniture,Furnishings,Home Office,30.7,0.40432,4,4,0,49.65,12,122.8
+South,Kentucky,Furniture,Furnishings,Consumer,237.94,0.24437,7,7,0,407.01,36,"1,665.57"
+South,Kentucky,Furniture,Bookcases,Consumer,261.96,0.16,1,1,0,41.91,2,261.96
+South,Kentucky,Furniture,Tables,Consumer,842.94,0.19,1,1,0,160.16,3,842.94
+South,Kentucky,Office Supplies,Paper,Home Office,6.54,0.46,1,1,0,3.01,1,6.54
+South,Kentucky,Office Supplies,Paper,Corporate,122.56,0.47842,6,6,0,351.8,24,735.34
+South,Kentucky,Office Supplies,Paper,Consumer,79.17,0.46546,4,4,0,147.4,18,316.67
+South,Kentucky,Office Supplies,Binders,Home Office,199.86,0.45618,5,5,0,455.85,23,999.28
+South,Kentucky,Office Supplies,Binders,Corporate,241.41,0.47047,3,3,0,340.73,34,724.23
+South,Kentucky,Office Supplies,Binders,Consumer,219.15,0.47835,9,9,0,943.45,30,"1,972.31"
+South,Kentucky,Office Supplies,Storage,Home Office,774.97,0.24496,2,2,0,379.67,19,"1,549.94"
+South,Kentucky,Office Supplies,Storage,Corporate,247.1,0.04931,5,5,0,60.93,18,"1,235.48"
+South,Kentucky,Office Supplies,Storage,Consumer,291,0.20363,7,7,0,414.79,33,"2,037.01"
+South,Kentucky,Office Supplies,Appliances,Corporate,177.6,0.28347,2,2,0,100.69,6,355.2
+South,Kentucky,Office Supplies,Appliances,Consumer,163.4,0.2759,6,6,0,270.5,23,980.42
+South,Kentucky,Office Supplies,Envelopes,Home Office,89.36,0.45391,1,1,0,40.56,4,89.36
+South,Kentucky,Office Supplies,Envelopes,Corporate,5.32,0.49,1,1,0,2.61,2,5.32
+South,Kentucky,Office Supplies,Envelopes,Consumer,10.67,0.46,1,1,0,4.91,1,10.67
+South,Kentucky,Office Supplies,Art,Home Office,5.48,0.27,1,1,0,1.48,2,5.48
+South,Kentucky,Office Supplies,Art,Corporate,21.46,0.33173,3,3,0,21.36,21,64.38
+South,Kentucky,Office Supplies,Art,Consumer,46.81,0.26978,6,6,0,75.77,17,280.86
+South,Kentucky,Office Supplies,Labels,Home Office,30,0.48,1,1,0,14.4,8,30
