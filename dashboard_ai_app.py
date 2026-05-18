@@ -1,5 +1,6 @@
 import io
 import re
+import requests
 
 import streamlit as st
 import pandas as pd
@@ -14,6 +15,18 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+try:
+    import tableauserverclient as TSC
+    TABLEAU_AVAILABLE = True
+except ImportError:
+    TABLEAU_AVAILABLE = False
+
+try:
+    import msal
+    MSAL_AVAILABLE = True
+except ImportError:
+    MSAL_AVAILABLE = False
 # ---------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------
@@ -647,18 +660,182 @@ def report_to_pdf(report_text, title, who, decision, timeframe):
 
 
 # ---------------------------------------------------
+# TABLEAU CONNECTOR
+# ---------------------------------------------------
+
+def load_tableau(server_url, site_id, token_name, token_secret, view_name):
+    if not TABLEAU_AVAILABLE:
+        st.error("tableauserverclient is not installed. Run: pip install tableauserverclient")
+        return None
+    try:
+        auth   = TSC.PersonalAccessTokenAuth(token_name, token_secret, site_id=site_id)
+        server = TSC.Server(server_url, use_server_version=True)
+        with server.auth.sign_in(auth):
+            views, _ = server.views.get()
+            target   = next((v for v in views if v.name == view_name), None)
+            if target is None:
+                available = [v.name for v in views]
+                st.error(f"View '{view_name}' not found. Available views: {available}")
+                return None
+            server.views.populate_csv(target)
+            csv_data = b"".join(target.csv).decode("utf-8")
+        return pd.read_csv(io.StringIO(csv_data))
+    except Exception as e:
+        st.error(f"Tableau connection failed: {e}")
+        return None
+
+
+# ---------------------------------------------------
+# POWER BI CONNECTOR
+# ---------------------------------------------------
+
+def get_powerbi_token(tenant_id, client_id, client_secret):
+    if not MSAL_AVAILABLE:
+        st.error("msal is not installed. Run: pip install msal")
+        return None
+    try:
+        app    = msal.ConfidentialClientApplication(
+            client_id,
+            authority=f"https://login.microsoftonline.com/{tenant_id}",
+            client_credential=client_secret,
+        )
+        result = app.acquire_token_for_client(
+            scopes=["https://analysis.windows.net/powerbi/api/.default"]
+        )
+        if "access_token" not in result:
+            st.error(f"Power BI auth failed: {result.get('error_description', 'Unknown error')}")
+            return None
+        return result["access_token"]
+    except Exception as e:
+        st.error(f"Power BI auth error: {e}")
+        return None
+
+
+def list_powerbi_tables(token, workspace_id, dataset_id):
+    url     = f"https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets/{dataset_id}/tables"
+    headers = {"Authorization": f"Bearer {token}"}
+    resp    = requests.get(url, headers=headers)
+    if resp.status_code != 200:
+        st.error(f"Could not fetch tables: {resp.text}")
+        return []
+    return [t["name"] for t in resp.json().get("value", [])]
+
+
+def load_powerbi_table(token, workspace_id, dataset_id, table_name):
+    try:
+        url     = f"https://api.powerbi.com/v1.0/myorg/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
+        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        body    = {
+            "queries": [{"query": f"EVALUATE '{table_name}'"}],
+            "serializerSettings": {"includeNulls": True},
+        }
+        resp = requests.post(url, headers=headers, json=body)
+        if resp.status_code != 200:
+            st.error(f"Power BI query failed: {resp.text}")
+            return None
+        results = resp.json()["results"][0]["tables"][0]["rows"]
+        df      = pd.DataFrame(results)
+        # Strip the "TableName[ColumnName]" prefix Power BI adds to column names
+        df.columns = [c.split("[")[-1].rstrip("]") for c in df.columns]
+        return df
+    except Exception as e:
+        st.error(f"Power BI data fetch failed: {e}")
+        return None
+
+
+# ---------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------
 
 with st.sidebar:
 
     st.markdown('<p class="section-label">Data Source</p>', unsafe_allow_html=True)
-    uploaded_file = st.file_uploader(
-        "Upload your data file",
-        type=["csv", "xlsx", "xls"],
+
+    data_source = st.radio(
+        "Choose how to load data",
+        ["Upload CSV / Excel", "Tableau", "Power BI"],
         label_visibility="collapsed",
-        help="CSV or Excel — any dataset works",
+        horizontal=False,
     )
+
+    uploaded_file  = None
+    df_from_bi     = None
+
+    # ── Upload ──────────────────────────────────────
+    if data_source == "Upload CSV / Excel":
+        uploaded_file = st.file_uploader(
+            "Upload your data file",
+            type=["csv", "xlsx", "xls"],
+            label_visibility="collapsed",
+            help="CSV or Excel — any dataset works. Try superstore_data.csv to explore.",
+        )
+
+    # ── Tableau ─────────────────────────────────────
+    elif data_source == "Tableau":
+        st.markdown('<p class="section-label">Tableau Credentials</p>', unsafe_allow_html=True)
+        tab_server = st.text_input("Server URL", placeholder="https://us-east-1.online.tableau.com")
+        tab_site   = st.text_input("Site ID", placeholder="your-site-name")
+        tab_token  = st.text_input("Token Name", placeholder="my-token")
+        tab_secret = st.text_input("Token Secret", type="password", placeholder="••••••••")
+        tab_view   = st.text_input("View Name", placeholder="Sales Overview")
+        if st.button("Connect to Tableau", use_container_width=True):
+            if all([tab_server, tab_site, tab_token, tab_secret, tab_view]):
+                with st.spinner("Connecting to Tableau..."):
+                    df_from_bi = load_tableau(tab_server, tab_site, tab_token, tab_secret, tab_view)
+                if df_from_bi is not None:
+                    st.session_state["bi_df"]     = df_from_bi
+                    st.session_state["bi_source"]  = f"Tableau · {tab_view}"
+                    st.success(f"Connected — {len(df_from_bi):,} rows loaded")
+            else:
+                st.warning("Please fill in all Tableau fields.")
+        if "bi_df" in st.session_state and st.session_state.get("bi_source", "").startswith("Tableau"):
+            df_from_bi = st.session_state["bi_df"]
+
+    # ── Power BI ─────────────────────────────────────
+    elif data_source == "Power BI":
+        st.markdown('<p class="section-label">Power BI Credentials</p>', unsafe_allow_html=True)
+        pbi_tenant   = st.text_input("Tenant ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        pbi_client   = st.text_input("Client ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        pbi_secret   = st.text_input("Client Secret", type="password", placeholder="••••••••")
+        pbi_workspace= st.text_input("Workspace ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+        pbi_dataset  = st.text_input("Dataset ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
+
+        if st.button("Connect to Power BI", use_container_width=True):
+            if all([pbi_tenant, pbi_client, pbi_secret, pbi_workspace, pbi_dataset]):
+                with st.spinner("Authenticating with Power BI..."):
+                    token = get_powerbi_token(pbi_tenant, pbi_client, pbi_secret)
+                if token:
+                    tables = list_powerbi_tables(token, pbi_workspace, pbi_dataset)
+                    if tables:
+                        st.session_state["pbi_token"]     = token
+                        st.session_state["pbi_workspace"] = pbi_workspace
+                        st.session_state["pbi_dataset"]   = pbi_dataset
+                        st.session_state["pbi_tables"]    = tables
+                        st.success(f"Connected — {len(tables)} table(s) found")
+                    else:
+                        st.warning("Connected but no tables found in this dataset.")
+            else:
+                st.warning("Please fill in all Power BI fields.")
+
+        if "pbi_tables" in st.session_state:
+            pbi_table_choice = st.selectbox(
+                "Select table to analyse",
+                st.session_state["pbi_tables"]
+            )
+            if st.button("Load Table", use_container_width=True):
+                with st.spinner(f"Loading {pbi_table_choice}..."):
+                    df_from_bi = load_powerbi_table(
+                        st.session_state["pbi_token"],
+                        st.session_state["pbi_workspace"],
+                        st.session_state["pbi_dataset"],
+                        pbi_table_choice,
+                    )
+                if df_from_bi is not None:
+                    st.session_state["bi_df"]    = df_from_bi
+                    st.session_state["bi_source"] = f"Power BI · {pbi_table_choice}"
+                    st.success(f"Loaded — {len(df_from_bi):,} rows")
+            if "bi_df" in st.session_state and st.session_state.get("bi_source", "").startswith("Power BI"):
+                df_from_bi = st.session_state["bi_df"]
 
     st.markdown("---")
     st.markdown('<p class="section-label">Analysis Context</p>', unsafe_allow_html=True)
@@ -712,7 +889,7 @@ st.markdown("""
     <div style="border-bottom: 1.5px solid #E8E5DC; padding-bottom: 1.25rem; margin-bottom: 2rem;">
         <p class="app-title">AI Dashboard Copilot</p>
         <div class="accent-bar"></div>
-        <p class="app-subtitle">Upload any dataset &nbsp;·&nbsp; Get executive-grade AI reports &nbsp;·&nbsp; Download as PDF or Word</p>
+        <p class="app-subtitle">Upload CSV / Excel &nbsp;·&nbsp; Connect Tableau or Power BI &nbsp;·&nbsp; Get executive-grade AI reports</p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -720,18 +897,32 @@ st.markdown("""
 # MAIN
 # ---------------------------------------------------
 
-if not uploaded_file:
-    st.markdown("""
+# Resolve data from whichever source was used
+df_raw = None
+data_badge = ""
+
+if uploaded_file:
+    df_raw     = load_file(uploaded_file)
+    data_badge = uploaded_file.name
+elif df_from_bi is not None:
+    df_raw     = df_from_bi
+    data_badge = st.session_state.get("bi_source", "BI Tool")
+
+if df_raw is None:
+    source_hint = {
+        "Upload CSV / Excel": "Upload a CSV or Excel file in the sidebar to begin",
+        "Tableau":            "Enter your Tableau credentials and click Connect",
+        "Power BI":           "Enter your Power BI credentials and click Connect",
+    }.get(data_source, "Choose a data source in the sidebar to begin")
+    st.markdown(f"""
         <div class="empty-state">
             <div class="icon">↓</div>
-            <p>Upload a CSV or Excel file in the sidebar to begin</p>
+            <p>{source_hint}</p>
         </div>
     """, unsafe_allow_html=True)
     st.stop()
 
-df_raw = load_file(uploaded_file)
-
-if df_raw is None:
+if uploaded_file and df_raw is None:
     st.error("Could not read that file. Please upload a CSV or Excel file.")
     st.stop()
 

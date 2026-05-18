@@ -8,3 +8,5 @@ openai
 python-docx
 reportlab
 openpyxl
+msal
+requests
