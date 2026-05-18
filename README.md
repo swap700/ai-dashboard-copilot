@@ -73,29 +73,14 @@ Works with any spreadsheet. Export from Excel, Google Sheets, or any tool and up
 
 ---
 
-## Run it locally (for developers)
+## Tech stack
 
-```bash
-# Clone the repo
-git clone https://github.com/swap700/ai-dashboard-copilot.git
-cd ai-dashboard-copilot
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Add your secrets
-mkdir -p .streamlit
-cat > .streamlit/secrets.toml << EOF
-OPENAI_API_KEY = "sk-your-key-here"
-TABLEAU_TOKEN_NAME = "your-token-name"
-TABLEAU_TOKEN_SECRET = "your-token-secret"
-TABLEAU_SERVER = "https://your-server.online.tableau.com"
-TABLEAU_SITE = "your-site-id"
-EOF
-
-# Launch
-streamlit run dashboard_ai_app.py
-```
+- **Frontend & app:** Streamlit
+- **AI reports:** OpenAI GPT-4o
+- **Charts:** Altair
+- **Tableau integration:** Tableau Server Client (TSC)
+- **Power BI integration:** Microsoft Power BI REST API
+- **Export:** python-docx (Word), ReportLab (PDF)
 
 ---
 
@@ -113,29 +98,17 @@ ai-dashboard-copilot/
 
 ---
 
-## Tech stack
-
-- **Frontend & app:** Streamlit
-- **AI reports:** OpenAI GPT-4o
-- **Charts:** Altair
-- **Tableau integration:** Tableau Server Client (TSC)
-- **Power BI integration:** Microsoft Power BI REST API
-- **Export:** python-docx (Word), ReportLab (PDF)
-
----
-
-## Deploying your own instance
-
-[![Deploy to Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io)
-
-1. Fork this repo
-2. Go to [share.streamlit.io](https://share.streamlit.io) and connect your fork
-3. Add your `OPENAI_API_KEY` and Tableau credentials in the Secrets panel
-4. Click Deploy — you'll have a live URL in under 2 minutes
-
----
-
 ## Built by
 
 **Swapnil Sakorkar** — AI Application Developer
 [LinkedIn](https://www.linkedin.com/in/sakorkar-s) · [GitHub](https://github.com/swap700)
+
+---
+
+## License
+
+© 2025 Swapnil Sakorkar. All rights reserved.
+
+This project is shared publicly for portfolio and demonstration purposes only.
+You may view and reference the code, but you may not copy, deploy, or distribute
+it — in whole or in part — without explicit written permission from the author.
