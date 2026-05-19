@@ -55,6 +55,12 @@ html, body, [class*="css"] {
 
 /* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
+
+/* ── Mobile: restore header so the sidebar toggle button is reachable ── */
+@media (max-width: 768px) {
+    header { visibility: visible !important; }
+    header [data-testid="stToolbar"] { display: none; }
+}
 .block-container {
     padding-top: 2rem;
     padding-bottom: 3rem;
