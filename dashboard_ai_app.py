@@ -230,19 +230,22 @@ html, body, [class*="css"] {
     background: #FFFFFF;
     border: 1px solid #E8E5DC;
     border-radius: 10px;
-    padding: 2rem 2.5rem;
-    line-height: 1.8;
-    font-size: 0.92rem;
+    padding: 1.5rem 2.5rem;
+    line-height: 1.65;
+    font-size: 1rem;
     color: #2E2E4A;
     box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+}
+.report-body p {
+    margin-bottom: 0.55rem;
 }
 .report-body h3 {
     font-family: 'Playfair Display', serif;
     color: #1A1A2E;
-    font-size: 1rem;
+    font-size: 1.08rem;
     font-weight: 600;
-    margin-top: 1.6rem;
-    margin-bottom: 0.5rem;
+    margin-top: 1.2rem;
+    margin-bottom: 0.35rem;
     border-left: 3px solid #B8975A;
     padding-left: 0.7rem;
 }
@@ -1085,6 +1088,9 @@ if run:
                     html_lines.append(f"<p>• {line[2:]}</p>")
                 else:
                     safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    # Convert *word* and **word** markdown bold to HTML <strong>
+                    safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
+                    safe = re.sub(r'\*(.+?)\*', r'<strong>\1</strong>', safe)
                     html_lines.append(f"<p>{safe}</p>")
             html_body = "\n".join(html_lines)
             st.markdown(
