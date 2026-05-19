@@ -56,14 +56,21 @@ html, body, [class*="css"] {
 /* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
 
-/* ── Sidebar toggle buttons — native Streamlit collapse/expand ── */
+/* ── Sidebar toggle buttons — override header visibility so they always show ── */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapsedControl"] {
+    visibility: visible !important;
+    display: flex !important;
+}
 [data-testid="stSidebarCollapseButton"] button,
 [data-testid="stSidebarCollapsedControl"] button {
+    visibility: visible !important;
     background: #1A1A2E !important;
     color: #FFFFFF !important;
     border: none !important;
     border-radius: 6px !important;
     box-shadow: 0 2px 8px rgba(0,0,0,.2) !important;
+    cursor: pointer !important;
 }
 [data-testid="stSidebarCollapseButton"] button:hover,
 [data-testid="stSidebarCollapsedControl"] button:hover {
