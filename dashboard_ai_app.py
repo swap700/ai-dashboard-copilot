@@ -53,17 +53,26 @@ html, body, [class*="css"] {
     color: #1A1A2E;
 }
 
-/* ── Hide Streamlit chrome ── */
-#MainMenu, footer, header { visibility: hidden; }
+/* ── Hide Streamlit chrome without disabling native sidebar controls ── */
+#MainMenu, footer { visibility: hidden; }
+header {
+    background: transparent !important;
+}
+button[data-testid="stBaseButton-header"],
+button[data-testid="stMainMenuButton"] {
+    visibility: hidden !important;
+}
 
-/* ── Sidebar toggle buttons — override header visibility so they always show ── */
+/* ── Sidebar toggle buttons — keep Streamlit's native collapse/expand behavior ── */
 [data-testid="stSidebarCollapseButton"],
-[data-testid="stSidebarCollapsedControl"] {
+[data-testid="stSidebarCollapsedControl"],
+button[data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
     display: flex !important;
 }
 [data-testid="stSidebarCollapseButton"] button,
-[data-testid="stSidebarCollapsedControl"] button {
+[data-testid="stSidebarCollapsedControl"] button,
+button[data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
     background: #1A1A2E !important;
     color: #FFFFFF !important;
@@ -73,8 +82,27 @@ html, body, [class*="css"] {
     cursor: pointer !important;
 }
 [data-testid="stSidebarCollapseButton"] button:hover,
-[data-testid="stSidebarCollapsedControl"] button:hover {
+[data-testid="stSidebarCollapsedControl"] button:hover,
+button[data-testid="stExpandSidebarButton"]:hover {
     opacity: 0.82 !important;
+}
+
+[data-testid="stSidebarCollapsedControl"],
+button[data-testid="stExpandSidebarButton"] {
+    z-index: 2147483647 !important;
+}
+
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] {
+        z-index: 2147483646 !important;
+    }
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stSidebarCollapsedControl"] button,
+    button[data-testid="stExpandSidebarButton"] {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        border-radius: 8px !important;
+    }
 }
 .block-container {
     padding-top: 2rem;
@@ -1029,8 +1057,8 @@ To remove your key at any time, untick "Remember key in this browser".
 
 # ---------------------------------------------------
 # MAIN-AREA PERSISTENT SCRIPTS
-# Runs in the main page (not sidebar), so it keeps working even when sidebar is closed.
-# Handles: (1) sidebar toggle button, (2) localStorage key bridge
+# Runs in the main page (not sidebar), so saved-key sync keeps working even when sidebar is closed.
+# Sidebar open/close is handled by Streamlit's native controls.
 # ---------------------------------------------------
 
 components.html("""
