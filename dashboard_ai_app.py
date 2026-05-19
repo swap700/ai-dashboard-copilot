@@ -613,7 +613,13 @@ Dashboard data:
 
 
 def clean_ai_output(text):
+    # Strip bold markers
     text = re.sub(r"\*\*", "", text)
+    # Strip any existing # heading markers — we re-add them cleanly below.
+    # Without this, "### Situation" → "### \n### Situation" (leaves orphan ###).
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+    # Strip backtick code formatting the AI uses for column names
+    text = re.sub(r"`([^`]*)`", r"\1", text)
     headers = [
         "Situation", "What This Means For You", "Recommended Actions",
         "Risks If You Wait", "Performance Breakdown", "Efficiency Gaps",
