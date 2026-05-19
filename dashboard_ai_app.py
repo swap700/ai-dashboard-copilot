@@ -56,21 +56,19 @@ html, body, [class*="css"] {
 /* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
 
-/* ── Desktop: sidebar always stays open — it's a tool, users always need it ── */
-@media (min-width: 769px) {
-    [data-testid="stSidebar"] {
-        transform: translateX(0) !important;
-        min-width: 21rem !important;
-        visibility: visible !important;
-    }
-    /* Hide the collapse/expand arrows on desktop — sidebar is pinned open */
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-    }
+/* ── Sidebar toggle buttons — native Streamlit collapse/expand ── */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="stSidebarCollapsedControl"] button {
+    background: #1A1A2E !important;
+    color: #FFFFFF !important;
+    border: none !important;
+    border-radius: 6px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,.2) !important;
 }
-
-/* ── Mobile: ☰ button injected by JS, no CSS needed here ── */
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="stSidebarCollapsedControl"] button:hover {
+    opacity: 0.82 !important;
+}
 .block-container {
     padding-top: 2rem;
     padding-bottom: 3rem;
@@ -1031,81 +1029,10 @@ To remove your key at any time, untick "Remember key in this browser".
 components.html("""
 <script>
 (function() {
-    var p   = window.parent;
-    var doc = p.document;
+    var p      = window.parent;
     var LS_KEY = 'ai_dash_copilot_oai_key';
 
-    /* ── 1. Mobile-only sidebar ☰ button ─────────────────────────────── */
-    /* On desktop the sidebar is CSS-pinned open, so this only matters on mobile */
-    function fireClick(el) {
-        /* Dispatch the full pointer+mouse event chain React listens to */
-        var r = el.getBoundingClientRect();
-        var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-        ['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(t) {
-            el.dispatchEvent(new MouseEvent(t, {
-                bubbles: true, cancelable: true, view: p,
-                clientX: cx, clientY: cy, screenX: cx, screenY: cy
-            }));
-        });
-    }
-
-    function findToggle() {
-        /* Try known selectors, then fall back to any left-edge button */
-        var sel = [
-            '[data-testid="stSidebarCollapsedControl"] button',
-            '[data-testid="stSidebarCollapsedControl"]',
-            '[data-testid="stSidebarCollapseButton"]',
-        ];
-        for (var i = 0; i < sel.length; i++) {
-            var el = doc.querySelector(sel[i]);
-            if (el) return el;
-        }
-        /* Last resort: any button sitting within 60 px of the left edge */
-        var all = Array.from(doc.querySelectorAll('button'));
-        return all.find(function(b) {
-            var r = b.getBoundingClientRect();
-            return r.left < 60 && r.width > 0 && r.height > 0;
-        }) || null;
-    }
-
-    function getBtn() { return doc.getElementById('_st_sb_open'); }
-
-    function createBtn() {
-        if (getBtn()) return;
-        var b = doc.createElement('button');
-        b.id    = '_st_sb_open';
-        b.innerHTML = '&#9776;';
-        b.title = 'Open sidebar';
-        b.style.cssText = [
-            'position:fixed','top:8px','left:8px','z-index:2147483647',
-            'background:#1A1A2E','color:#fff','border:none','border-radius:6px',
-            'padding:5px 11px','font-size:18px','line-height:1','cursor:pointer',
-            'display:none','box-shadow:0 2px 8px rgba(0,0,0,.3)','font-family:sans-serif'
-        ].join(';');
-        b.onclick = function() {
-            var t = findToggle();
-            if (t) fireClick(t);
-        };
-        doc.body.appendChild(b);
-    }
-
-    function isMobile() { return p.innerWidth <= 768; }
-
-    function tick() {
-        createBtn();
-        var btn = getBtn();
-        if (!isMobile()) { btn.style.display = 'none'; return; }
-        var sb  = doc.querySelector('[data-testid="stSidebar"]');
-        var collapsed = !sb
-            || sb.getAttribute('aria-expanded') === 'false'
-            || sb.getBoundingClientRect().width < 20;
-        btn.style.display = collapsed ? 'block' : 'none';
-    }
-
-    createBtn();
-    setInterval(tick, 200);
-
-    /* ── 2. localStorage → query-param bridge ────────────────────────── */
+    /* localStorage → query-param bridge (keeps saved API key across page reloads) */
     var saved  = p.localStorage.getItem(LS_KEY);
     var params = new URLSearchParams(p.location.search);
     if (saved && params.get('_oai') !== saved) {
