@@ -1,6 +1,7 @@
 import io
 import re
 import requests
+import streamlit.components.v1 as components
 
 import streamlit as st
 import pandas as pd
@@ -344,7 +345,10 @@ hr { border-color: #E8E5DC !important; }
 # ---------------------------------------------------
 
 def get_client(user_key=None):
-    key = user_key.strip() if user_key and user_key.strip() else st.secrets.get("OPENAI_API_KEY", "")
+    # The visitor's key is used ONLY here to initialise the OpenAI client.
+    # It is never logged, stored on the server, or sent anywhere except OpenAI.
+    # If no key is supplied the call will fail — there is no owner fallback.
+    key = user_key.strip() if user_key and user_key.strip() else ""
     return OpenAI(api_key=key)
 
 # ---------------------------------------------------
@@ -887,9 +891,54 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<p class="section-label">OpenAI API Key</p>', unsafe_allow_html=True)
 
-    # Persist key in session state so it survives sidebar reruns
+    # ── localStorage bridge ──────────────────────────────────────────────────
+    # This invisible component reads any previously saved key from the visitor's
+    # browser localStorage and writes it into a hidden Streamlit query param so
+    # Streamlit can pick it up on the next rerun.  The key NEVER leaves the
+    # visitor's own browser (it is never sent to this server).
+    components.html(
+        """
+        <script>
+        (function() {
+            const STORAGE_KEY = 'ai_dash_copilot_oai_key';
+            // On load: if a key is saved and the URL doesn't already carry it, inject it
+            const saved = localStorage.getItem(STORAGE_KEY);
+            const params = new URLSearchParams(window.parent.location.search);
+            if (saved && params.get('_oai') !== saved) {
+                params.set('_oai', saved);
+                // Replace URL silently — triggers Streamlit rerun with the param
+                window.parent.history.replaceState({}, '', '?' + params.toString());
+                window.parent.location.reload();
+            }
+
+            // Listen for save / clear messages from the Streamlit page
+            window.addEventListener('message', function(e) {
+                if (e.data && e.data.type === 'SAVE_OAI_KEY') {
+                    localStorage.setItem(STORAGE_KEY, e.data.key);
+                } else if (e.data && e.data.type === 'CLEAR_OAI_KEY') {
+                    localStorage.removeItem(STORAGE_KEY);
+                    const p2 = new URLSearchParams(window.parent.location.search);
+                    p2.delete('_oai');
+                    window.parent.history.replaceState({}, '', p2.toString() ? '?' + p2.toString() : window.parent.location.pathname);
+                }
+            });
+        })();
+        </script>
+        """,
+        height=0,
+    )
+
+    # Read the key from query params (injected by JS above on the PREVIOUS rerun)
+    _qp = st.query_params
+    _saved_key = _qp.get("_oai", "")
+
+    # Initialise session state — prefer query-param value if session state is empty
     if "user_api_key" not in st.session_state:
-        st.session_state["user_api_key"] = ""
+        st.session_state["user_api_key"] = _saved_key
+
+    # If a new saved key arrived from localStorage and session state is still empty, adopt it
+    if _saved_key and not st.session_state["user_api_key"]:
+        st.session_state["user_api_key"] = _saved_key
 
     entered_key = st.text_input(
         "Your OpenAI API key",
@@ -899,26 +948,63 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    # Save to session state whenever user types
+    # Save to session state whenever the user types
     if entered_key:
         st.session_state["user_api_key"] = entered_key
 
     user_api_key = st.session_state["user_api_key"]
 
+    # ── Save-in-browser checkbox ─────────────────────────────────────────────
+    _already_saved = bool(_saved_key and _saved_key == user_api_key)
+    save_in_browser = st.checkbox(
+        "Remember key in this browser",
+        value=_already_saved,
+        help=(
+            "Saves your key to this device only — like a password manager. "
+            "It is never uploaded to any server. Uncheck to forget it."
+        ),
+    )
+
+    if save_in_browser and user_api_key and user_api_key.startswith("sk-"):
+        # Trigger JS to persist the key in localStorage
+        components.html(
+            f"""<script>
+            window.parent.postMessage({{type:'SAVE_OAI_KEY', key:{repr(user_api_key)}}}, '*');
+            </script>""",
+            height=0,
+        )
+    elif not save_in_browser and _already_saved:
+        # User unchecked — clear the saved key
+        components.html(
+            """<script>
+            window.parent.postMessage({type:'CLEAR_OAI_KEY'}, '*');
+            </script>""",
+            height=0,
+        )
+
     # Key status indicator
     if user_api_key and user_api_key.startswith("sk-"):
-        st.markdown(
-            '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">✓ Key saved for this session</p>',
-            unsafe_allow_html=True,
-        )
+        if save_in_browser:
+            st.markdown(
+                '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">'
+                '✓ Key active &amp; saved in this browser</p>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">'
+                '✓ Key active for this session only</p>',
+                unsafe_allow_html=True,
+            )
     elif user_api_key:
         st.markdown(
-            '<p style="font-size:0.72rem;color:#C0392B;margin-top:3px;">⚠ Key format looks incorrect — should start with sk-</p>',
+            '<p style="font-size:0.72rem;color:#C0392B;margin-top:3px;">'
+            '⚠ Key format looks incorrect — should start with sk-</p>',
             unsafe_allow_html=True,
         )
 
     # Step-by-step guide for non-tech users
-    with st.expander("How to get your free API key"):
+    with st.expander("How to get your API key — 5 easy steps"):
         st.markdown("""
 **Step 1** — Go to [platform.openai.com](https://platform.openai.com)
 and create a free account (or log in if you have one).
@@ -928,24 +1014,25 @@ Give it any name, e.g. *"Dashboard Copilot"*.
 
 **Step 3** — Copy the key (starts with `sk-`). You only see it once — copy it now.
 
-**Step 4** — Paste it in the field above. It is stored only in your browser
-session and disappears when you close the tab. It is never saved to any server.
+**Step 4** — Paste it in the field above, then tick **"Remember key in this browser"**
+so you never have to paste it again on this device.
 
 **Step 5** — OpenAI gives new accounts **$5 of free credit**.
 Each report costs roughly $0.01–0.02, so you can generate hundreds of reports for free.
 
 ---
-**Your key is safe here.**
-It is sent directly from your browser to OpenAI — this app never reads,
-logs, or stores it. You can verify this in the
-[open-source code](https://github.com/swap700/ai-dashboard-copilot).
+**Is it safe?**
+Your key is saved in your own browser's local storage — exactly like how a password
+manager works. It is never transmitted to this app's server. It goes directly from
+your browser to OpenAI and nowhere else.
+
+To remove your key at any time, untick "Remember key in this browser".
         """)
 
     st.markdown("---")
 
-    # Block the button if no valid key is available
-    fallback_key = st.secrets.get("OPENAI_API_KEY", "")
-    key_ready = bool(user_api_key and user_api_key.startswith("sk-")) or bool(fallback_key)
+    # Block the button if no valid key is provided by the visitor
+    key_ready = bool(user_api_key and user_api_key.startswith("sk-"))
 
     if not key_ready:
         st.markdown(
