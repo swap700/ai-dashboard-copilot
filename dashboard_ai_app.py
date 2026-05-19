@@ -56,10 +56,27 @@ html, body, [class*="css"] {
 /* ── Hide Streamlit chrome ── */
 #MainMenu, footer, header { visibility: hidden; }
 
-/* ── Mobile: restore header so the sidebar toggle button is reachable ── */
+/* ── Mobile sidebar open button ── */
+.mobile-menu-btn {
+    display: none;
+    position: fixed;
+    top: 0.55rem;
+    left: 0.55rem;
+    z-index: 99999;
+    background: #1A1A2E;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 7px;
+    padding: 0.42rem 0.7rem;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(26,26,46,0.22);
+    font-family: 'IBM Plex Sans', sans-serif;
+}
+.mobile-menu-btn:active { opacity: 0.75; }
 @media (max-width: 768px) {
-    header { visibility: visible !important; }
-    header [data-testid="stToolbar"] { display: none; }
+    .mobile-menu-btn { display: block; }
 }
 .block-container {
     padding-top: 2rem;
@@ -1052,6 +1069,28 @@ To remove your key at any time, untick "Remember key in this browser".
         use_container_width=True,
         disabled=not key_ready,
     )
+
+# ---------------------------------------------------
+# MOBILE SIDEBAR TOGGLE BUTTON
+# ---------------------------------------------------
+
+st.markdown("""
+<button class="mobile-menu-btn" onclick="
+    (function() {
+        var targets = [
+            '[data-testid=stSidebarCollapsedControl]',
+            '[data-testid=stSidebarCollapsedControl] button',
+            'button[kind=header]',
+            '[data-testid=stSidebar] ~ div button',
+            'section[data-testid=stSidebar]'
+        ];
+        for (var i = 0; i < targets.length; i++) {
+            var el = document.querySelector(targets[i]);
+            if (el) { el.click(); return; }
+        }
+    })();
+" title="Open menu">☰</button>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------
 # APP HEADER
