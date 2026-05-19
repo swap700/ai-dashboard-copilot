@@ -81,6 +81,12 @@ button[data-testid="stExpandSidebarButton"] {
     box-shadow: 0 2px 8px rgba(0,0,0,.2) !important;
     cursor: pointer !important;
 }
+[data-testid="stSidebarCollapseButton"] button *,
+[data-testid="stSidebarCollapsedControl"] button *,
+button[data-testid="stExpandSidebarButton"] * {
+    color: #F7F6F2 !important;
+    fill: #F7F6F2 !important;
+}
 [data-testid="stSidebarCollapseButton"] button:hover,
 [data-testid="stSidebarCollapsedControl"] button:hover,
 button[data-testid="stExpandSidebarButton"]:hover {
