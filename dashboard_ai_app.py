@@ -340,10 +340,12 @@ hr { border-color: #E8E5DC !important; }
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# CLIENT
+# CLIENT — resolved later in sidebar after user key is captured
 # ---------------------------------------------------
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+def get_client(user_key=None):
+    key = user_key.strip() if user_key and user_key.strip() else st.secrets.get("OPENAI_API_KEY", "")
+    return OpenAI(api_key=key)
 
 # ---------------------------------------------------
 # FILE LOADER
@@ -526,7 +528,7 @@ Rules: under 450 words, risk language, reference specific numbers, write to prom
 # PROMPT + AI CALL
 # ---------------------------------------------------
 
-def generate_report(summary, who, decision, timeframe, report_type):
+def generate_report(summary, who, decision, timeframe, report_type, api_key=None):
     instruction = REPORT_CONFIGS[report_type]
     prompt = f"""You are advising a {who} who needs to make a decision about:
 "{decision}"
@@ -541,7 +543,8 @@ Write for a {who} — direct and specific, not academic.
 Dashboard data:
 {summary}
 """
-    response = client.chat.completions.create(
+    c = get_client(api_key)
+    response = c.chat.completions.create(
         model="gpt-4o",
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
@@ -882,7 +885,80 @@ with st.sidebar:
                 filter_col = None
 
     st.markdown("---")
-    run = st.button("Generate Reports", use_container_width=True)
+    st.markdown('<p class="section-label">OpenAI API Key</p>', unsafe_allow_html=True)
+
+    # Persist key in session state so it survives sidebar reruns
+    if "user_api_key" not in st.session_state:
+        st.session_state["user_api_key"] = ""
+
+    entered_key = st.text_input(
+        "Your OpenAI API key",
+        type="password",
+        placeholder="sk-proj-...",
+        value=st.session_state["user_api_key"],
+        label_visibility="collapsed",
+    )
+
+    # Save to session state whenever user types
+    if entered_key:
+        st.session_state["user_api_key"] = entered_key
+
+    user_api_key = st.session_state["user_api_key"]
+
+    # Key status indicator
+    if user_api_key and user_api_key.startswith("sk-"):
+        st.markdown(
+            '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">✓ Key saved for this session</p>',
+            unsafe_allow_html=True,
+        )
+    elif user_api_key:
+        st.markdown(
+            '<p style="font-size:0.72rem;color:#C0392B;margin-top:3px;">⚠ Key format looks incorrect — should start with sk-</p>',
+            unsafe_allow_html=True,
+        )
+
+    # Step-by-step guide for non-tech users
+    with st.expander("How to get your free API key"):
+        st.markdown("""
+**Step 1** — Go to [platform.openai.com](https://platform.openai.com)
+and create a free account (or log in if you have one).
+
+**Step 2** — Click your profile icon (top right) → **API keys** → **Create new secret key**.
+Give it any name, e.g. *"Dashboard Copilot"*.
+
+**Step 3** — Copy the key (starts with `sk-`). You only see it once — copy it now.
+
+**Step 4** — Paste it in the field above. It is stored only in your browser
+session and disappears when you close the tab. It is never saved to any server.
+
+**Step 5** — OpenAI gives new accounts **$5 of free credit**.
+Each report costs roughly $0.01–0.02, so you can generate hundreds of reports for free.
+
+---
+**Your key is safe here.**
+It is sent directly from your browser to OpenAI — this app never reads,
+logs, or stores it. You can verify this in the
+[open-source code](https://github.com/swap700/ai-dashboard-copilot).
+        """)
+
+    st.markdown("---")
+
+    # Block the button if no valid key is available
+    fallback_key = st.secrets.get("OPENAI_API_KEY", "")
+    key_ready = bool(user_api_key and user_api_key.startswith("sk-")) or bool(fallback_key)
+
+    if not key_ready:
+        st.markdown(
+            '<p style="font-size:0.75rem;color:#C0392B;text-align:center;">'
+            'Add your OpenAI key above to generate reports.</p>',
+            unsafe_allow_html=True,
+        )
+
+    run = st.button(
+        "Generate Reports",
+        use_container_width=True,
+        disabled=not key_ready,
+    )
 
 # ---------------------------------------------------
 # APP HEADER
@@ -1066,7 +1142,7 @@ if run:
     ):
         with tab:
             with st.spinner(f"Generating {report_type}..."):
-                report_text = generate_report(summary, who, decision, timeframe, report_type)
+                report_text = generate_report(summary, who, decision, timeframe, report_type, api_key=user_api_key)
 
             # Clean up raw markdown artifacts before rendering
             clean = report_text
