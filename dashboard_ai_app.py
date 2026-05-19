@@ -53,29 +53,9 @@ html, body, [class*="css"] {
     color: #1A1A2E;
 }
 
-/* ── Hide Streamlit chrome — surgical, not blanket ── */
-#MainMenu { visibility: hidden; }
-footer    { visibility: hidden; }
-
-/* Make the header container transparent so it takes no visual space */
-header[data-testid="stHeader"] {
-    background: transparent !important;
-    box-shadow: none !important;
-}
-
-/* Hide the specific toolbar items we don't want */
-[data-testid="stToolbar"],
-[data-testid="stStatusWidget"],
-[data-testid="stDecoration"] {
-    visibility: hidden !important;
-}
-
-/* Always keep the sidebar open/close toggle visible */
-[data-testid="stSidebarCollapsedControl"] {
-    visibility: visible !important;
-    display: flex !important;
-    z-index: 999999 !important;
-}
+/* ── Hide Streamlit chrome ── */
+#MainMenu, footer, header { visibility: hidden; }
+/* Our ☰ sidebar button is injected by JS directly onto document.body — unaffected by this */
 .block-container {
     padding-top: 2rem;
     padding-bottom: 3rem;
@@ -335,10 +315,6 @@ hr { border-color: #E8E5DC !important; }
     font-weight: 500;
 }
 
-/* ── Hide iframe component labels ("streamlitApp") ── */
-.stIFrame ~ div, iframe + div { display: none !important; }
-[data-testid="stCustomComponentV1"] > div:first-child { display: none !important; }
-iframe[title="streamlitApp"] { display: block; height: 0 !important; border: none !important; }
 
 /* ── File uploader ── */
 [data-testid="stFileUploader"] {
@@ -917,44 +893,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<p class="section-label">OpenAI API Key</p>', unsafe_allow_html=True)
 
-    # ── localStorage bridge ──────────────────────────────────────────────────
-    # This invisible component reads any previously saved key from the visitor's
-    # browser localStorage and writes it into a hidden Streamlit query param so
-    # Streamlit can pick it up on the next rerun.  The key NEVER leaves the
-    # visitor's own browser (it is never sent to this server).
-    components.html(
-        """
-        <script>
-        (function() {
-            const STORAGE_KEY = 'ai_dash_copilot_oai_key';
-            // On load: if a key is saved and the URL doesn't already carry it, inject it
-            const saved = localStorage.getItem(STORAGE_KEY);
-            const params = new URLSearchParams(window.parent.location.search);
-            if (saved && params.get('_oai') !== saved) {
-                params.set('_oai', saved);
-                // Replace URL silently — triggers Streamlit rerun with the param
-                window.parent.history.replaceState({}, '', '?' + params.toString());
-                window.parent.location.reload();
-            }
-
-            // Listen for save / clear messages from the Streamlit page
-            window.addEventListener('message', function(e) {
-                if (e.data && e.data.type === 'SAVE_OAI_KEY') {
-                    localStorage.setItem(STORAGE_KEY, e.data.key);
-                } else if (e.data && e.data.type === 'CLEAR_OAI_KEY') {
-                    localStorage.removeItem(STORAGE_KEY);
-                    const p2 = new URLSearchParams(window.parent.location.search);
-                    p2.delete('_oai');
-                    window.parent.history.replaceState({}, '', p2.toString() ? '?' + p2.toString() : window.parent.location.pathname);
-                }
-            });
-        })();
-        </script>
-        """,
-        height=0,
-    )
-
-    # Read the key from query params (injected by JS above on the PREVIOUS rerun)
+    # Read the key from query params (injected by main-area JS on the previous rerun)
     _qp = st.query_params
     _saved_key = _qp.get("_oai", "")
 
@@ -992,19 +931,14 @@ with st.sidebar:
     )
 
     if save_in_browser and user_api_key and user_api_key.startswith("sk-"):
-        # Trigger JS to persist the key in localStorage
+        # Write directly to parent localStorage — same origin, no postMessage needed
         components.html(
-            f"""<script>
-            window.parent.postMessage({{type:'SAVE_OAI_KEY', key:{repr(user_api_key)}}}, '*');
-            </script>""",
+            f"<script>try{{window.parent.localStorage.setItem('ai_dash_copilot_oai_key',{repr(user_api_key)})}}catch(e){{}}</script>",
             height=0,
         )
     elif not save_in_browser and _already_saved:
-        # User unchecked — clear the saved key
         components.html(
-            """<script>
-            window.parent.postMessage({type:'CLEAR_OAI_KEY'}, '*');
-            </script>""",
+            "<script>try{window.parent.localStorage.removeItem('ai_dash_copilot_oai_key')}catch(e){}</script>",
             height=0,
         )
 
@@ -1072,6 +1006,74 @@ To remove your key at any time, untick "Remember key in this browser".
         use_container_width=True,
         disabled=not key_ready,
     )
+
+# ---------------------------------------------------
+# MAIN-AREA PERSISTENT SCRIPTS
+# Runs in the main page (not sidebar), so it keeps working even when sidebar is closed.
+# Handles: (1) sidebar toggle button, (2) localStorage key bridge
+# ---------------------------------------------------
+
+components.html("""
+<script>
+(function() {
+    var p   = window.parent;
+    var doc = p.document;
+    var LS_KEY = 'ai_dash_copilot_oai_key';
+
+    /* ── 1. Sidebar toggle button ─────────────────────────────────────── */
+    function getBtn() { return doc.getElementById('_st_sb_open'); }
+
+    function createBtn() {
+        if (getBtn()) return;
+        var b = doc.createElement('button');
+        b.id = '_st_sb_open';
+        b.innerHTML = '&#9776;';
+        b.title = 'Open sidebar';
+        b.style.cssText = [
+            'position:fixed', 'top:8px', 'left:8px',
+            'z-index:2147483647',
+            'background:#1A1A2E', 'color:#fff',
+            'border:none', 'border-radius:6px',
+            'padding:5px 11px', 'font-size:18px', 'line-height:1',
+            'cursor:pointer', 'display:none',
+            'box-shadow:0 2px 8px rgba(0,0,0,.3)',
+            'font-family:sans-serif'
+        ].join(';');
+        b.onclick = function() {
+            var t = doc.querySelector('[data-testid="stSidebarCollapsedControl"] button')
+                 || doc.querySelector('[data-testid="stSidebarCollapsedControl"]');
+            if (t) t.click();
+        };
+        doc.body.appendChild(b);
+    }
+
+    function tick() {
+        createBtn();
+        var btn = getBtn();
+        var sb  = doc.querySelector('[data-testid="stSidebar"]');
+        /* Sidebar is collapsed when aria-expanded="false" or its width is tiny */
+        var collapsed = !sb
+            || sb.getAttribute('aria-expanded') === 'false'
+            || sb.getBoundingClientRect().width < 20;
+        btn.style.display = collapsed ? 'block' : 'none';
+    }
+
+    createBtn();
+    setInterval(tick, 200);   /* poll every 200 ms — lightweight */
+
+    /* ── 2. localStorage → query-param bridge ────────────────────────── */
+    /* If visitor has a saved key and it isn't already in the URL,
+       inject it and reload so Streamlit can read it from st.query_params */
+    var saved  = p.localStorage.getItem(LS_KEY);
+    var params = new URLSearchParams(p.location.search);
+    if (saved && params.get('_oai') !== saved) {
+        params.set('_oai', saved);
+        p.history.replaceState({}, '', '?' + params.toString());
+        p.location.reload();
+    }
+})();
+</script>
+""", height=0)
 
 # ---------------------------------------------------
 # APP HEADER
