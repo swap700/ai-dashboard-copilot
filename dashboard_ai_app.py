@@ -33,7 +33,7 @@ except ImportError:
 # ---------------------------------------------------
 
 st.set_page_config(
-    page_title="AI Dashboard Copilot",
+    page_title="Nixara",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -993,12 +993,12 @@ with st.sidebar:
     if save_in_browser and user_api_key and user_api_key.startswith("sk-"):
         # Write directly to parent localStorage — same origin, no postMessage needed
         components.html(
-            f"<script>try{{window.parent.localStorage.setItem('ai_dash_copilot_oai_key',{repr(user_api_key)})}}catch(e){{}}</script>",
+            f"<script>try{{window.parent.localStorage.setItem('nixara_oai_key',{repr(user_api_key)})}}catch(e){{}}</script>",
             height=0,
         )
     elif not save_in_browser and _already_saved:
         components.html(
-            "<script>try{window.parent.localStorage.removeItem('ai_dash_copilot_oai_key')}catch(e){}</script>",
+            "<script>try{window.parent.localStorage.removeItem('nixara_oai_key')}catch(e){}</script>",
             height=0,
         )
 
@@ -1030,7 +1030,7 @@ with st.sidebar:
 and create a free account (or log in if you have one).
 
 **Step 2** — Click your profile icon (top right) → **API keys** → **Create new secret key**.
-Give it any name, e.g. *"Dashboard Copilot"*.
+Give it any name, e.g. *"Nixara"*.
 
 **Step 3** — Copy the key (starts with `sk-`). You only see it once — copy it now.
 
@@ -1077,7 +1077,7 @@ components.html("""
 <script>
 (function() {
     var p      = window.parent;
-    var LS_KEY = 'ai_dash_copilot_oai_key';
+    var LS_KEY = 'nixara_oai_key';
 
     /* localStorage → query-param bridge (keeps saved API key across page reloads) */
     var saved  = p.localStorage.getItem(LS_KEY);
@@ -1097,7 +1097,11 @@ components.html("""
 
 st.markdown("""
     <div style="border-bottom: 1.5px solid #E8E5DC; padding-bottom: 1.25rem; margin-bottom: 2rem;">
-        <p class="app-title">AI Dashboard Copilot</p>
+        <p class="app-title">Nixara</p>
+        <p style="font-size:0.7rem; color:#9B8FA8; letter-spacing:0.12em; text-transform:uppercase;
+                  font-weight:500; margin: 0.1rem 0 0.4rem;">
+            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0;">from <strong style="color:#B8975A;">nix</strong> (clarity, light) + <strong style="color:#B8975A;">ara</strong> (direction) — illuminating the path forward in your data</em>
+        </p>
         <div class="accent-bar"></div>
         <p class="app-subtitle">Upload CSV / Excel &nbsp;·&nbsp; Connect Tableau or Power BI &nbsp;·&nbsp; Get executive-grade AI reports</p>
     </div>
@@ -1194,7 +1198,7 @@ with nav_faq:
         <p class="faq-eyebrow">Help & Documentation</p>
         <p class="faq-title">Frequently Asked Questions</p>
         <p class="faq-subtitle">
-            Everything you need to know about how AI Dashboard Copilot works,
+            Everything you need to know about how Nixara works,
             how your data is handled, and how to get the most from it.
         </p>
     </div>
@@ -1225,9 +1229,9 @@ with nav_faq:
     # ── GETTING STARTED ──────────────────────────────────
     st.markdown('<p class="faq-category">Getting Started</p>', unsafe_allow_html=True)
 
-    with st.expander("What is AI Dashboard Copilot?"):
+    with st.expander("What is Nixara?"):
         st.markdown("""
-        **AI Dashboard Copilot is a built-in AI analyst for your business data** — no prompting skills required.
+        **Nixara is a built-in AI analyst for your business data** — no prompting skills required.
 
         Upload any CSV or Excel file, or connect your live Tableau / Power BI dashboard, and get three
         decision-ready reports in under 30 seconds:
