@@ -1104,238 +1104,529 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------
-# MAIN
+# TOP-LEVEL NAVIGATION TABS
+# FAQ tab is defined first in code so it always renders
+# even if the dashboard tab has early-exit logic.
 # ---------------------------------------------------
 
-# Resolve data from whichever source was used
-df_raw = None
-data_badge = ""
+nav_dashboard, nav_faq = st.tabs(["  Dashboard  ", "  FAQ & Help  "])
 
-if uploaded_file:
-    df_raw     = load_file(uploaded_file)
-    data_badge = uploaded_file.name
-elif df_from_bi is not None:
-    df_raw     = df_from_bi
-    data_badge = st.session_state.get("bi_source", "BI Tool")
+# ---------------------------------------------------
+# FAQ TAB
+# ---------------------------------------------------
 
-if df_raw is None:
-    source_hint = {
-        "Upload CSV / Excel": "Upload a CSV or Excel file in the sidebar to begin",
-        "Tableau":            "Enter your Tableau credentials and click Connect",
-        "Power BI":           "Enter your Power BI credentials and click Connect",
-    }.get(data_source, "Choose a data source in the sidebar to begin")
-    st.markdown(f"""
-        <div class="empty-state">
-            <div class="icon">↓</div>
-            <p>{source_hint}</p>
-        </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-if uploaded_file and df_raw is None:
-    st.error("Could not read that file. Please upload a CSV or Excel file.")
-    st.stop()
-
-df = clean_dataframe(df_raw.copy())
-st.session_state["df_for_filter"] = df
-
-numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-cat_cols = df.select_dtypes(exclude=np.number).columns.tolist()
-
-# Apply filter for display
-df_display = df.copy()
-if filter_col and filter_val:
-    df_display = df[df[filter_col] == filter_val]
-
-# --- DATA PREVIEW ---
-st.markdown('<p class="section-label">Dataset Overview</p>', unsafe_allow_html=True)
-
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Rows", f"{len(df_display):,}")
-c2.metric("Columns", f"{len(df_display.columns)}")
-c3.metric("Numeric fields", len(numeric_cols))
-c4.metric("Quality Score", f"{dashboard_score(df_display)}/100")
-
-st.dataframe(
-    df_display.head(10),
-    use_container_width=True,
-    hide_index=True,
-)
-
-# --- CHARTS ---
-if cat_cols and numeric_cols and df_display[cat_cols[0]].nunique() <= 25:
-
-    chart_col1, chart_col2 = st.columns(2)
-
-    with chart_col1:
-        primary_cat = cat_cols[0]
-        primary_num = numeric_cols[0]
-        agg = smart_agg(primary_num)
-        chart_df = df_display.groupby(primary_cat)[primary_num].agg(agg).reset_index()
-        chart_df.columns = ["category", "value"]
-        chart_df = chart_df.sort_values("value", ascending=False)
-
-        bar = (
-            alt.Chart(chart_df)
-            .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-            .encode(
-                x=alt.X("value:Q", title=f"{agg.title()} of {primary_num}",
-                         axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
-                                       gridColor="#E8E5DC", domainColor="#E8E5DC",
-                                       tickColor="#E8E5DC")),
-                y=alt.Y("category:N", sort="-x", title="",
-                         axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
-                                       tickColor="#E8E5DC")),
-                color=alt.condition(
-                    alt.datum.value >= 0,
-                    alt.value("#B8975A"),
-                    alt.value("#C0392B"),
-                ),
-                tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
-            )
-            .properties(
-                title=alt.TitleParams(
-                    f"{agg.title()} {primary_num} by {primary_cat}",
-                    color="#1A1A2E",
-                    fontSize=13,
-                    font="IBM Plex Sans",
-                ),
-                height=max(min(52 * df_display[primary_cat].nunique(), 400), 160),
-                background="#FFFFFF",
-                padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
-            )
-        )
-        st.altair_chart(bar, use_container_width=True)
-
-    with chart_col2:
-        if len(numeric_cols) >= 2:
-            second_num = numeric_cols[1]
-            agg2 = smart_agg(second_num)
-            chart_df2 = df_display.groupby(cat_cols[0])[second_num].agg(agg2).reset_index()
-            chart_df2.columns = ["category", "value"]
-            chart_df2 = chart_df2.sort_values("value", ascending=False)
-
-            bar2 = (
-                alt.Chart(chart_df2)
-                .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
-                .encode(
-                    x=alt.X("value:Q", title=f"{agg2.title()} of {second_num}",
-                             axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
-                                           gridColor="#E8E5DC", domainColor="#E8E5DC",
-                                           tickColor="#E8E5DC")),
-                    y=alt.Y("category:N", sort="-x", title="",
-                             axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
-                                           tickColor="#E8E5DC")),
-                    color=alt.condition(
-                        alt.datum.value >= 0,
-                        alt.value("#2E6DA4"),
-                        alt.value("#C0392B"),
-                    ),
-                    tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
-                )
-                .properties(
-                    title=alt.TitleParams(
-                        f"{agg2.title()} {second_num} by {cat_cols[0]}",
-                        color="#1A1A2E",
-                        fontSize=13,
-                        font="IBM Plex Sans",
-                    ),
-                    height=max(min(52 * df_display[cat_cols[0]].nunique(), 400), 160),
-                    background="#FFFFFF",
-                    padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
-                )
-            )
-            st.altair_chart(bar2, use_container_width=True)
-
-# Anomaly warnings
-for col in numeric_cols[:2]:
-    anom = detect_anomalies(df_display, col)
-    if not anom.empty:
-        st.warning(f"{len(anom)} anomalous rows detected in **{col}** — flagged in the Risk Report.")
-
-# --- REPORTS ---
-if run:
-
-    if not decision.strip():
-        st.warning("Please describe the decision you are trying to make before generating reports.")
-        st.stop()
-
-    summary = build_data_summary(df, filter_col=filter_col, filter_val=filter_val)
-
-    st.markdown("---")
-    st.markdown('<p class="section-label">AI Reports</p>', unsafe_allow_html=True)
-
-    tab1, tab2, tab3 = st.tabs(["Executive Summary", "Operational Detail", "Risk Report"])
-
-    for tab, report_type in zip(
-        [tab1, tab2, tab3],
-        ["Executive Summary", "Operational Detail", "Risk Report"]
-    ):
-        with tab:
-            with st.spinner(f"Generating {report_type}..."):
-                report_text = generate_report(summary, who, decision, timeframe, report_type, api_key=user_api_key)
-
-            # Clean up raw markdown artifacts before rendering
-            clean = report_text
-            # Ensure ### headers have a blank line before them for proper rendering
-            clean = re.sub(r'([^\n])\n(### )', r'\1\n\n\2', clean)
-
-            # FIX: old code rendered an empty div then put content outside it.
-            # Now we convert to HTML and inject it inside the styled .report-body card.
-            html_lines = []
-            for line in clean.split("\n"):
-                line = line.strip()
-                if not line:
-                    html_lines.append("<br>")
-                elif line.startswith("### "):
-                    html_lines.append(f"<h3>{line[4:]}</h3>")
-                elif re.match(r"^\d+\.", line):
-                    html_lines.append(f"<p>{line}</p>")
-                elif line.startswith("- ") or line.startswith("• "):
-                    html_lines.append(f"<p>• {line[2:]}</p>")
-                else:
-                    safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                    # Convert *word* and **word** markdown bold to HTML <strong>
-                    safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
-                    safe = re.sub(r'\*(.+?)\*', r'<strong>\1</strong>', safe)
-                    html_lines.append(f"<p>{safe}</p>")
-            html_body = "\n".join(html_lines)
-            st.markdown(
-                f'<div class="report-body">{html_body}</div>',
-                unsafe_allow_html=True
-            )
-
-            st.markdown("<br>", unsafe_allow_html=True)
-            dl1, dl2 = st.columns([1, 1])
-
-            with dl1:
-                st.download_button(
-                    label="↓  Download as Word",
-                    data=report_to_docx(report_text, report_type, who, decision, timeframe),
-                    file_name=f"{report_type.lower().replace(' ', '_')}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"docx_{report_type}",
-                    use_container_width=True,
-                )
-
-            with dl2:
-                st.download_button(
-                    label="↓  Download as PDF",
-                    data=report_to_pdf(report_text, report_type, who, decision, timeframe),
-                    file_name=f"{report_type.lower().replace(' ', '_')}.pdf",
-                    mime="application/pdf",
-                    key=f"pdf_{report_type}",
-                    use_container_width=True,
-                )
-
-elif uploaded_file:
+with nav_faq:
     st.markdown("""
-        <div style="text-align:center; padding: 2rem; color: #B0ADC0;
-                    border: 1px dashed #D4D0C8; border-radius: 10px; margin-top: 1rem;
-                    background: #FAFAF8;">
-            <p style="font-size: 0.82rem; letter-spacing: 0.08em;
-                      text-transform: uppercase; margin: 0; font-weight: 500;">
-                Fill in the sidebar and click Generate Reports
-            </p>
-        </div>
+    <style>
+    /* FAQ section headers */
+    .faq-category {
+        font-family: 'Playfair Display', serif;
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #1A1A2E;
+        margin-top: 2rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid #B8975A;
+        padding-left: 0.75rem;
+    }
+    /* Trust badge strip */
+    .trust-strip {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin: 1.5rem 0;
+        padding: 1.2rem 1.5rem;
+        background: #FAFAF8;
+        border: 1px solid #E8E5DC;
+        border-radius: 10px;
+    }
+    .trust-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.82rem;
+        color: #4A4A6A;
+        font-weight: 500;
+    }
+    .trust-icon { font-size: 1rem; }
+    </style>
     """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="margin-bottom: 1.5rem;">
+        <p class="app-title" style="font-size:1.4rem;">Frequently Asked Questions</p>
+        <div class="accent-bar"></div>
+        <p class="app-subtitle">Everything you need to know before you upload your first file.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Trust strip
+    st.markdown("""
+    <div class="trust-strip">
+        <div class="trust-item"><span class="trust-icon">🔒</span> Your data never leaves your session</div>
+        <div class="trust-item"><span class="trust-icon">🗝️</span> Your OpenAI key — your account, your costs</div>
+        <div class="trust-item"><span class="trust-icon">📄</span> No accounts, no sign-up required</div>
+        <div class="trust-item"><span class="trust-icon">⚡</span> Reports in under 30 seconds</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── GETTING STARTED ──────────────────────────────────
+    st.markdown('<p class="faq-category">Getting Started</p>', unsafe_allow_html=True)
+
+    with st.expander("What is AI Dashboard Copilot?"):
+        st.markdown("""
+        **AI Dashboard Copilot is a built-in AI analyst for your business data** — no prompting skills required.
+
+        Upload any CSV or Excel file, or connect your live Tableau / Power BI dashboard, and get three
+        decision-ready reports in under 30 seconds:
+
+        - **Executive Summary** — Strategic narrative written for the boardroom: situation, implications, recommended actions
+        - **Operational Detail** — Efficiency gaps, process recommendations, and quick wins for team managers
+        - **Risk Report** — Early warning signs, data quality flags, and mitigation actions
+
+        Each report is generated for your specific role, decision context, and time horizon — then delivered as
+        a formatted Word or PDF document you can share immediately.
+        """)
+
+    with st.expander("What data formats are supported?"):
+        st.markdown("""
+        - **CSV** (.csv) — any standard comma-separated file
+        - **Excel** (.xlsx, .xls) — single-sheet workbooks work best
+        - **Tableau Server** — connect via your Tableau credentials and pull live view data
+        - **Power BI** — connect via Azure AD credentials and pull dataset exports
+
+        Your data must be **tabular** (rows and columns) with at least one numeric column.
+        It works best with structured business data: sales figures, operational KPIs,
+        HR metrics, financial reports, healthcare outcomes.
+
+        > **Tip:** If your Excel file has merged cells or multi-row headers, flatten it to a simple table first.
+        """)
+
+    with st.expander("How do I get an OpenAI API key?"):
+        st.markdown("""
+        1. Go to **[platform.openai.com](https://platform.openai.com)** and sign in (or create a free account)
+        2. Click your profile → **API Keys** → **Create new secret key**
+        3. Copy the key (starts with `sk-proj-...`) and paste it into the sidebar
+
+        **Cost:** A typical three-report run uses approximately 2,000–5,000 tokens.
+        At current GPT-4o pricing, that's roughly **$0.01–$0.05 per run** — less than a cup of coffee per week
+        for daily use. You can monitor usage at **platform.openai.com/usage** at any time.
+        """)
+
+    # ── PRIVACY & SECURITY ────────────────────────────────
+    st.markdown('<p class="faq-category">Privacy & Security</p>', unsafe_allow_html=True)
+
+    with st.expander("Is my data safe? Where does it go?"):
+        st.markdown("""
+        Your data is handled with the following guarantees:
+
+        - **Processed in memory only** — data lives in your active session and is discarded when you close the tab
+        - **Never stored or logged** — we do not write your data to any database or file system
+        - **Never used for AI training** — OpenAI's API terms prohibit using API inputs for model training
+        - **Single external touchpoint** — the only service your data reaches is OpenAI's API,
+          and only when you click *Generate Reports*
+
+        Think of it like a calculator: it processes your numbers and returns a result,
+        but it doesn't remember what you typed.
+        """)
+
+    with st.expander("Why do I need my own OpenAI API key? Why not just use the app's key?"):
+        st.markdown("""
+        We deliberately chose **not** to embed a shared API key. Here's why this is actually better for you:
+
+        - **Your data only passes through your OpenAI account** — not a pooled account with other users' data
+        - **You control your own spend** — you can set monthly budget limits directly in OpenAI's dashboard
+        - **You can revoke access instantly** — delete the key anytime from OpenAI without affecting anyone else
+        - **No trust required** — you don't have to trust that we're handling a shared key responsibly,
+          because there isn't one
+
+        It's the same reason you wouldn't want your bank to share a login with everyone in the branch.
+
+        You can also optionally check *"Remember key in this browser"* in the sidebar —
+        the key is stored in your browser's local storage (like a password manager), so you only paste it once.
+        """)
+
+    with st.expander("Can I trust that the \"Remember key\" feature is secure?"):
+        st.markdown("""
+        Yes. Here's exactly what happens:
+
+        1. When you check *Remember key in this browser*, the key is saved to **your browser's localStorage** —
+           the same mechanism used by password managers and banking apps
+        2. The key is **never sent to our server** — the JavaScript runs in your browser only
+        3. It is **never visible in logs, analytics, or network requests** on our side
+        4. You can remove it any time by unchecking the box, or by clearing your browser's site data
+
+        If you're using a shared or public computer, simply leave the box unchecked.
+        """)
+
+    # ── HOW IT WORKS ─────────────────────────────────────
+    st.markdown('<p class="faq-category">How It Works</p>', unsafe_allow_html=True)
+
+    with st.expander("How is this different from pasting my data into ChatGPT?"):
+        st.markdown("""
+        Five meaningful differences:
+
+        **1. Direct connection, no copy-paste**
+        Upload once or connect your BI tool — no manual copying, no hitting character limits,
+        no worrying about whether the AI saw all your rows.
+
+        **2. Pre-engineered prompts**
+        Instead of you figuring out how to ask for analysis, the prompts are pre-built for business decision-making —
+        calibrated by role (CFO vs. Operations Manager) and time horizon (next 30 days vs. next quarter).
+        ChatGPT gives you what you ask for; this gives you what you need.
+
+        **3. Anomaly detection before the AI sees your data**
+        Statistical outliers in your dataset are flagged before the report is generated,
+        so the AI's recommendations account for dirty or unusual data.
+
+        **4. Structured, shareable output**
+        Reports are formatted and downloadable as Word or PDF — ready to drop into a board deck or email.
+        No reformatting required.
+
+        **5. Your data stays in your account**
+        When you paste into ChatGPT, OpenAI's default data handling applies.
+        Here, you're using your own API key — your data flows through your OpenAI account,
+        subject to your organization's data agreements with OpenAI.
+        """)
+
+    with st.expander("What do the three report types mean?"):
+        st.markdown("""
+        Each report is written for a different audience and decision type:
+
+        **Executive Summary**
+        Written for the boardroom. Covers: Situation (what the data shows), What This Means For You
+        (strategic implications), Recommended Actions, and Risks If You Wait.
+        Best for: quarterly reviews, board presentations, investor updates.
+
+        **Operational Detail**
+        Written for team managers. Covers: Performance Breakdown by segment, Efficiency Gaps,
+        Process Recommendations, and Quick Wins you can act on this week.
+        Best for: weekly team syncs, department reviews, ops planning.
+
+        **Risk Report**
+        Written for risk officers and cautious decision-makers. Covers: Top Risks Identified,
+        Early Warning Signs in the data, Mitigation Actions, and Data Quality Risks.
+        Best for: audits, compliance reviews, risk committee updates.
+        """)
+
+    with st.expander("How accurate are the AI reports?"):
+        st.markdown("""
+        The reports are as accurate as your data and your decision context.
+
+        The AI performs **pattern recognition and business reasoning** — it identifies trends, comparisons,
+        outliers, and implications based on your dataset. It does not perform statistical hypothesis testing
+        or make guarantees about future outcomes.
+
+        **To get the best results:**
+        - Be specific in the *Decision Context* field (e.g., "Should we expand into the Northeast market
+          given Q2 performance?" is better than "What should I do?")
+        - Select the right role — the report language and depth change significantly between CFO and Analyst
+        - Upload clean, well-labelled data with clear column names
+
+        Always use AI reports as **decision support**, not as a substitute for domain expertise.
+        """)
+
+    # ── ENTERPRISE ────────────────────────────────────────
+    st.markdown('<p class="faq-category">Enterprise & Teams</p>', unsafe_allow_html=True)
+
+    with st.expander("Can my organization use this internally without opening an external link?"):
+        st.markdown("""
+        Yes — this is built for exactly that use case.
+
+        **Option 1: Self-host on your own infrastructure**
+        The app is a standard Python/Streamlit application. Deploy it on AWS, Azure, GCP, or any internal
+        server. Your IT team can sit it behind your SSO/VPN so employees access it through your intranet
+        without ever going to an external URL.
+
+        **Option 2: Embed in an existing internal portal**
+        The app can be embedded as an iframe inside SharePoint, Confluence, Notion, or any internal web portal.
+        One `<iframe>` tag and it lives inside your existing tools — C-suite never needs to open another link.
+
+        **Option 3: Pre-fill the API key via environment variable**
+        In an enterprise deployment, the API key can be provided server-side so end users never need
+        to paste or manage one — it just works, like any other internal tool.
+
+        **Option 4: Tableau/Power BI integration**
+        If your org already runs Tableau Server or Power BI, analysts can pull live dashboard data
+        directly into the copilot without any file export at all.
+        """)
+
+    with st.expander("Does this work with Tableau or Power BI?"):
+        st.markdown("""
+        Yes. In the sidebar, switch the data source to **Tableau** or **Power BI**:
+
+        **Tableau Server / Tableau Cloud**
+        Enter your server URL, username, and password (or Personal Access Token).
+        The app lists your available workbooks and views — select one and it pulls the underlying data live.
+
+        **Power BI**
+        Enter your Azure tenant ID, client ID, client secret, and workspace/dataset IDs.
+        The app exports the dataset and loads it for analysis.
+
+        These connections are stateless — credentials are used to fetch data during your session
+        and are not stored after you close the browser.
+        """)
+
+    with st.expander("Is there an API or can we connect this to our data pipeline?"):
+        st.markdown("""
+        Not yet as a public API — but the codebase is open for extension.
+
+        If your team has a data engineer, the report generation logic (`generate_report()`) can be called
+        programmatically from any Python script, scheduled job, or data pipeline. The function takes a
+        data summary string, role, decision context, and timeframe and returns a formatted report string.
+
+        Common enterprise patterns:
+        - Run a nightly job that pulls yesterday's KPIs, generates a report, and emails it to leadership
+        - Trigger a report generation on dashboard publish events (Tableau webhooks)
+        - Integrate into a Slack bot that delivers morning briefings
+
+        Contact us if you're interested in a custom integration for your org.
+        """)
+
+    # ── FOOTER ────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="border-top: 1px solid #E8E5DC; padding-top: 1.2rem; margin-top: 1rem;
+                color: #9B8FA8; font-size: 0.78rem; text-align: center; line-height: 1.7;">
+        Built by <strong style="color:#4A4A6A;">Swapnil Sakorkar</strong> &nbsp;·&nbsp;
+        AI Application Developer &nbsp;·&nbsp;
+        <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank"
+           style="color:#B8975A; text-decoration:none;">LinkedIn</a>
+        &nbsp;·&nbsp;
+        Questions? Open an issue or reach out directly.
+        <br><br>
+        <em>This tool uses your own OpenAI API key. Your data is processed in-session only and is never stored.</em>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ---------------------------------------------------
+# DASHBOARD TAB
+# ---------------------------------------------------
+
+with nav_dashboard:
+
+    # Resolve data from whichever source was used
+    df_raw = None
+    data_badge = ""
+
+    if uploaded_file:
+        df_raw     = load_file(uploaded_file)
+        data_badge = uploaded_file.name
+    elif df_from_bi is not None:
+        df_raw     = df_from_bi
+        data_badge = st.session_state.get("bi_source", "BI Tool")
+
+    if df_raw is None:
+        source_hint = {
+            "Upload CSV / Excel": "Upload a CSV or Excel file in the sidebar to begin",
+            "Tableau":            "Enter your Tableau credentials and click Connect",
+            "Power BI":           "Enter your Power BI credentials and click Connect",
+        }.get(data_source, "Choose a data source in the sidebar to begin")
+        st.markdown(f"""
+            <div class="empty-state">
+                <div class="icon">↓</div>
+                <p>{source_hint}</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    else:
+        df = clean_dataframe(df_raw.copy())
+        st.session_state["df_for_filter"] = df
+
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        cat_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+
+        # Apply filter for display
+        df_display = df.copy()
+        if filter_col and filter_val:
+            df_display = df[df[filter_col] == filter_val]
+
+        # --- DATA PREVIEW ---
+        st.markdown('<p class="section-label">Dataset Overview</p>', unsafe_allow_html=True)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Rows", f"{len(df_display):,}")
+        c2.metric("Columns", f"{len(df_display.columns)}")
+        c3.metric("Numeric fields", len(numeric_cols))
+        c4.metric("Quality Score", f"{dashboard_score(df_display)}/100")
+
+        st.dataframe(
+            df_display.head(10),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        # --- CHARTS ---
+        if cat_cols and numeric_cols and df_display[cat_cols[0]].nunique() <= 25:
+
+            chart_col1, chart_col2 = st.columns(2)
+
+            with chart_col1:
+                primary_cat = cat_cols[0]
+                primary_num = numeric_cols[0]
+                agg = smart_agg(primary_num)
+                chart_df = df_display.groupby(primary_cat)[primary_num].agg(agg).reset_index()
+                chart_df.columns = ["category", "value"]
+                chart_df = chart_df.sort_values("value", ascending=False)
+
+                bar = (
+                    alt.Chart(chart_df)
+                    .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                    .encode(
+                        x=alt.X("value:Q", title=f"{agg.title()} of {primary_num}",
+                                 axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
+                                               gridColor="#E8E5DC", domainColor="#E8E5DC",
+                                               tickColor="#E8E5DC")),
+                        y=alt.Y("category:N", sort="-x", title="",
+                                 axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
+                                               tickColor="#E8E5DC")),
+                        color=alt.condition(
+                            alt.datum.value >= 0,
+                            alt.value("#B8975A"),
+                            alt.value("#C0392B"),
+                        ),
+                        tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
+                    )
+                    .properties(
+                        title=alt.TitleParams(
+                            f"{agg.title()} {primary_num} by {primary_cat}",
+                            color="#1A1A2E",
+                            fontSize=13,
+                            font="IBM Plex Sans",
+                        ),
+                        height=max(min(52 * df_display[primary_cat].nunique(), 400), 160),
+                        background="#FFFFFF",
+                        padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
+                    )
+                )
+                st.altair_chart(bar, use_container_width=True)
+
+            with chart_col2:
+                if len(numeric_cols) >= 2:
+                    second_num = numeric_cols[1]
+                    agg2 = smart_agg(second_num)
+                    chart_df2 = df_display.groupby(cat_cols[0])[second_num].agg(agg2).reset_index()
+                    chart_df2.columns = ["category", "value"]
+                    chart_df2 = chart_df2.sort_values("value", ascending=False)
+
+                    bar2 = (
+                        alt.Chart(chart_df2)
+                        .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
+                        .encode(
+                            x=alt.X("value:Q", title=f"{agg2.title()} of {second_num}",
+                                     axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
+                                                   gridColor="#E8E5DC", domainColor="#E8E5DC",
+                                                   tickColor="#E8E5DC")),
+                            y=alt.Y("category:N", sort="-x", title="",
+                                     axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
+                                                   tickColor="#E8E5DC")),
+                            color=alt.condition(
+                                alt.datum.value >= 0,
+                                alt.value("#2E6DA4"),
+                                alt.value("#C0392B"),
+                            ),
+                            tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
+                        )
+                        .properties(
+                            title=alt.TitleParams(
+                                f"{agg2.title()} {second_num} by {cat_cols[0]}",
+                                color="#1A1A2E",
+                                fontSize=13,
+                                font="IBM Plex Sans",
+                            ),
+                            height=max(min(52 * df_display[cat_cols[0]].nunique(), 400), 160),
+                            background="#FFFFFF",
+                            padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
+                        )
+                    )
+                    st.altair_chart(bar2, use_container_width=True)
+
+        # Anomaly warnings
+        for col in numeric_cols[:2]:
+            anom = detect_anomalies(df_display, col)
+            if not anom.empty:
+                st.warning(f"{len(anom)} anomalous rows detected in **{col}** — flagged in the Risk Report.")
+
+        # --- REPORTS ---
+        if run:
+
+            if not decision.strip():
+                st.warning("Please describe the decision you are trying to make before generating reports.")
+            else:
+                summary = build_data_summary(df, filter_col=filter_col, filter_val=filter_val)
+
+                st.markdown("---")
+                st.markdown('<p class="section-label">AI Reports</p>', unsafe_allow_html=True)
+
+                tab1, tab2, tab3 = st.tabs(["Executive Summary", "Operational Detail", "Risk Report"])
+
+                for tab, report_type in zip(
+                    [tab1, tab2, tab3],
+                    ["Executive Summary", "Operational Detail", "Risk Report"]
+                ):
+                    with tab:
+                        with st.spinner(f"Generating {report_type}..."):
+                            report_text = generate_report(summary, who, decision, timeframe, report_type, api_key=user_api_key)
+
+                        # Clean up raw markdown artifacts before rendering
+                        clean = report_text
+                        # Ensure ### headers have a blank line before them for proper rendering
+                        clean = re.sub(r'([^\n])\n(### )', r'\1\n\n\2', clean)
+
+                        # Convert to HTML and inject inside styled .report-body card
+                        html_lines = []
+                        for line in clean.split("\n"):
+                            line = line.strip()
+                            if not line:
+                                html_lines.append("<br>")
+                            elif line.startswith("### "):
+                                html_lines.append(f"<h3>{line[4:]}</h3>")
+                            elif re.match(r"^\d+\.", line):
+                                html_lines.append(f"<p>{line}</p>")
+                            elif line.startswith("- ") or line.startswith("• "):
+                                html_lines.append(f"<p>• {line[2:]}</p>")
+                            else:
+                                safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                                safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
+                                safe = re.sub(r'\*(.+?)\*', r'<strong>\1</strong>', safe)
+                                html_lines.append(f"<p>{safe}</p>")
+                        html_body = "\n".join(html_lines)
+                        st.markdown(
+                            f'<div class="report-body">{html_body}</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        dl1, dl2 = st.columns([1, 1])
+
+                        with dl1:
+                            st.download_button(
+                                label="↓  Download as Word",
+                                data=report_to_docx(report_text, report_type, who, decision, timeframe),
+                                file_name=f"{report_type.lower().replace(' ', '_')}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key=f"docx_{report_type}",
+                                use_container_width=True,
+                            )
+
+                        with dl2:
+                            st.download_button(
+                                label="↓  Download as PDF",
+                                data=report_to_pdf(report_text, report_type, who, decision, timeframe),
+                                file_name=f"{report_type.lower().replace(' ', '_')}.pdf",
+                                mime="application/pdf",
+                                key=f"pdf_{report_type}",
+                                use_container_width=True,
+                            )
+
+        elif uploaded_file:
+            st.markdown("""
+                <div style="text-align:center; padding: 2rem; color: #B0ADC0;
+                            border: 1px dashed #D4D0C8; border-radius: 10px; margin-top: 1rem;
+                            background: #FAFAF8;">
+                    <p style="font-size: 0.82rem; letter-spacing: 0.08em;
+                              text-transform: uppercase; margin: 0; font-weight: 500;">
+                        Fill in the sidebar and click Generate Reports
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
