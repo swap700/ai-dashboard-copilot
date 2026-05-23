@@ -1118,55 +1118,107 @@ nav_dashboard, nav_faq = st.tabs(["  Dashboard  ", "  FAQ & Help  "])
 with nav_faq:
     st.markdown("""
     <style>
-    /* FAQ section headers */
+    /* ── FAQ category headers ── */
     .faq-category {
         font-family: 'Playfair Display', serif;
-        font-size: 1.05rem;
+        font-size: 1.0rem;
         font-weight: 600;
         color: #1A1A2E;
-        margin-top: 2rem;
-        margin-bottom: 0.5rem;
+        margin-top: 2.2rem;
+        margin-bottom: 0.6rem;
         border-left: 3px solid #B8975A;
         padding-left: 0.75rem;
+        letter-spacing: 0.01em;
     }
-    /* Trust badge strip */
-    .trust-strip {
-        display: flex;
-        gap: 1.5rem;
-        flex-wrap: wrap;
-        margin: 1.5rem 0;
-        padding: 1.2rem 1.5rem;
-        background: #FAFAF8;
+    /* ── Trust pillars grid ── */
+    .trust-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin: 1.75rem 0 2rem;
+    }
+    .trust-card {
+        background: #FFFFFF;
         border: 1px solid #E8E5DC;
         border-radius: 10px;
+        padding: 1.1rem 1.25rem;
+        box-shadow: 0 1px 4px rgba(26,26,46,0.05);
     }
-    .trust-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.82rem;
-        color: #4A4A6A;
-        font-weight: 500;
+    .trust-card-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #B8975A;
+        margin-bottom: 0.3rem;
     }
-    .trust-icon { font-size: 1rem; }
+    .trust-card-text {
+        font-size: 0.85rem;
+        color: #2E2E4A;
+        font-weight: 400;
+        line-height: 1.45;
+    }
+    /* ── FAQ page header ── */
+    .faq-header {
+        padding-bottom: 1.5rem;
+        margin-bottom: 0.5rem;
+        border-bottom: 1.5px solid #E8E5DC;
+    }
+    .faq-eyebrow {
+        font-size: 0.68rem;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #B8975A;
+        margin-bottom: 0.5rem;
+    }
+    .faq-title {
+        font-family: 'Playfair Display', serif;
+        font-size: 1.6rem;
+        font-weight: 600;
+        color: #1A1A2E;
+        margin: 0 0 0.3rem;
+        line-height: 1.25;
+    }
+    .faq-subtitle {
+        font-size: 0.85rem;
+        color: #6B6B8A;
+        font-weight: 300;
+        letter-spacing: 0.01em;
+    }
     </style>
     """, unsafe_allow_html=True)
 
     st.markdown("""
-    <div style="margin-bottom: 1.5rem;">
-        <p class="app-title" style="font-size:1.4rem;">Frequently Asked Questions</p>
-        <div class="accent-bar"></div>
-        <p class="app-subtitle">Everything you need to know before you upload your first file.</p>
+    <div class="faq-header">
+        <p class="faq-eyebrow">Help & Documentation</p>
+        <p class="faq-title">Frequently Asked Questions</p>
+        <p class="faq-subtitle">
+            Everything you need to know about how AI Dashboard Copilot works,
+            how your data is handled, and how to get the most from it.
+        </p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Trust strip
+    # Trust pillars
     st.markdown("""
-    <div class="trust-strip">
-        <div class="trust-item"><span class="trust-icon">🔒</span> Your data never leaves your session</div>
-        <div class="trust-item"><span class="trust-icon">🗝️</span> Your OpenAI key — your account, your costs</div>
-        <div class="trust-item"><span class="trust-icon">📄</span> No accounts, no sign-up required</div>
-        <div class="trust-item"><span class="trust-icon">⚡</span> Reports in under 30 seconds</div>
+    <div class="trust-grid">
+        <div class="trust-card">
+            <p class="trust-card-label">Data Privacy</p>
+            <p class="trust-card-text">Your data is processed in-session only. Nothing is stored, logged, or retained after you close the browser.</p>
+        </div>
+        <div class="trust-card">
+            <p class="trust-card-label">Your API Key</p>
+            <p class="trust-card-text">Reports run through your own OpenAI account. You control access, usage, and spend — not us.</p>
+        </div>
+        <div class="trust-card">
+            <p class="trust-card-label">No Account Required</p>
+            <p class="trust-card-text">No sign-up, no login, no tracking. Open the app and start working immediately.</p>
+        </div>
+        <div class="trust-card">
+            <p class="trust-card-label">Speed</p>
+            <p class="trust-card-text">Three executive-grade reports — Executive, Operational, and Risk — generated in under 30 seconds.</p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1329,28 +1381,6 @@ with nav_faq:
     # ── ENTERPRISE ────────────────────────────────────────
     st.markdown('<p class="faq-category">Enterprise & Teams</p>', unsafe_allow_html=True)
 
-    with st.expander("Can my organization use this internally without opening an external link?"):
-        st.markdown("""
-        Yes — this is built for exactly that use case.
-
-        **Option 1: Self-host on your own infrastructure**
-        The app is a standard Python/Streamlit application. Deploy it on AWS, Azure, GCP, or any internal
-        server. Your IT team can sit it behind your SSO/VPN so employees access it through your intranet
-        without ever going to an external URL.
-
-        **Option 2: Embed in an existing internal portal**
-        The app can be embedded as an iframe inside SharePoint, Confluence, Notion, or any internal web portal.
-        One `<iframe>` tag and it lives inside your existing tools — C-suite never needs to open another link.
-
-        **Option 3: Pre-fill the API key via environment variable**
-        In an enterprise deployment, the API key can be provided server-side so end users never need
-        to paste or manage one — it just works, like any other internal tool.
-
-        **Option 4: Tableau/Power BI integration**
-        If your org already runs Tableau Server or Power BI, analysts can pull live dashboard data
-        directly into the copilot without any file export at all.
-        """)
-
     with st.expander("Does this work with Tableau or Power BI?"):
         st.markdown("""
         Yes. In the sidebar, switch the data source to **Tableau** or **Power BI**:
@@ -1358,29 +1388,18 @@ with nav_faq:
         **Tableau Server / Tableau Cloud**
         Enter your server URL, username, and password (or Personal Access Token).
         The app lists your available workbooks and views — select one and it pulls the underlying data live.
+        No file export needed — the connection reads directly from your published dashboard data.
 
         **Power BI**
         Enter your Azure tenant ID, client ID, client secret, and workspace/dataset IDs.
-        The app exports the dataset and loads it for analysis.
+        The app exports the dataset and loads it for analysis, keeping your data within your
+        Microsoft tenant's security boundary.
 
-        These connections are stateless — credentials are used to fetch data during your session
-        and are not stored after you close the browser.
-        """)
+        Both connections are stateless — credentials are used only to fetch data during your active session
+        and are never stored, logged, or retained after you close the browser.
 
-    with st.expander("Is there an API or can we connect this to our data pipeline?"):
-        st.markdown("""
-        Not yet as a public API — but the codebase is open for extension.
-
-        If your team has a data engineer, the report generation logic (`generate_report()`) can be called
-        programmatically from any Python script, scheduled job, or data pipeline. The function takes a
-        data summary string, role, decision context, and timeframe and returns a formatted report string.
-
-        Common enterprise patterns:
-        - Run a nightly job that pulls yesterday's KPIs, generates a report, and emails it to leadership
-        - Trigger a report generation on dashboard publish events (Tableau webhooks)
-        - Integrate into a Slack bot that delivers morning briefings
-
-        Contact us if you're interested in a custom integration for your org.
+        > **Enterprise note:** If your organization has questions about connecting to internal Tableau Server
+        > or Power BI on-premises deployments, reach out directly for guidance on network and credential configuration.
         """)
 
     # ── FOOTER ────────────────────────────────────────────
