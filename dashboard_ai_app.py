@@ -1416,8 +1416,6 @@ with nav_faq:
         <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank"
            style="color:#B8975A; text-decoration:none;">LinkedIn</a>
         &nbsp;·&nbsp;
-        Questions? Open an issue or reach out directly.
-        <br><br>
         <em>This tool uses your own OpenAI API key. Your data is processed in-session only and is never stored.</em>
     </div>
     """, unsafe_allow_html=True)
