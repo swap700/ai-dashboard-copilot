@@ -266,8 +266,8 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 }
 .app-title {
     font-family: 'Inter', sans-serif;
-    font-size: 5.2rem;
-    font-weight: 700;
+    font-size: 7.2rem;
+    font-weight: 900;
     color: #1E293B;
     margin: 0;
     line-height: 1.1;
