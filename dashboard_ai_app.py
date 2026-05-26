@@ -98,31 +98,58 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------
-# CUSTOM CSS — Light professional executive theme
+# CUSTOM CSS — Pearl White theme
 # ---------------------------------------------------
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+/* ── Keyframe animations ── */
+@keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes shimmerBar {
+    0%   { background-position: -600px 0; }
+    100% { background-position: 600px 0; }
+}
+@keyframes pulseBlue {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0.30); }
+    50%       { box-shadow: 0 0 0 7px rgba(37,99,235,0); }
+}
+@keyframes spinBlue {
+    to { transform: rotate(360deg); }
+}
 
 /* ── Global ── */
 html, body, [class*="css"] {
-    font-family: 'IBM Plex Sans', sans-serif;
-    background-color: #F7F6F2;
-    color: #1A1A2E;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #F8F9FC;
+    color: #1E293B;
 }
 
-/* ── Hide Streamlit chrome without disabling native sidebar controls ── */
+/* ── Staggered section entrance ── */
+.block-container > div > div > div {
+    animation: fadeSlideUp 0.42s ease both;
+}
+.block-container > div > div > div:nth-child(1) { animation-delay: 0.04s; }
+.block-container > div > div > div:nth-child(2) { animation-delay: 0.09s; }
+.block-container > div > div > div:nth-child(3) { animation-delay: 0.14s; }
+.block-container > div > div > div:nth-child(4) { animation-delay: 0.19s; }
+.block-container > div > div > div:nth-child(5) { animation-delay: 0.24s; }
+
+/* ── Hide Streamlit chrome ── */
 #MainMenu, footer { visibility: hidden; }
-header {
-    background: transparent !important;
-}
+header { background: transparent !important; }
 button[data-testid="stBaseButton-header"],
-button[data-testid="stMainMenuButton"] {
-    visibility: hidden !important;
-}
+button[data-testid="stMainMenuButton"] { visibility: hidden !important; }
 
-/* ── Sidebar toggle buttons — keep Streamlit's native collapse/expand behavior ── */
+/* ── Sidebar toggle buttons — keep native collapse/expand ── */
 [data-testid="stSidebarCollapseButton"],
 [data-testid="stSidebarCollapsedControl"],
 button[data-testid="stExpandSidebarButton"] {
@@ -133,42 +160,37 @@ button[data-testid="stExpandSidebarButton"] {
 [data-testid="stSidebarCollapsedControl"] button,
 button[data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
-    background: #1A1A2E !important;
+    background: #2563EB !important;
     color: #FFFFFF !important;
     border: none !important;
-    border-radius: 6px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,.2) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(37,99,235,0.30) !important;
     cursor: pointer !important;
+    transition: opacity 0.2s !important;
 }
 [data-testid="stSidebarCollapseButton"] button *,
 [data-testid="stSidebarCollapsedControl"] button *,
 button[data-testid="stExpandSidebarButton"] * {
-    color: #F7F6F2 !important;
-    fill: #F7F6F2 !important;
+    color: #FFFFFF !important;
+    fill: #FFFFFF !important;
 }
 [data-testid="stSidebarCollapseButton"] button:hover,
 [data-testid="stSidebarCollapsedControl"] button:hover,
-button[data-testid="stExpandSidebarButton"]:hover {
-    opacity: 0.82 !important;
-}
-
+button[data-testid="stExpandSidebarButton"]:hover { opacity: 0.85 !important; }
 [data-testid="stSidebarCollapsedControl"],
-button[data-testid="stExpandSidebarButton"] {
-    z-index: 2147483647 !important;
-}
+button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 
 @media (max-width: 768px) {
-    [data-testid="stSidebar"] {
-        z-index: 2147483646 !important;
-    }
+    [data-testid="stSidebar"] { z-index: 2147483646 !important; }
     [data-testid="stSidebarCollapseButton"] button,
     [data-testid="stSidebarCollapsedControl"] button,
     button[data-testid="stExpandSidebarButton"] {
         min-width: 44px !important;
         min-height: 44px !important;
-        border-radius: 8px !important;
+        border-radius: 10px !important;
     }
 }
+
 .block-container {
     padding-top: 2rem;
     padding-bottom: 3rem;
@@ -177,95 +199,100 @@ button[data-testid="stExpandSidebarButton"] {
 
 /* ── Sidebar ── */
 [data-testid="stSidebar"] {
-    background-color: #FFFFFF;
-    border-right: 1px solid #E8E5DC;
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E2E8F0 !important;
 }
 [data-testid="stSidebar"] .stMarkdown p {
-    color: #9B8FA8;
+    color: #94A3B8;
     font-size: 0.7rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    font-weight: 500;
+    font-weight: 600;
 }
 [data-testid="stSidebar"] label {
-    color: #3A3A5A !important;
+    color: #374151 !important;
     font-size: 0.82rem !important;
-    font-weight: 400 !important;
+    font-weight: 500 !important;
 }
 [data-testid="stSidebar"] .stTextArea textarea {
-    background-color: #F7F6F2 !important;
-    border: 1px solid #D8D4CC !important;
-    color: #1A1A2E !important;
-    border-radius: 6px !important;
-    font-family: 'IBM Plex Sans', sans-serif !important;
+    background-color: #F0F7FF !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #1E293B !important;
+    border-radius: 8px !important;
     font-size: 0.85rem !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+[data-testid="stSidebar"] .stTextArea textarea:focus {
+    border-color: #2563EB !important;
+    box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important;
 }
 [data-testid="stSidebar"] select,
 [data-testid="stSidebar"] .stSelectbox > div > div {
-    background-color: #F7F6F2 !important;
-    border: 1px solid #D8D4CC !important;
-    color: #1A1A2E !important;
-    border-radius: 6px !important;
+    background-color: #F0F7FF !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #1E293B !important;
+    border-radius: 8px !important;
 }
 
 /* ── Logo placeholder ── */
 .logo-placeholder {
     width: 100%;
     height: 52px;
-    border: 1.5px dashed #C8C4BC;
-    border-radius: 8px;
+    border: 1.5px dashed #93C5FD;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #A8A4A0;
+    color: #93C5FD;
     font-size: 0.68rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.2s;
-    background: #FAFAF8;
+    background: #F0F7FF;
     cursor: pointer;
 }
-.logo-placeholder:hover { border-color: #B8975A; color: #B8975A; background: #FBF8F2; }
+.logo-placeholder:hover { border-color: #2563EB; color: #2563EB; background: #EEF2FF; }
 
 /* ── App header ── */
 .app-header {
-    border-bottom: 2px solid #E8E5DC;
+    border-bottom: 2px solid #E2E8F0;
     padding-bottom: 1.25rem;
     margin-bottom: 2rem;
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
+    animation: fadeSlideUp 0.4s ease both;
 }
 .app-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Inter', sans-serif;
     font-size: 1.9rem;
     font-weight: 600;
-    color: #1A1A2E;
+    color: #1E293B;
     margin: 0;
     line-height: 1.2;
+    letter-spacing: -0.02em;
 }
 .app-subtitle {
-    color: #6B6B8A;
+    color: #64748B;
     font-size: 0.83rem;
     margin-top: 0.3rem;
-    font-weight: 300;
-    letter-spacing: 0.02em;
+    font-weight: 400;
 }
 .accent-bar {
     width: 36px;
     height: 3px;
-    background: #B8975A;
+    background: linear-gradient(90deg, #2563EB 0%, #60A5FA 100%);
     border-radius: 2px;
     margin: 0.5rem 0 0.35rem;
 }
 .header-tag {
     font-size: 0.7rem;
-    font-weight: 500;
-    letter-spacing: 0.1em;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #B8975A;
-    border: 1px solid #B8975A;
+    color: #2563EB;
+    background: #EEF2FF;
     border-radius: 20px;
     padding: 0.2rem 0.75rem;
     margin-bottom: 0.5rem;
@@ -274,152 +301,182 @@ button[data-testid="stExpandSidebarButton"] {
 /* ── Section labels ── */
 .section-label {
     font-size: 0.68rem;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #B8975A;
+    color: #2563EB;
     margin-bottom: 0.6rem;
     margin-top: 0.25rem;
 }
 
-/* ── Metric cards ── */
+/* ── Metric cards — fade up + hover lift ── */
 [data-testid="metric-container"] {
-    background: #FFFFFF;
-    border: 1px solid #E8E5DC;
-    border-radius: 10px;
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-top: 3px solid #2563EB !important;
+    border-radius: 12px !important;
     padding: 1.1rem 1.3rem !important;
-    box-shadow: 0 1px 4px rgba(26,26,46,0.06);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+    transition: transform 0.22s ease, box-shadow 0.22s ease !important;
+    animation: fadeSlideUp 0.5s ease both;
+}
+[data-testid="metric-container"]:hover {
+    transform: translateY(-3px) !important;
+    box-shadow: 0 6px 20px rgba(37,99,235,0.13) !important;
 }
 [data-testid="metric-container"] label {
-    color: #8B8FA8 !important;
+    color: #64748B !important;
     font-size: 0.72rem !important;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
 }
 [data-testid="metric-container"] [data-testid="stMetricValue"] {
-    color: #1A1A2E !important;
-    font-size: 1.65rem !important;
-    font-weight: 300 !important;
-    font-family: 'Playfair Display', serif !important;
+    color: #1E293B !important;
+    font-size: 1.75rem !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.02em;
 }
 
 /* ── Dataframe ── */
 [data-testid="stDataFrame"] {
-    border: 1px solid #E8E5DC !important;
-    border-radius: 8px !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 10px !important;
     overflow: hidden;
-    box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    animation: fadeIn 0.5s ease both;
 }
 
-/* ── Tabs ── */
+/* ── Tabs — underline style ── */
 [data-testid="stTabs"] [role="tablist"] {
-    border-bottom: 2px solid #E8E5DC;
+    border-bottom: 2px solid #E2E8F0;
     gap: 0;
     background: transparent;
 }
 [data-testid="stTabs"] button[role="tab"] {
     background: transparent !important;
-    color: #8B8FA8 !important;
-    font-size: 0.82rem !important;
+    color: #94A3B8 !important;
+    font-size: 0.85rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.01em;
     padding: 0.65rem 1.4rem !important;
     border-bottom: 2px solid transparent !important;
+    margin-bottom: -2px !important;
     border-radius: 0 !important;
-    transition: all 0.2s;
-    font-family: 'IBM Plex Sans', sans-serif !important;
+    transition: color 0.2s, background 0.2s !important;
 }
 [data-testid="stTabs"] button[role="tab"]:hover {
-    color: #1A1A2E !important;
-    background: #F0EDE6 !important;
+    color: #2563EB !important;
+    background: #F0F7FF !important;
 }
 [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    color: #1A1A2E !important;
-    border-bottom: 2px solid #B8975A !important;
-    font-weight: 500 !important;
+    color: #2563EB !important;
+    border-bottom: 2px solid #2563EB !important;
+    font-weight: 600 !important;
 }
 
 /* ── Report body ── */
 .report-body {
     background: #FFFFFF;
-    border: 1px solid #E8E5DC;
-    border-radius: 10px;
-    padding: 1.5rem 2.5rem;
-    line-height: 1.65;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+    padding: 1.75rem 2.5rem;
+    line-height: 1.72;
     font-size: 1rem;
-    color: #2E2E4A;
-    box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+    color: #334155;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    animation: fadeSlideUp 0.5s ease both;
 }
-.report-body p {
-    margin-bottom: 0.55rem;
-}
+.report-body p { margin-bottom: 0.55rem; }
 .report-body h3 {
-    font-family: 'Playfair Display', serif;
-    color: #1A1A2E;
-    font-size: 1.08rem;
+    font-family: 'Inter', sans-serif;
+    color: #1E293B;
+    font-size: 1.05rem;
     font-weight: 600;
-    margin-top: 1.2rem;
-    margin-bottom: 0.35rem;
-    border-left: 3px solid #B8975A;
-    padding-left: 0.7rem;
+    margin-top: 1.3rem;
+    margin-bottom: 0.4rem;
+    border-left: 3px solid #2563EB;
+    padding-left: 0.75rem;
+    letter-spacing: -0.01em;
+}
+
+/* ── Spinner — blue ── */
+[data-testid="stSpinner"] > div > div {
+    border-top-color: #2563EB !important;
+    border-color: #DBEAFE !important;
+    border-top-color: #2563EB !important;
+}
+
+/* ── Progress shimmer on stStatus/expander loading ── */
+[data-testid="stStatusWidget"] {
+    background: linear-gradient(90deg, #EEF2FF 25%, #DBEAFE 50%, #EEF2FF 75%);
+    background-size: 600px 100%;
+    animation: shimmerBar 1.6s infinite linear;
+    border-radius: 8px;
 }
 
 /* ── Download buttons ── */
 [data-testid="stDownloadButton"] button {
     background: #FFFFFF !important;
-    border: 1px solid #D4D0C8 !important;
-    color: #4A4A6A !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #374151 !important;
     font-size: 0.78rem !important;
     font-weight: 500 !important;
-    letter-spacing: 0.04em;
-    border-radius: 6px !important;
+    letter-spacing: 0.02em;
+    border-radius: 8px !important;
     transition: all 0.2s !important;
-    font-family: 'IBM Plex Sans', sans-serif !important;
 }
 [data-testid="stDownloadButton"] button:hover {
-    border-color: #B8975A !important;
-    color: #B8975A !important;
-    background: #FBF8F2 !important;
+    border-color: #2563EB !important;
+    color: #2563EB !important;
+    background: #EEF2FF !important;
+    box-shadow: 0 2px 8px rgba(37,99,235,0.15) !important;
 }
 
-/* ── Generate button ── */
+/* ── Generate button — pulsing blue ── */
 [data-testid="stSidebar"] [data-testid="stButton"] button {
-    background: #1A1A2E !important;
+    background: #2563EB !important;
     color: #FFFFFF !important;
     border: none !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
     font-size: 0.85rem !important;
-    letter-spacing: 0.06em;
-    border-radius: 6px !important;
-    transition: opacity 0.2s !important;
-    font-family: 'IBM Plex Sans', sans-serif !important;
+    letter-spacing: 0.03em;
+    border-radius: 8px !important;
+    transition: background 0.2s, transform 0.2s, box-shadow 0.2s !important;
+    animation: pulseBlue 2.8s ease-in-out infinite;
 }
 [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-    opacity: 0.85 !important;
+    background: #1D4ED8 !important;
+    box-shadow: 0 4px 16px rgba(37,99,235,0.40) !important;
+    transform: translateY(-1px) !important;
+    animation: none !important;
+}
+[data-testid="stSidebar"] [data-testid="stButton"] button:active {
+    transform: translateY(0) !important;
 }
 
 /* ── Alerts ── */
 [data-testid="stAlert"] {
-    background: #FDF8F0 !important;
-    border: 1px solid #E8D9B8 !important;
-    border-radius: 8px !important;
-    color: #5A4A2A !important;
+    background: #EEF2FF !important;
+    border: 1px solid #BFDBFE !important;
+    border-radius: 10px !important;
+    color: #1E40AF !important;
 }
 
 /* ── Divider ── */
-hr { border-color: #E8E5DC !important; }
+hr { border-color: #E2E8F0 !important; }
 
 /* ── Empty state ── */
 .empty-state {
     text-align: center;
     padding: 5rem 2rem;
-    color: #B0ADC0;
+    color: #94A3B8;
+    animation: fadeIn 0.6s ease both;
 }
 .empty-state .icon {
     font-size: 2rem;
     margin-bottom: 1rem;
-    color: #D4D0C8;
+    color: #CBD5E1;
 }
 .empty-state p {
     font-size: 0.82rem;
@@ -428,29 +485,29 @@ hr { border-color: #E8E5DC !important; }
     font-weight: 500;
 }
 
-
-/* ── File uploader ── */
+/* ── File uploader — blue dashed ── */
 [data-testid="stFileUploader"] {
-    background: #F7F6F2 !important;
-    border: 1px solid #D8D4CC !important;
-    border-radius: 8px !important;
+    background: #F0F7FF !important;
+    border: 1.5px dashed #93C5FD !important;
+    border-radius: 10px !important;
+    transition: border-color 0.2s !important;
 }
+[data-testid="stFileUploader"]:hover { border-color: #2563EB !important; }
 [data-testid="stFileUploader"] section {
-    background: #F7F6F2 !important;
+    background: #F0F7FF !important;
     border: none !important;
 }
 [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {
-    color: #6B6B8A !important;
+    color: #60A5FA !important;
 }
-/* uploaded file pill */
 [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {
-    background: #EEEAE4 !important;
-    border: 1px solid #D8D4CC !important;
-    border-radius: 6px !important;
-    color: #1A1A2E !important;
+    background: #DBEAFE !important;
+    border: 1px solid #93C5FD !important;
+    border-radius: 8px !important;
+    color: #1E40AF !important;
 }
 [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] span {
-    color: #3A3A5A !important;
+    color: #1E40AF !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1180,11 +1237,11 @@ components.html("""
 # ---------------------------------------------------
 
 st.markdown("""
-    <div style="border-bottom: 1.5px solid #E8E5DC; padding-bottom: 1.25rem; margin-bottom: 2rem;">
+    <div style="border-bottom: 1.5px solid #E2E8F0; padding-bottom: 1.25rem; margin-bottom: 2rem;">
         <p class="app-title">Nixara</p>
-        <p style="font-size:0.7rem; color:#9B8FA8; letter-spacing:0.12em; text-transform:uppercase;
+        <p style="font-size:0.7rem; color:#94A3B8; letter-spacing:0.12em; text-transform:uppercase;
                   font-weight:500; margin: 0.1rem 0 0.4rem;">
-            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0;">from <strong style="color:#B8975A;">nix</strong> (clarity, light) + <strong style="color:#B8975A;">ara</strong> (direction) — illuminating the path forward in your data</em>
+            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0;">from <strong style="color:#2563EB;">nix</strong> (clarity, light) + <strong style="color:#2563EB;">ara</strong> (direction) — illuminating the path forward in your data</em>
         </p>
         <div class="accent-bar"></div>
         <p class="app-subtitle">Upload CSV / Excel &nbsp;·&nbsp; Connect Tableau or Power BI &nbsp;·&nbsp; Get executive-grade AI reports</p>
@@ -1208,15 +1265,15 @@ with nav_faq:
     <style>
     /* ── FAQ category headers ── */
     .faq-category {
-        font-family: 'Playfair Display', serif;
+        font-family: 'Inter', sans-serif;
         font-size: 1.0rem;
         font-weight: 600;
-        color: #1A1A2E;
+        color: #1E293B;
         margin-top: 2.2rem;
         margin-bottom: 0.6rem;
-        border-left: 3px solid #B8975A;
+        border-left: 3px solid #2563EB;
         padding-left: 0.75rem;
-        letter-spacing: 0.01em;
+        letter-spacing: -0.01em;
     }
     /* ── Trust pillars grid ── */
     .trust-grid {
@@ -1227,22 +1284,23 @@ with nav_faq:
     }
     .trust-card {
         background: #FFFFFF;
-        border: 1px solid #E8E5DC;
+        border: 1px solid #E2E8F0;
+        border-top: 3px solid #2563EB;
         border-radius: 10px;
         padding: 1.1rem 1.25rem;
-        box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .trust-card-label {
         font-size: 0.68rem;
         font-weight: 600;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: #B8975A;
+        color: #2563EB;
         margin-bottom: 0.3rem;
     }
     .trust-card-text {
         font-size: 0.85rem;
-        color: #2E2E4A;
+        color: #334155;
         font-weight: 400;
         line-height: 1.45;
     }
@@ -1250,28 +1308,29 @@ with nav_faq:
     .faq-header {
         padding-bottom: 1.5rem;
         margin-bottom: 0.5rem;
-        border-bottom: 1.5px solid #E8E5DC;
+        border-bottom: 1.5px solid #E2E8F0;
     }
     .faq-eyebrow {
         font-size: 0.68rem;
         font-weight: 600;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: #B8975A;
+        color: #2563EB;
         margin-bottom: 0.5rem;
     }
     .faq-title {
-        font-family: 'Playfair Display', serif;
+        font-family: 'Inter', sans-serif;
         font-size: 1.6rem;
         font-weight: 600;
-        color: #1A1A2E;
+        color: #1E293B;
         margin: 0 0 0.3rem;
         line-height: 1.25;
+        letter-spacing: -0.02em;
     }
     .faq-subtitle {
         font-size: 0.85rem;
-        color: #6B6B8A;
-        font-weight: 300;
+        color: #64748B;
+        font-weight: 400;
         letter-spacing: 0.01em;
     }
     </style>
@@ -1493,12 +1552,12 @@ with nav_faq:
     # ── FOOTER ────────────────────────────────────────────
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
-    <div style="border-top: 1px solid #E8E5DC; padding-top: 1.2rem; margin-top: 1rem;
-                color: #9B8FA8; font-size: 0.78rem; text-align: center; line-height: 1.7;">
-        Built by <strong style="color:#4A4A6A;">Swapnil Sakorkar</strong> &nbsp;·&nbsp;
+    <div style="border-top: 1px solid #E2E8F0; padding-top: 1.2rem; margin-top: 1rem;
+                color: #94A3B8; font-size: 0.78rem; text-align: center; line-height: 1.7;">
+        Built by <strong style="color:#1E293B;">Swapnil Sakorkar</strong> &nbsp;·&nbsp;
         AI Application Developer &nbsp;·&nbsp;
         <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank"
-           style="color:#B8975A; text-decoration:none;">LinkedIn</a>
+           style="color:#2563EB; text-decoration:none;">LinkedIn</a>
         &nbsp;·&nbsp;
         <em>This tool uses your own OpenAI API key. Your data is processed in-session only and is never stored.</em>
     </div>
@@ -1596,25 +1655,25 @@ with nav_dashboard:
                     .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
                     .encode(
                         x=alt.X("value:Q", title=f"{agg.title()} of {primary_num}",
-                                 axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
-                                               gridColor="#E8E5DC", domainColor="#E8E5DC",
-                                               tickColor="#E8E5DC")),
+                                 axis=alt.Axis(labelColor="#64748B", titleColor="#64748B",
+                                               gridColor="#E2E8F0", domainColor="#E2E8F0",
+                                               tickColor="#E2E8F0")),
                         y=alt.Y("category:N", sort="-x", title="",
-                                 axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
-                                               tickColor="#E8E5DC")),
+                                 axis=alt.Axis(labelColor="#1E293B", domainColor="#E2E8F0",
+                                               tickColor="#E2E8F0")),
                         color=alt.condition(
                             alt.datum.value >= 0,
-                            alt.value("#B8975A"),
-                            alt.value("#C0392B"),
+                            alt.value("#2563EB"),
+                            alt.value("#DC2626"),
                         ),
                         tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
                     )
                     .properties(
                         title=alt.TitleParams(
                             f"{agg.title()} {primary_num} by {primary_cat}",
-                            color="#1A1A2E",
+                            color="#1E293B",
                             fontSize=13,
-                            font="IBM Plex Sans",
+                            font="Inter",
                         ),
                         height=max(min(52 * df_display[primary_cat].nunique(), 400), 160),
                         background="#FFFFFF",
@@ -1636,25 +1695,25 @@ with nav_dashboard:
                         .mark_bar(cornerRadiusTopRight=4, cornerRadiusBottomRight=4)
                         .encode(
                             x=alt.X("value:Q", title=f"{agg2.title()} of {second_num}",
-                                     axis=alt.Axis(labelColor="#8B8FA8", titleColor="#8B8FA8",
-                                                   gridColor="#E8E5DC", domainColor="#E8E5DC",
-                                                   tickColor="#E8E5DC")),
+                                     axis=alt.Axis(labelColor="#64748B", titleColor="#64748B",
+                                                   gridColor="#E2E8F0", domainColor="#E2E8F0",
+                                                   tickColor="#E2E8F0")),
                             y=alt.Y("category:N", sort="-x", title="",
-                                     axis=alt.Axis(labelColor="#2E2E4A", domainColor="#E8E5DC",
-                                                   tickColor="#E8E5DC")),
+                                     axis=alt.Axis(labelColor="#1E293B", domainColor="#E2E8F0",
+                                                   tickColor="#E2E8F0")),
                             color=alt.condition(
                                 alt.datum.value >= 0,
-                                alt.value("#2E6DA4"),
-                                alt.value("#C0392B"),
+                                alt.value("#60A5FA"),
+                                alt.value("#DC2626"),
                             ),
                             tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
                         )
                         .properties(
                             title=alt.TitleParams(
                                 f"{agg2.title()} {second_num} by {cat_cols[0]}",
-                                color="#1A1A2E",
+                                color="#1E293B",
                                 fontSize=13,
-                                font="IBM Plex Sans",
+                                font="Inter",
                             ),
                             height=max(min(52 * df_display[cat_cols[0]].nunique(), 400), 160),
                             background="#FFFFFF",
