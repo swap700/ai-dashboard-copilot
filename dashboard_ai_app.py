@@ -1209,6 +1209,173 @@ if "session_logged" not in st.session_state:
     log_event("session_start", data_source=data_source, referrer=_referrer)
 
 # ---------------------------------------------------
+# ANIMATIONS — particle network background + count-up metrics + typewriter header
+# Injected once per page load; guards prevent duplicate canvases on Streamlit reruns.
+# ---------------------------------------------------
+
+st.markdown("""
+<script>
+(function nixaraAnimations() {
+
+    /* ── 1. PARTICLE NETWORK BACKGROUND ─────────────────────────── */
+    if (!document.getElementById('nixara-canvas')) {
+        var canvas = document.createElement('canvas');
+        canvas.id  = 'nixara-canvas';
+        canvas.style.cssText = [
+            'position:fixed', 'top:0', 'left:0',
+            'width:100vw', 'height:100vh',
+            'z-index:0', 'pointer-events:none',
+            'opacity:0.22'
+        ].join(';');
+        document.body.appendChild(canvas);
+
+        var ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resize();
+        window.addEventListener('resize', resize);
+
+        /* generate particles */
+        var PARTICLE_COUNT = 70;
+        var MAX_DIST       = 140;
+        var pts = [];
+        for (var i = 0; i < PARTICLE_COUNT; i++) {
+            pts.push({
+                x:  Math.random() * canvas.width,
+                y:  Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.45,
+                vy: (Math.random() - 0.5) * 0.45,
+                r:  Math.random() * 1.8 + 0.8
+            });
+        }
+
+        function tick() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            /* move */
+            pts.forEach(function(p) {
+                p.x += p.vx;
+                p.y += p.vy;
+                if (p.x < 0 || p.x > canvas.width)  p.vx *= -1;
+                if (p.y < 0 || p.y > canvas.height)  p.vy *= -1;
+            });
+
+            /* draw connections */
+            for (var a = 0; a < pts.length; a++) {
+                for (var b = a + 1; b < pts.length; b++) {
+                    var dx   = pts[a].x - pts[b].x;
+                    var dy   = pts[a].y - pts[b].y;
+                    var dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < MAX_DIST) {
+                        var alpha = (1 - dist / MAX_DIST) * 0.55;
+                        ctx.beginPath();
+                        ctx.moveTo(pts[a].x, pts[a].y);
+                        ctx.lineTo(pts[b].x, pts[b].y);
+                        ctx.strokeStyle = 'rgba(37,99,235,' + alpha + ')';
+                        ctx.lineWidth   = 0.75;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            /* draw dots */
+            pts.forEach(function(p) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(37,99,235,0.75)';
+                ctx.fill();
+            });
+
+            requestAnimationFrame(tick);
+        }
+        tick();
+    }
+
+    /* ── 2. METRIC COUNT-UP ─────────────────────────────────────── */
+    function countUp(el, target, duration) {
+        var start     = 0;
+        var startTime = null;
+        var isInt     = Number.isInteger(target);
+        function step(ts) {
+            if (!startTime) startTime = ts;
+            var progress = Math.min((ts - startTime) / duration, 1);
+            var eased    = 1 - Math.pow(1 - progress, 3);
+            var current  = start + (target - start) * eased;
+            el.textContent = isInt
+                ? Math.round(current).toLocaleString()
+                : current.toFixed(1);
+            if (progress < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    var metricObserver = new MutationObserver(function() {
+        document.querySelectorAll('[data-testid="stMetricValue"]').forEach(function(el) {
+            if (el.dataset.nixaraCountup) return;
+            el.dataset.nixaraCountup = '1';
+            var raw = parseFloat(el.textContent.replace(/[^0-9.]/g, ''));
+            if (!isNaN(raw) && raw > 0) countUp(el, raw, 1100);
+        });
+    });
+    metricObserver.observe(document.body, { childList: true, subtree: true });
+
+    /* ── 3. TYPEWRITER for app title ────────────────────────────── */
+    function typewriter(el, text, speed) {
+        el.textContent = '';
+        var i = 0;
+        var cursor = document.createElement('span');
+        cursor.textContent = '|';
+        cursor.style.cssText = 'opacity:1;animation:nixBlink 0.7s step-end infinite;';
+        el.appendChild(cursor);
+        var style = document.createElement('style');
+        style.textContent = '@keyframes nixBlink{0%,100%{opacity:1}50%{opacity:0}}';
+        document.head.appendChild(style);
+        function type() {
+            if (i < text.length) {
+                cursor.insertAdjacentText('beforebegin', text[i]);
+                i++;
+                setTimeout(type, speed);
+            } else {
+                setTimeout(function() { cursor.remove(); }, 600);
+            }
+        }
+        type();
+    }
+
+    /* wait for the title element to render, then type it */
+    var titleObserver = new MutationObserver(function() {
+        var titleEl = document.querySelector('.app-title');
+        if (titleEl && !titleEl.dataset.typed) {
+            titleEl.dataset.typed = '1';
+            typewriter(titleEl, 'Nixara', 95);
+        }
+    });
+    titleObserver.observe(document.body, { childList: true, subtree: true });
+
+    /* ── 4. CARD SHIMMER on hover ───────────────────────────────── */
+    if (!document.getElementById('nixara-shimmer-style')) {
+        var shStyle = document.createElement('style');
+        shStyle.id  = 'nixara-shimmer-style';
+        shStyle.textContent = [
+            '[data-testid="metric-container"]{position:relative;overflow:hidden;}',
+            '[data-testid="metric-container"]::after{',
+            '  content:"";position:absolute;top:0;left:-100%;width:60%;height:100%;',
+            '  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.55),transparent);',
+            '  transform:skewX(-20deg);transition:none;pointer-events:none;}',
+            '[data-testid="metric-container"]:hover::after{',
+            '  left:160%;transition:left 0.55s ease;}'
+        ].join('');
+        document.head.appendChild(shStyle);
+    }
+
+})();
+</script>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------
 # MAIN-AREA PERSISTENT SCRIPTS
 # Runs in the main page (not sidebar), so saved-key sync keeps working even when sidebar is closed.
 # Sidebar open/close is handled by Streamlit's native controls.
