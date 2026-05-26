@@ -909,7 +909,7 @@ with st.sidebar:
         tab_token  = st.text_input("Token Name", placeholder="my-token")
         tab_secret = st.text_input("Token Secret", type="password", placeholder="••••••••")
         tab_view   = st.text_input("View Name", placeholder="Sales Overview")
-        if st.button("Connect to Tableau", use_container_width=True):
+        if st.button("Connect to Tableau", width='stretch'):
             if all([tab_server, tab_site, tab_token, tab_secret, tab_view]):
                 with st.spinner("Connecting to Tableau..."):
                     df_from_bi = load_tableau(tab_server, tab_site, tab_token, tab_secret, tab_view)
@@ -931,7 +931,7 @@ with st.sidebar:
         pbi_workspace= st.text_input("Workspace ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
         pbi_dataset  = st.text_input("Dataset ID", placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx")
 
-        if st.button("Connect to Power BI", use_container_width=True):
+        if st.button("Connect to Power BI", width='stretch'):
             if all([pbi_tenant, pbi_client, pbi_secret, pbi_workspace, pbi_dataset]):
                 with st.spinner("Authenticating with Power BI..."):
                     token = get_powerbi_token(pbi_tenant, pbi_client, pbi_secret)
@@ -953,7 +953,7 @@ with st.sidebar:
                 "Select table to analyse",
                 st.session_state["pbi_tables"]
             )
-            if st.button("Load Table", use_container_width=True):
+            if st.button("Load Table", width='stretch'):
                 with st.spinner(f"Loading {pbi_table_choice}..."):
                     df_from_bi = load_powerbi_table(
                         st.session_state["pbi_token"],
@@ -1122,7 +1122,7 @@ To remove your key at any time, untick "Remember key in this browser".
 
     run = st.button(
         "Generate Reports",
-        use_container_width=True,
+        width='stretch',
         disabled=not key_ready,
     )
 
@@ -1557,7 +1557,7 @@ with nav_dashboard:
 
         st.dataframe(
             df_display.head(10),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
         )
 
@@ -1604,7 +1604,7 @@ with nav_dashboard:
                         padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
                     )
                 )
-                st.altair_chart(bar, use_container_width=True)
+                st.altair_chart(bar, width='stretch')
 
             with chart_col2:
                 if len(numeric_cols) >= 2:
@@ -1644,7 +1644,7 @@ with nav_dashboard:
                             padding={"top": 16, "left": 16, "right": 16, "bottom": 16},
                         )
                     )
-                    st.altair_chart(bar2, use_container_width=True)
+                    st.altair_chart(bar2, width='stretch')
 
         # Anomaly warnings
         for col in numeric_cols[:2]:
@@ -1720,7 +1720,7 @@ with nav_dashboard:
                                 file_name=f"{report_type.lower().replace(' ', '_')}.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 key=f"docx_{report_type}",
-                                use_container_width=True,
+                                width='stretch',
                             )
 
                         with dl2:
@@ -1730,7 +1730,7 @@ with nav_dashboard:
                                 file_name=f"{report_type.lower().replace(' ', '_')}.pdf",
                                 mime="application/pdf",
                                 key=f"pdf_{report_type}",
-                                use_container_width=True,
+                                width='stretch',
                             )
 
         elif uploaded_file:
