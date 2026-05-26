@@ -1132,7 +1132,24 @@ To remove your key at any time, untick "Remember key in this browser".
 
 if "session_logged" not in st.session_state:
     st.session_state["session_logged"] = True
-    log_event("session_start", data_source=data_source)
+    # Detect traffic source: UTM params first, then Referer header, else "direct"
+    _referrer = "direct"
+    try:
+        _utm = st.query_params.get("utm_source", "")
+        if _utm:
+            _referrer = str(_utm).lower()
+        else:
+            _hdrs = st.context.headers
+            _ref  = _hdrs.get("referer", "") or _hdrs.get("Referer", "")
+            if _ref:
+                if "linkedin" in _ref.lower():   _referrer = "linkedin"
+                elif "google"  in _ref.lower():  _referrer = "google"
+                elif "twitter" in _ref.lower() or "x.com" in _ref.lower(): _referrer = "twitter"
+                elif "github"  in _ref.lower():  _referrer = "github"
+                else:                            _referrer = "web"
+    except Exception:
+        pass
+    log_event("session_start", data_source=data_source, referrer=_referrer)
 
 # ---------------------------------------------------
 # MAIN-AREA PERSISTENT SCRIPTS
