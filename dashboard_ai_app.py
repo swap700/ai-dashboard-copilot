@@ -266,18 +266,19 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 }
 .app-title {
     font-family: 'Inter', sans-serif;
-    font-size: 1.9rem;
-    font-weight: 600;
+    font-size: 3.2rem;
+    font-weight: 700;
     color: #1E293B;
     margin: 0;
-    line-height: 1.2;
-    letter-spacing: -0.02em;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
 }
 .app-subtitle {
     color: #64748B;
-    font-size: 0.83rem;
-    margin-top: 0.3rem;
+    font-size: 1.05rem;
+    margin-top: 0.4rem;
     font-weight: 400;
+    line-height: 1.5;
 }
 .accent-bar {
     width: 36px;
@@ -1225,7 +1226,7 @@ components.html("""
     if (!d.getElementById('nixara-canvas')) {
         var canvas = d.createElement('canvas');
         canvas.id  = 'nixara-canvas';
-        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:0.20;';
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:0.45;';
         d.body.appendChild(canvas);
 
         var ctx = canvas.getContext('2d');
@@ -1263,7 +1264,7 @@ components.html("""
                         ctx.beginPath();
                         ctx.moveTo(pts[a].x, pts[a].y);
                         ctx.lineTo(pts[b].x, pts[b].y);
-                        ctx.strokeStyle = 'rgba(37,99,235,' + ((1 - dist/MAX) * 0.5) + ')';
+                        ctx.strokeStyle = 'rgba(29,78,216,' + ((1 - dist/MAX) * 0.75) + ')';
                         ctx.lineWidth = 0.7;
                         ctx.stroke();
                     }
@@ -1272,7 +1273,7 @@ components.html("""
             pts.forEach(function(pt) {
                 ctx.beginPath();
                 ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2);
-                ctx.fillStyle = 'rgba(37,99,235,0.7)';
+                ctx.fillStyle = 'rgba(29,78,216,0.92)';
                 ctx.fill();
             });
             p.requestAnimationFrame(tick);
@@ -1334,7 +1335,7 @@ components.html("""
         function type() {
             if (i < text.length) {
                 cursor.insertAdjacentText('beforebegin', text[i++]);
-                setTimeout(type, 90);
+                setTimeout(type, 165);
             } else {
                 setTimeout(function(){ cursor.remove(); }, 550);
             }
@@ -1386,9 +1387,9 @@ components.html("""
 st.markdown("""
     <div style="border-bottom: 1.5px solid #E2E8F0; padding-bottom: 1.25rem; margin-bottom: 2rem;">
         <p class="app-title">Nixara</p>
-        <p style="font-size:0.7rem; color:#94A3B8; letter-spacing:0.12em; text-transform:uppercase;
-                  font-weight:500; margin: 0.1rem 0 0.4rem;">
-            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0;">from <strong style="color:#2563EB;">nix</strong> (clarity, light) + <strong style="color:#2563EB;">ara</strong> (direction) — illuminating the path forward in your data</em>
+        <p style="font-size:1rem; color:#94A3B8; letter-spacing:0.08em; text-transform:uppercase;
+                  font-weight:500; margin: 0.25rem 0 0.5rem;">
+            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0; font-size:0.95rem;">from <strong style="color:#2563EB;">nix</strong> (clarity, light) + <strong style="color:#2563EB;">ara</strong> (direction) — illuminating the path forward in your data</em>
         </p>
         <div class="accent-bar"></div>
         <p class="app-subtitle">Upload CSV / Excel &nbsp;·&nbsp; Connect Tableau or Power BI &nbsp;·&nbsp; Get executive-grade AI reports</p>
