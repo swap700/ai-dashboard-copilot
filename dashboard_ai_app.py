@@ -28,6 +28,65 @@ try:
     MSAL_AVAILABLE = True
 except ImportError:
     MSAL_AVAILABLE = False
+
+import uuid
+import threading
+# ---------------------------------------------------
+# ANALYTICS — silent Supabase event logging
+# Credentials live in .streamlit/secrets.toml (never committed to git).
+# Falls back gracefully if Supabase is not configured.
+# ---------------------------------------------------
+
+def _get_supabase_cfg():
+    """Return (url, anon_key) from st.secrets, or (None, None) if not set."""
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_ANON_KEY"]
+        if url and key:
+            return url.rstrip("/"), key
+    except Exception:
+        pass
+    return None, None
+
+
+def _fire_event(url: str, key: str, payload: dict):
+    """POST a single event row to Supabase. Runs in a background thread — receives
+    url and key directly so it never touches st.secrets (which is main-thread only)."""
+    try:
+        requests.post(
+            f"{url}/rest/v1/nixara_events",
+            json=payload,
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            timeout=4,
+        )
+    except Exception:
+        pass  # never surface analytics errors to the user
+
+
+def log_event(event_type: str, **kwargs):
+    """Log a named event. Extra kwargs become columns in nixara_events."""
+    # Read secrets in the main Streamlit thread — st.secrets is not thread-safe
+    url, key = _get_supabase_cfg()
+    if not url:
+        return  # analytics not configured — skip silently
+    # Ensure a stable session ID exists for this browser session
+    if "analytics_session_id" not in st.session_state:
+        st.session_state["analytics_session_id"] = str(uuid.uuid4())
+    payload = {
+        "session_id": st.session_state["analytics_session_id"],
+        "event_type": event_type,
+        **kwargs,
+    }
+    # Fire in a daemon thread — pass url/key explicitly, never call st.secrets from the thread
+    t = threading.Thread(target=_fire_event, args=(url, key, payload), daemon=True)
+    t.start()
+
+
 # ---------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------
@@ -1068,6 +1127,14 @@ To remove your key at any time, untick "Remember key in this browser".
     )
 
 # ---------------------------------------------------
+# ANALYTICS — session start (fires once per browser session via session_state guard)
+# ---------------------------------------------------
+
+if "session_logged" not in st.session_state:
+    st.session_state["session_logged"] = True
+    log_event("session_start", data_source=data_source)
+
+# ---------------------------------------------------
 # MAIN-AREA PERSISTENT SCRIPTS
 # Runs in the main page (not sidebar), so saved-key sync keeps working even when sidebar is closed.
 # Sidebar open/close is handled by Streamlit's native controls.
@@ -1430,12 +1497,29 @@ with nav_dashboard:
     df_raw = None
     data_badge = ""
 
+    _analytics_data_source = None   # used later in report_generate event
+
     if uploaded_file:
         df_raw     = load_file(uploaded_file)
         data_badge = uploaded_file.name
+        _ext = uploaded_file.name.rsplit(".", 1)[-1].lower()
+        _analytics_data_source = _ext
+        # Log file upload (once per unique file name per session)
+        _upload_key = f"logged_upload_{uploaded_file.name}"
+        if _upload_key not in st.session_state:
+            st.session_state[_upload_key] = True
+            log_event("file_upload", data_source=_ext)
     elif df_from_bi is not None:
         df_raw     = df_from_bi
         data_badge = st.session_state.get("bi_source", "BI Tool")
+        _bi_source = st.session_state.get("bi_source", "bi")
+        _bi_type   = "tableau" if "Tableau" in _bi_source else "powerbi"
+        _analytics_data_source = _bi_type
+        # Log BI connection (once per session per source)
+        _bi_key = f"logged_bi_{_bi_source}"
+        if _bi_key not in st.session_state:
+            st.session_state[_bi_key] = True
+            log_event("bi_connect", data_source=_bi_type)
 
     if df_raw is None:
         source_hint = {
@@ -1588,6 +1672,15 @@ with nav_dashboard:
                     with tab:
                         with st.spinner(f"Generating {report_type}..."):
                             report_text = generate_report(summary, who, decision, timeframe, report_type, api_key=user_api_key)
+                        log_event(
+                            "report_generate",
+                            report_type=report_type,
+                            role=who,
+                            timeframe=timeframe,
+                            data_source=_analytics_data_source,
+                            data_rows=len(df),
+                            data_cols=len(df.columns),
+                        )
 
                         # Clean up raw markdown artifacts before rendering
                         clean = report_text
