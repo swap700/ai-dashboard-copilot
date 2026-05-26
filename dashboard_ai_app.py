@@ -1209,171 +1209,151 @@ if "session_logged" not in st.session_state:
     log_event("session_start", data_source=data_source, referrer=_referrer)
 
 # ---------------------------------------------------
-# ANIMATIONS — particle network background + count-up metrics + typewriter header
-# Injected once per page load; guards prevent duplicate canvases on Streamlit reruns.
+# ANIMATIONS — particle network + count-up + typewriter + card shimmer
+# Must use components.html() so the script actually executes.
+# st.markdown strips <script> tags — components.html() runs in an iframe
+# and uses window.parent to reach the real Streamlit page DOM.
 # ---------------------------------------------------
 
-st.markdown("""
+components.html("""
 <script>
-(function nixaraAnimations() {
+(function() {
+    var p = window.parent;          /* the real Streamlit page */
+    var d = p.document;
 
-    /* ── 1. PARTICLE NETWORK BACKGROUND ─────────────────────────── */
-    if (!document.getElementById('nixara-canvas')) {
-        var canvas = document.createElement('canvas');
+    /* ── 1. PARTICLE NETWORK BACKGROUND ─────────────────────── */
+    if (!d.getElementById('nixara-canvas')) {
+        var canvas = d.createElement('canvas');
         canvas.id  = 'nixara-canvas';
-        canvas.style.cssText = [
-            'position:fixed', 'top:0', 'left:0',
-            'width:100vw', 'height:100vh',
-            'z-index:0', 'pointer-events:none',
-            'opacity:0.22'
-        ].join(';');
-        document.body.appendChild(canvas);
+        canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;pointer-events:none;opacity:0.20;';
+        d.body.appendChild(canvas);
 
         var ctx = canvas.getContext('2d');
 
         function resize() {
-            canvas.width  = window.innerWidth;
-            canvas.height = window.innerHeight;
+            canvas.width  = p.innerWidth;
+            canvas.height = p.innerHeight;
         }
         resize();
-        window.addEventListener('resize', resize);
+        p.addEventListener('resize', resize);
 
-        /* generate particles */
-        var PARTICLE_COUNT = 70;
-        var MAX_DIST       = 140;
-        var pts = [];
-        for (var i = 0; i < PARTICLE_COUNT; i++) {
+        var N = 72, MAX = 145, pts = [];
+        for (var i = 0; i < N; i++) {
             pts.push({
                 x:  Math.random() * canvas.width,
                 y:  Math.random() * canvas.height,
-                vx: (Math.random() - 0.5) * 0.45,
-                vy: (Math.random() - 0.5) * 0.45,
-                r:  Math.random() * 1.8 + 0.8
+                vx: (Math.random() - 0.5) * 0.42,
+                vy: (Math.random() - 0.5) * 0.42,
+                r:  Math.random() * 1.8 + 0.7
             });
         }
 
         function tick() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            /* move */
-            pts.forEach(function(p) {
-                p.x += p.vx;
-                p.y += p.vy;
-                if (p.x < 0 || p.x > canvas.width)  p.vx *= -1;
-                if (p.y < 0 || p.y > canvas.height)  p.vy *= -1;
+            pts.forEach(function(pt) {
+                pt.x += pt.vx; pt.y += pt.vy;
+                if (pt.x < 0 || pt.x > canvas.width)  pt.vx *= -1;
+                if (pt.y < 0 || pt.y > canvas.height)  pt.vy *= -1;
             });
-
-            /* draw connections */
             for (var a = 0; a < pts.length; a++) {
                 for (var b = a + 1; b < pts.length; b++) {
-                    var dx   = pts[a].x - pts[b].x;
-                    var dy   = pts[a].y - pts[b].y;
+                    var dx = pts[a].x - pts[b].x, dy = pts[a].y - pts[b].y;
                     var dist = Math.sqrt(dx*dx + dy*dy);
-                    if (dist < MAX_DIST) {
-                        var alpha = (1 - dist / MAX_DIST) * 0.55;
+                    if (dist < MAX) {
                         ctx.beginPath();
                         ctx.moveTo(pts[a].x, pts[a].y);
                         ctx.lineTo(pts[b].x, pts[b].y);
-                        ctx.strokeStyle = 'rgba(37,99,235,' + alpha + ')';
-                        ctx.lineWidth   = 0.75;
+                        ctx.strokeStyle = 'rgba(37,99,235,' + ((1 - dist/MAX) * 0.5) + ')';
+                        ctx.lineWidth = 0.7;
                         ctx.stroke();
                     }
                 }
             }
-
-            /* draw dots */
-            pts.forEach(function(p) {
+            pts.forEach(function(pt) {
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(37,99,235,0.75)';
+                ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(37,99,235,0.7)';
                 ctx.fill();
             });
-
-            requestAnimationFrame(tick);
+            p.requestAnimationFrame(tick);
         }
         tick();
     }
 
-    /* ── 2. METRIC COUNT-UP ─────────────────────────────────────── */
-    function countUp(el, target, duration) {
-        var start     = 0;
-        var startTime = null;
-        var isInt     = Number.isInteger(target);
-        function step(ts) {
-            if (!startTime) startTime = ts;
-            var progress = Math.min((ts - startTime) / duration, 1);
-            var eased    = 1 - Math.pow(1 - progress, 3);
-            var current  = start + (target - start) * eased;
-            el.textContent = isInt
-                ? Math.round(current).toLocaleString()
-                : current.toFixed(1);
-            if (progress < 1) requestAnimationFrame(step);
-        }
-        requestAnimationFrame(step);
+    /* ── 2. CARD SHIMMER (inject style into parent head) ────── */
+    if (!d.getElementById('nixara-shimmer-style')) {
+        var s = d.createElement('style');
+        s.id  = 'nixara-shimmer-style';
+        s.textContent = '[data-testid="metric-container"]{position:relative!important;overflow:hidden!important;}' +
+            '[data-testid="metric-container"]::after{content:"";position:absolute;top:0;left:-120%;width:60%;height:100%;' +
+            'background:linear-gradient(90deg,transparent,rgba(255,255,255,0.6),transparent);' +
+            'transform:skewX(-18deg);pointer-events:none;transition:none;}' +
+            '[data-testid="metric-container"]:hover::after{left:160%;transition:left 0.5s ease;}';
+        d.head.appendChild(s);
     }
 
-    var metricObserver = new MutationObserver(function() {
-        document.querySelectorAll('[data-testid="stMetricValue"]').forEach(function(el) {
-            if (el.dataset.nixaraCountup) return;
-            el.dataset.nixaraCountup = '1';
+    /* ── 3. METRIC COUNT-UP ─────────────────────────────────── */
+    function countUp(el, target) {
+        var start = null;
+        var isInt = (target % 1 === 0);
+        function step(ts) {
+            if (!start) start = ts;
+            var pct = Math.min((ts - start) / 1100, 1);
+            var val = target * (1 - Math.pow(1 - pct, 3));
+            el.textContent = isInt ? Math.round(val).toLocaleString() : val.toFixed(1);
+            if (pct < 1) p.requestAnimationFrame(step);
+        }
+        p.requestAnimationFrame(step);
+    }
+
+    var metricObs = new MutationObserver(function() {
+        d.querySelectorAll('[data-testid="stMetricValue"]').forEach(function(el) {
+            if (el.dataset.nxDone) return;
+            el.dataset.nxDone = '1';
             var raw = parseFloat(el.textContent.replace(/[^0-9.]/g, ''));
-            if (!isNaN(raw) && raw > 0) countUp(el, raw, 1100);
+            if (!isNaN(raw) && raw > 0) countUp(el, raw);
         });
     });
-    metricObserver.observe(document.body, { childList: true, subtree: true });
+    metricObs.observe(d.body, { childList: true, subtree: true });
 
-    /* ── 3. TYPEWRITER for app title ────────────────────────────── */
-    function typewriter(el, text, speed) {
+    /* ── 4. TYPEWRITER for app title ────────────────────────── */
+    if (!d.getElementById('nixara-blink-style')) {
+        var bs = d.createElement('style');
+        bs.id  = 'nixara-blink-style';
+        bs.textContent = '@keyframes nixBlink{0%,100%{opacity:1}50%{opacity:0}}';
+        d.head.appendChild(bs);
+    }
+
+    function typewrite(el, text) {
         el.textContent = '';
-        var i = 0;
-        var cursor = document.createElement('span');
+        var cursor = d.createElement('span');
         cursor.textContent = '|';
-        cursor.style.cssText = 'opacity:1;animation:nixBlink 0.7s step-end infinite;';
+        cursor.style.cssText = 'animation:nixBlink 0.65s step-end infinite;';
         el.appendChild(cursor);
-        var style = document.createElement('style');
-        style.textContent = '@keyframes nixBlink{0%,100%{opacity:1}50%{opacity:0}}';
-        document.head.appendChild(style);
+        var i = 0;
         function type() {
             if (i < text.length) {
-                cursor.insertAdjacentText('beforebegin', text[i]);
-                i++;
-                setTimeout(type, speed);
+                cursor.insertAdjacentText('beforebegin', text[i++]);
+                setTimeout(type, 90);
             } else {
-                setTimeout(function() { cursor.remove(); }, 600);
+                setTimeout(function(){ cursor.remove(); }, 550);
             }
         }
         type();
     }
 
-    /* wait for the title element to render, then type it */
-    var titleObserver = new MutationObserver(function() {
-        var titleEl = document.querySelector('.app-title');
-        if (titleEl && !titleEl.dataset.typed) {
-            titleEl.dataset.typed = '1';
-            typewriter(titleEl, 'Nixara', 95);
+    var titleObs = new MutationObserver(function() {
+        var t = d.querySelector('.app-title');
+        if (t && !t.dataset.nxTyped) {
+            t.dataset.nxTyped = '1';
+            typewrite(t, 'Nixara');
         }
     });
-    titleObserver.observe(document.body, { childList: true, subtree: true });
-
-    /* ── 4. CARD SHIMMER on hover ───────────────────────────────── */
-    if (!document.getElementById('nixara-shimmer-style')) {
-        var shStyle = document.createElement('style');
-        shStyle.id  = 'nixara-shimmer-style';
-        shStyle.textContent = [
-            '[data-testid="metric-container"]{position:relative;overflow:hidden;}',
-            '[data-testid="metric-container"]::after{',
-            '  content:"";position:absolute;top:0;left:-100%;width:60%;height:100%;',
-            '  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.55),transparent);',
-            '  transform:skewX(-20deg);transition:none;pointer-events:none;}',
-            '[data-testid="metric-container"]:hover::after{',
-            '  left:160%;transition:left 0.55s ease;}'
-        ].join('');
-        document.head.appendChild(shStyle);
-    }
+    titleObs.observe(d.body, { childList: true, subtree: true });
 
 })();
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
 # ---------------------------------------------------
 # MAIN-AREA PERSISTENT SCRIPTS
