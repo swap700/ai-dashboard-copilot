@@ -531,7 +531,15 @@ def get_client(user_key=None):
 def load_file(uploaded):
     name = uploaded.name.lower()
     if name.endswith(".csv"):
-        return pd.read_csv(uploaded)
+        # Try common encodings in order; fall back to latin-1 which never raises UnicodeDecodeError
+        data = uploaded.read()
+        for enc in ("utf-8", "utf-8-sig", "cp1252", "latin-1"):
+            try:
+                return pd.read_csv(io.BytesIO(data), encoding=enc)
+            except UnicodeDecodeError:
+                continue
+        # Last-resort: decode with replacement characters
+        return pd.read_csv(io.BytesIO(data), encoding="utf-8", errors="replace")
     elif name.endswith(".xlsx") or name.endswith(".xls"):
         return pd.read_excel(uploaded)
     return None
