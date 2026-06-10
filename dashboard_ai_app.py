@@ -518,11 +518,18 @@ hr { border-color: #E2E8F0 !important; }
 # ---------------------------------------------------
 
 def get_client(user_key=None):
-    # The visitor's key is used ONLY here to initialise the OpenAI client.
-    # It is never logged, stored on the server, or sent anywhere except OpenAI.
-    # If no key is supplied the call will fail — there is no owner fallback.
-    key = user_key.strip() if user_key and user_key.strip() else ""
-    return OpenAI(api_key=key)
+    # Use the visitor's own key if they provided one.
+    if user_key and user_key.strip() and user_key.strip().startswith("sk-"):
+        return OpenAI(api_key=user_key.strip())
+    # No user key — fall back to the server-side key for the free tier.
+    # The key lives in st.secrets and is never exposed to the visitor.
+    try:
+        server_key = st.secrets["OPENAI_API_KEY"]
+        if server_key:
+            return OpenAI(api_key=server_key)
+    except Exception:
+        pass
+    return OpenAI(api_key="")
 
 # ---------------------------------------------------
 # FILE LOADER
@@ -1078,6 +1085,10 @@ with st.sidebar:
     st.markdown("---")
     st.markdown('<p class="section-label">OpenAI API Key</p>', unsafe_allow_html=True)
 
+    # Free-tier report counter — resets when the browser session ends
+    if "free_reports_used" not in st.session_state:
+        st.session_state["free_reports_used"] = 0
+
     # Read the key from query params (injected by main-area JS on the previous rerun)
     _qp = st.query_params
     _saved_key = _qp.get("_oai", "")
@@ -1089,6 +1100,13 @@ with st.sidebar:
     # If a new saved key arrived from localStorage and session state is still empty, adopt it
     if _saved_key and not st.session_state["user_api_key"]:
         st.session_state["user_api_key"] = _saved_key
+
+    # Helper text — shown above the input field
+    st.markdown(
+        '<p style="font-size:0.75rem;color:#64748B;margin-bottom:4px;">'
+        'Try Nixara free — no API key needed. Enter your own OpenAI key for unlimited reports.</p>',
+        unsafe_allow_html=True,
+    )
 
     entered_key = st.text_input(
         "Your OpenAI API key",
@@ -1103,6 +1121,8 @@ with st.sidebar:
         st.session_state["user_api_key"] = entered_key
 
     user_api_key = st.session_state["user_api_key"]
+    _using_own_key = bool(user_api_key and user_api_key.startswith("sk-"))
+    _free_used = st.session_state["free_reports_used"]
 
     # ── Save-in-browser checkbox ─────────────────────────────────────────────
     _already_saved = bool(_saved_key and _saved_key == user_api_key)
@@ -1127,8 +1147,8 @@ with st.sidebar:
             height=0,
         )
 
-    # Key status indicator
-    if user_api_key and user_api_key.startswith("sk-"):
+    # ── Key / free-tier status indicator ────────────────────────────────────
+    if _using_own_key:
         if save_in_browser:
             st.markdown(
                 '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">'
@@ -1141,10 +1161,18 @@ with st.sidebar:
                 '✓ Key active for this session only</p>',
                 unsafe_allow_html=True,
             )
-    elif user_api_key:
+    elif user_api_key and not _using_own_key:
         st.markdown(
             '<p style="font-size:0.72rem;color:#C0392B;margin-top:3px;">'
             '⚠ Key format looks incorrect — should start with sk-</p>',
+            unsafe_allow_html=True,
+        )
+    else:
+        # No key entered — show the free-tier counter, always visible
+        _counter_color = "#2E7D52" if _free_used == 0 else ("#D97706" if _free_used < 3 else "#C0392B")
+        st.markdown(
+            f'<p style="font-size:0.72rem;color:{_counter_color};margin-top:3px;">'
+            f'◉ {_free_used} / 3 free reports used this session</p>',
             unsafe_allow_html=True,
         )
 
@@ -1176,13 +1204,23 @@ To remove your key at any time, untick "Remember key in this browser".
 
     st.markdown("---")
 
-    # Block the button if no valid key is provided by the visitor
-    key_ready = bool(user_api_key and user_api_key.startswith("sk-"))
+    # Cap logic — own key = unlimited; no key = max 3 free reports per session
+    _cap_hit = (not _using_own_key) and (_free_used >= 3)
+    key_ready = _using_own_key or (not _cap_hit)
 
-    if not key_ready:
+    # Contextual message above the button
+    if _cap_hit:
         st.markdown(
             '<p style="font-size:0.75rem;color:#C0392B;text-align:center;">'
-            'Add your OpenAI key above to generate reports.</p>',
+            "You've reached the free limit for this session. To keep going, paste your "
+            "OpenAI key in the field above — it stays in your browser only.</p>",
+            unsafe_allow_html=True,
+        )
+    elif not _using_own_key and _free_used == 2:
+        st.markdown(
+            '<p style="font-size:0.75rem;color:#D97706;text-align:center;">'
+            "You've used 2 of 3 free reports. Enter your OpenAI key in the sidebar "
+            "for unlimited access.</p>",
             unsafe_allow_html=True,
         )
 
@@ -1896,6 +1934,10 @@ with nav_dashboard:
                 st.markdown('<p class="section-label">AI Reports</p>', unsafe_allow_html=True)
 
                 tab1, tab2, tab3 = st.tabs(["Executive Summary", "Operational Detail", "Risk Report"])
+
+                # Count one free report used per button click (not per tab)
+                if not _using_own_key:
+                    st.session_state["free_reports_used"] += 1
 
                 for tab, report_type in zip(
                     [tab1, tab2, tab3],
