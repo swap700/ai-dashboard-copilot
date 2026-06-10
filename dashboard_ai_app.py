@@ -518,11 +518,17 @@ hr { border-color: #E2E8F0 !important; }
 # ---------------------------------------------------
 
 def get_client(user_key=None):
-    # Use the visitor's own key if they provided one.
+    # Admin token — bypass cap, use server key silently
+    try:
+        _at = st.secrets.get("NIXARA_ADMIN_TOKEN", "")
+        if user_key and _at and user_key.strip() == _at.strip():
+            return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    except Exception:
+        pass
+    # Visitor's own key
     if user_key and user_key.strip() and user_key.strip().startswith("sk-"):
         return OpenAI(api_key=user_key.strip())
-    # No user key — fall back to the server-side key for the free tier.
-    # The key lives in st.secrets and is never exposed to the visitor.
+    # Free-tier fallback — server key, cap enforced in sidebar logic
     try:
         server_key = st.secrets["OPENAI_API_KEY"]
         if server_key:
@@ -1101,10 +1107,15 @@ with st.sidebar:
     if _saved_key and not st.session_state["user_api_key"]:
         st.session_state["user_api_key"] = _saved_key
 
-    # Helper text — shown above the input field
+    # Instructional callout — two-tier explanation for visitors
     st.markdown(
-        '<p style="font-size:0.75rem;color:#64748B;margin-bottom:4px;">'
-        'Try Nixara free — no API key needed. Enter your own OpenAI key for unlimited reports.</p>',
+        """
+        <div style="background:#EFF6FF;border-left:3px solid #2563EB;border-radius:6px;
+                    padding:10px 12px;margin-bottom:10px;font-size:0.78rem;color:#1E293B;line-height:1.6;">
+            <strong>🆓 Try it free</strong> — no key needed. You get <strong>3 free reports</strong> per session, on us.<br>
+            <strong>🔑 Unlimited access</strong> — paste your own OpenAI key below. It stays in your browser only.
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -1121,8 +1132,15 @@ with st.sidebar:
         st.session_state["user_api_key"] = entered_key
 
     user_api_key = st.session_state["user_api_key"]
-    _using_own_key = bool(user_api_key and user_api_key.startswith("sk-"))
     _free_used = st.session_state["free_reports_used"]
+
+    # Check admin token (never exposed — compared server-side only)
+    try:
+        _admin_token = st.secrets.get("NIXARA_ADMIN_TOKEN", "")
+    except Exception:
+        _admin_token = ""
+    _is_admin = bool(user_api_key and _admin_token and user_api_key.strip() == _admin_token.strip())
+    _using_own_key = _is_admin or bool(user_api_key and user_api_key.startswith("sk-"))
 
     # ── Save-in-browser checkbox ─────────────────────────────────────────────
     _already_saved = bool(_saved_key and _saved_key == user_api_key)
@@ -1148,7 +1166,13 @@ with st.sidebar:
         )
 
     # ── Key / free-tier status indicator ────────────────────────────────────
-    if _using_own_key:
+    if _is_admin:
+        st.markdown(
+            '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">'
+            '✓ Admin access — unlimited reports</p>',
+            unsafe_allow_html=True,
+        )
+    elif _using_own_key:
         if save_in_browser:
             st.markdown(
                 '<p style="font-size:0.72rem;color:#2E7D52;margin-top:3px;">'
