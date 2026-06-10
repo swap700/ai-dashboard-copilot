@@ -1107,18 +1107,6 @@ with st.sidebar:
     if _saved_key and not st.session_state["user_api_key"]:
         st.session_state["user_api_key"] = _saved_key
 
-    # Instructional callout — two-tier explanation for visitors
-    st.markdown(
-        """
-        <div style="background:#EFF6FF;border-left:3px solid #2563EB;border-radius:6px;
-                    padding:10px 12px;margin-bottom:10px;font-size:0.78rem;color:#1E293B;line-height:1.6;">
-            <strong>🆓 Try it free</strong> — no key needed. You get <strong>3 free reports</strong> per session, on us.<br>
-            <strong>🔑 Unlimited access</strong> — paste your own OpenAI key below. It stays in your browser only.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     entered_key = st.text_input(
         "Your OpenAI API key",
         type="password",
@@ -1471,6 +1459,26 @@ st.markdown("""
 # FAQ tab is defined first in code so it always renders
 # even if the dashboard tab has early-exit logic.
 # ---------------------------------------------------
+
+st.markdown("""
+<div style="display:flex;align-items:center;gap:28px;background:#EFF6FF;
+            border:1px solid #BFDBFE;border-radius:10px;
+            padding:11px 20px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
+        <span style="font-size:1rem;">🆓</span>
+        <span style="font-size:0.82rem;color:#1E293B;font-family:Inter,sans-serif;">
+            <strong>Try it free</strong> — 3 reports per session, no key needed
+        </span>
+    </div>
+    <div style="width:1px;height:22px;background:#BFDBFE;flex-shrink:0;"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1rem;">🔑</span>
+        <span style="font-size:0.82rem;color:#1E293B;font-family:Inter,sans-serif;">
+            <strong>Unlimited</strong> — paste your OpenAI key in the sidebar. It stays in your browser only
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 nav_dashboard, nav_faq = st.tabs(["  Dashboard  ", "  FAQ & Help  "])
 
