@@ -960,43 +960,44 @@ _free_used     = 0
 
 with st.sidebar:
 
-    # ── Font size control — compact, top of sidebar ──────────────────────────
-    if "font_size" not in st.session_state:
-        st.session_state["font_size"] = "Medium"
-    _fs_options = ["Small", "Medium", "Large"]
-    _fs_map     = {"Small": "0.78rem", "Medium": "0.85rem", "Large": "0.96rem"}
-    _fs_label_map = {"Small": "0.68rem", "Medium": "0.75rem", "Large": "0.84rem"}
-
-    _fs_col1, _fs_col2 = st.columns([2, 3])
-    with _fs_col1:
-        st.markdown(
-            '<p style="font-size:0.65rem;color:#94A3B8;letter-spacing:0.1em;text-transform:uppercase;'
-            'font-weight:600;margin:6px 0 4px;">Text Size</p>',
-            unsafe_allow_html=True
-        )
-    with _fs_col2:
-        _fs_choice = st.select_slider(
-            "font_size_slider",
-            options=_fs_options,
-            value=st.session_state["font_size"],
-            label_visibility="collapsed",
-        )
-        st.session_state["font_size"] = _fs_choice
-
-    _fs_val       = _fs_map[_fs_choice]
-    _fs_label_val = _fs_label_map[_fs_choice]
-
-    # Inject dynamic font size into the page
-    st.markdown(
-        f'''<style>
-        [data-testid="stSidebar"] label {{ font-size: {_fs_val} !important; }}
-        [data-testid="stSidebar"] .stMarkdown p {{ font-size: {_fs_label_val} !important; }}
-        [data-testid="stSidebar"] .stTextArea textarea {{ font-size: {_fs_val} !important; }}
+    # ── Dynamic sidebar font via CSS container queries ───────────────────────
+    # No slider, no JS iframe tricks. The browser measures the sidebar's own
+    # inline-size and picks the right font tier as the user drags the edge.
+    st.markdown("""
+    <style>
+    [data-testid="stSidebar"] > div:first-child {
+        container-type: inline-size;
+        container-name: nixara-sidebar;
+    }
+    @container nixara-sidebar (max-width: 239px) {
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] .stTextArea textarea,
         [data-testid="stSidebar"] select,
-        [data-testid="stSidebar"] .stSelectbox > div > div {{ font-size: {_fs_val} !important; }}
-        </style>''',
-        unsafe_allow_html=True,
-    )
+        [data-testid="stSidebar"] .stSelectbox > div > div,
+        [data-testid="stSidebar"] .stExpander summary span { font-size: 0.70rem !important; }
+        [data-testid="stSidebar"] .section-label { font-size: 0.60rem !important; }
+    }
+    @container nixara-sidebar (min-width: 240px) and (max-width: 339px) {
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] select,
+        [data-testid="stSidebar"] .stSelectbox > div > div,
+        [data-testid="stSidebar"] .stExpander summary span { font-size: 0.82rem !important; }
+        [data-testid="stSidebar"] .section-label { font-size: 0.70rem !important; }
+    }
+    @container nixara-sidebar (min-width: 340px) {
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .stMarkdown p,
+        [data-testid="stSidebar"] .stTextArea textarea,
+        [data-testid="stSidebar"] select,
+        [data-testid="stSidebar"] .stSelectbox > div > div,
+        [data-testid="stSidebar"] .stExpander summary span { font-size: 0.92rem !important; }
+        [data-testid="stSidebar"] .section-label { font-size: 0.78rem !important; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown('<p class="section-label">Data Source</p>', unsafe_allow_html=True)
@@ -1445,43 +1446,6 @@ components.html("""
         }
     });
     titleObs.observe(d.body, { childList: true, subtree: true });
-
-    /* ── 5. DYNAMIC SIDEBAR FONT SCALING ────────────────────── */
-    (function() {
-        var styleId = 'nixara-sidebar-dyn';
-        if (!d.getElementById(styleId)) {
-            var s = d.createElement('style');
-            s.id = styleId;
-            d.head.appendChild(s);
-        }
-        var styleEl = d.getElementById(styleId);
-
-        function scaleSidebar() {
-            var sb = d.querySelector('[data-testid="stSidebar"]');
-            if (!sb) return;
-            var w = sb.offsetWidth;
-            // Map sidebar width (200–420px) to a font scale (0.70–0.90rem)
-            var f  = Math.max(0.70, Math.min(0.90, w / 400)).toFixed(3);
-            var lf = Math.max(0.62, Math.min(0.78, w / 460)).toFixed(3);
-            styleEl.textContent =
-                '[data-testid="stSidebar"] .stMarkdown p,' +
-                '[data-testid="stSidebar"] .stTextInput label,' +
-                '[data-testid="stSidebar"] .stSelectbox label,' +
-                '[data-testid="stSidebar"] .stCheckbox label,' +
-                '[data-testid="stSidebar"] .stExpander summary span {' +
-                '    font-size:' + f + 'rem !important; }' +
-                '[data-testid="stSidebar"] .section-label {' +
-                '    font-size:' + lf + 'rem !important; }';
-        }
-
-        function attachObserver() {
-            var sb = d.querySelector('[data-testid="stSidebar"]');
-            if (!sb) { setTimeout(attachObserver, 300); return; }
-            scaleSidebar();
-            new p.ResizeObserver(scaleSidebar).observe(sb);
-        }
-        attachObserver();
-    })();
 
 })();
 </script>
