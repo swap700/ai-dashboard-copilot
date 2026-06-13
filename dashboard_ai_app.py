@@ -1123,26 +1123,9 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Free-tier report counter — always initialised here
+    # Free-tier report counter — initialised here, rendered in main area
     if "free_reports_used" not in st.session_state:
         st.session_state["free_reports_used"] = 0
-
-    # ── Prominent free reports counter — always visible above the key field ──
-    _fc = st.session_state["free_reports_used"]
-    _fc_dots = "●" * _fc + "○" * (3 - _fc)
-    _fc_color = "#2E7D52" if _fc == 0 else ("#D97706" if _fc < 3 else "#C0392B")
-    _fc_bg    = "#F0FDF4" if _fc == 0 else ("#FFFBEB" if _fc < 3 else "#FEF2F2")
-    _fc_border= "#BBF7D0" if _fc == 0 else ("#FDE68A" if _fc < 3 else "#FECACA")
-    st.markdown(
-        f'''<div style="background:{_fc_bg};border:1px solid {_fc_border};border-radius:8px;
-                    padding:9px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px;">
-            <span style="font-size:0.95rem;letter-spacing:2px;color:{_fc_color}">{_fc_dots}</span>
-            <span style="font-size:0.76rem;font-weight:600;color:{_fc_color}">
-                {_fc} / 3 FREE REPORTS USED THIS SESSION
-            </span>
-        </div>''',
-        unsafe_allow_html=True,
-    )
 
     st.markdown('<p class="section-label">OpenAI API Key</p>', unsafe_allow_html=True)
 
@@ -1225,11 +1208,10 @@ with st.sidebar:
             unsafe_allow_html=True,
         )
     else:
-        # No key entered — show the free-tier counter, always visible
-        _counter_color = "#2E7D52" if _free_used == 0 else ("#D97706" if _free_used < 3 else "#C0392B")
+        # No key — free tier active, counter shown in main area above the tabs
         st.markdown(
-            f'<p style="font-size:0.72rem;color:{_counter_color};margin-top:3px;">'
-            f'◉ {_free_used} / 3 free reports used this session</p>',
+            '<p style="font-size:0.72rem;color:#2563EB;margin-top:3px;">'
+            '◉ Free tier active — see counter above</p>',
             unsafe_allow_html=True,
         )
 
@@ -1457,6 +1439,43 @@ components.html("""
     });
     titleObs.observe(d.body, { childList: true, subtree: true });
 
+    /* ── 5. DYNAMIC SIDEBAR FONT SCALING ────────────────────── */
+    (function() {
+        var styleId = 'nixara-sidebar-dyn';
+        if (!d.getElementById(styleId)) {
+            var s = d.createElement('style');
+            s.id = styleId;
+            d.head.appendChild(s);
+        }
+        var styleEl = d.getElementById(styleId);
+
+        function scaleSidebar() {
+            var sb = d.querySelector('[data-testid="stSidebar"]');
+            if (!sb) return;
+            var w = sb.offsetWidth;
+            // Map sidebar width (200–420px) to a font scale (0.70–0.90rem)
+            var f  = Math.max(0.70, Math.min(0.90, w / 400)).toFixed(3);
+            var lf = Math.max(0.62, Math.min(0.78, w / 460)).toFixed(3);
+            styleEl.textContent =
+                '[data-testid="stSidebar"] .stMarkdown p,' +
+                '[data-testid="stSidebar"] .stTextInput label,' +
+                '[data-testid="stSidebar"] .stSelectbox label,' +
+                '[data-testid="stSidebar"] .stCheckbox label,' +
+                '[data-testid="stSidebar"] .stExpander summary span {' +
+                '    font-size:' + f + 'rem !important; }' +
+                '[data-testid="stSidebar"] .section-label {' +
+                '    font-size:' + lf + 'rem !important; }';
+        }
+
+        function attachObserver() {
+            var sb = d.querySelector('[data-testid="stSidebar"]');
+            if (!sb) { setTimeout(attachObserver, 300); return; }
+            scaleSidebar();
+            new p.ResizeObserver(scaleSidebar).observe(sb);
+        }
+        attachObserver();
+    })();
+
 })();
 </script>
 """, height=0)
@@ -1507,7 +1526,44 @@ st.markdown("""
 # even if the dashboard tab has early-exit logic.
 # ---------------------------------------------------
 
-# Inject larger tab label fonts before rendering tabs
+# ── Free-tier counter (main area, above trial banner) ──────────────────────
+if not _using_own_key and not _is_admin:
+    _fc       = st.session_state["free_reports_used"]
+    _fc_dots  = "●" * _fc + "○" * (3 - _fc)
+    _fc_color = "#2E7D52" if _fc == 0 else ("#D97706" if _fc < 3 else "#C0392B")
+    _fc_bg    = "#F0FDF4" if _fc == 0 else ("#FFFBEB" if _fc < 3 else "#FEF2F2")
+    _fc_bdr   = "#BBF7D0" if _fc == 0 else ("#FDE68A" if _fc < 3 else "#FECACA")
+    st.markdown(
+        f'<div style="background:{_fc_bg};border:1px solid {_fc_bdr};border-radius:8px;'
+        f'padding:8px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
+        f'<span style="font-size:0.9rem;letter-spacing:3px;color:{_fc_color};">{_fc_dots}</span>'
+        f'<span style="font-size:0.78rem;font-weight:600;color:{_fc_color};">'
+        f'{_fc} / 3 free reports used this session</span></div>',
+        unsafe_allow_html=True,
+    )
+
+# ── Trial banner ────────────────────────────────────────────────────────────
+st.markdown("""
+<div style="display:flex;align-items:center;gap:28px;background:#EFF6FF;
+            border:1px solid #BFDBFE;border-radius:10px;
+            padding:11px 20px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
+        <span style="font-size:1rem;">🆓</span>
+        <span style="font-size:0.82rem;color:#1E293B;font-family:Inter,sans-serif;">
+            <strong>Try it free</strong> — 3 reports per session, no key needed
+        </span>
+    </div>
+    <div style="width:1px;height:22px;background:#BFDBFE;flex-shrink:0;"></div>
+    <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1rem;">🔑</span>
+        <span style="font-size:0.82rem;color:#1E293B;font-family:Inter,sans-serif;">
+            <strong>Unlimited</strong> — paste your OpenAI key in the sidebar. It stays in your browser only
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── Tab label styles ────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 [data-testid="stTabs"] button[role="tab"] {
@@ -1523,7 +1579,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-nav_dashboard, nav_faq = st.tabs(["  📊  Dashboard  ", "  ❓  FAQ & Help  "])
+nav_dashboard, nav_faq = st.tabs(["  Dashboard  ", "  FAQ & Help  "])
 
 # ---------------------------------------------------
 # FAQ TAB
