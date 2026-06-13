@@ -949,7 +949,14 @@ def load_powerbi_table(token, workspace_id, dataset_id, table_name):
 
 # ---------------------------------------------------
 # SIDEBAR
+# Safe defaults — overridden inside the sidebar block.
+# Defined here so the main area never hits a NameError
+# if the sidebar block throws before reaching these assignments.
 # ---------------------------------------------------
+
+_is_admin      = False
+_using_own_key = False
+_free_used     = 0
 
 with st.sidebar:
 
