@@ -87,6 +87,54 @@ def log_event(event_type: str, **kwargs):
     t.start()
 
 
+# ── DECISION TRACKING ────────────────────────────────────────────────────────
+
+def _fire_decision(url: str, key: str, payload: dict):
+    """POST a decision row to Supabase nixara_decisions table. Runs in a background thread."""
+    try:
+        requests.post(
+            f"{url}/rest/v1/nixara_decisions",
+            json=payload,
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            timeout=5,
+        )
+    except Exception:
+        pass  # never surface analytics errors to the user
+
+
+def log_decision_record(
+    session_id: str,
+    report_type: str,
+    role: str,
+    dataset_name: str,
+    decision_choice: str,   # 'approved' | 'rejected' | 'postponed'
+    notes: str = "",
+    timeframe: str = "",
+    question: str = "",
+):
+    """Record a user decision in Supabase. Reads secrets in main thread, fires in daemon thread."""
+    url, key = _get_supabase_cfg()
+    if not url:
+        return  # Supabase not configured — skip silently
+    payload = {
+        "session_id": session_id,
+        "report_type": report_type,
+        "role": role,
+        "dataset_name": dataset_name,
+        "decision": decision_choice,
+        "notes": notes,
+        "timeframe": timeframe,
+        "question": question,
+    }
+    t = threading.Thread(target=_fire_decision, args=(url, key, payload), daemon=True)
+    t.start()
+
+
 # ---------------------------------------------------
 # PAGE CONFIG
 # ---------------------------------------------------
@@ -2108,6 +2156,83 @@ with nav_dashboard:
                                 key=f"pdf_{report_type}",
                                 width='stretch',
                             )
+
+                        # ── DECISION PANEL ───────────────────────────────────────────────
+                        _dk = f"decision_made_{report_type}"
+                        _prior_decision = st.session_state.get(_dk)
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        st.markdown("""
+<div style="background:#F8FAFF;border:1px solid #DBEAFE;border-radius:12px;
+            padding:18px 22px 4px;margin-top:4px;">
+  <p style="font-weight:700;color:#1E293B;font-size:0.95rem;margin:0 0 2px 0;">
+    📋 &nbsp;Record Your Decision
+  </p>
+  <p style="color:#64748B;font-size:0.78rem;margin:0 0 14px 0;">
+    What did you decide to do with these recommendations?
+  </p>
+</div>
+""", unsafe_allow_html=True)
+
+                        if _prior_decision:
+                            _badge_map = {
+                                "approved":  ("✅", "Approved",  "#D1FAE5", "#065F46"),
+                                "rejected":  ("❌", "Rejected",  "#FEE2E2", "#991B1B"),
+                                "postponed": ("⏸", "Postponed", "#FEF3C7", "#92400E"),
+                            }
+                            _ico, _lbl, _bg, _fg = _badge_map.get(_prior_decision, ("◉", _prior_decision, "#F1F5F9", "#334155"))
+                            st.markdown(
+                                f'<div style="display:inline-flex;align-items:center;gap:8px;'
+                                f'background:{_bg};color:{_fg};border-radius:8px;'
+                                f'padding:8px 18px;font-weight:600;font-size:0.88rem;margin-bottom:12px;">'
+                                f'{_ico} &nbsp;Decision recorded — <strong>{_lbl}</strong></div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            _nt_key = f"d_notes_{report_type}"
+                            st.text_input(
+                                "Add context (optional)",
+                                key=_nt_key,
+                                placeholder="e.g. Assigned to Sarah, revisit end of Q3…",
+                            )
+                            _dc1, _dc2, _dc3 = st.columns(3)
+
+                            _sess_id  = st.session_state.get("analytics_session_id", "")
+                            _ds_name  = uploaded_file.name if uploaded_file else "tableau"
+
+                            with _dc1:
+                                if st.button("✅  Approve", key=f"dec_approve_{report_type}", use_container_width=True):
+                                    log_decision_record(
+                                        _sess_id, report_type, who, _ds_name,
+                                        "approved",
+                                        st.session_state.get(_nt_key, ""),
+                                        timeframe, decision,
+                                    )
+                                    st.session_state[_dk] = "approved"
+                                    st.rerun()
+                            with _dc2:
+                                if st.button("❌  Reject", key=f"dec_reject_{report_type}", use_container_width=True):
+                                    log_decision_record(
+                                        _sess_id, report_type, who, _ds_name,
+                                        "rejected",
+                                        st.session_state.get(_nt_key, ""),
+                                        timeframe, decision,
+                                    )
+                                    st.session_state[_dk] = "rejected"
+                                    st.rerun()
+                            with _dc3:
+                                if st.button("⏸  Postpone", key=f"dec_postpone_{report_type}", use_container_width=True):
+                                    log_decision_record(
+                                        _sess_id, report_type, who, _ds_name,
+                                        "postponed",
+                                        st.session_state.get(_nt_key, ""),
+                                        timeframe, decision,
+                                    )
+                                    st.session_state[_dk] = "postponed"
+                                    st.rerun()
+
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        # ── END DECISION PANEL ───────────────────────────────────────────
 
         elif uploaded_file:
             st.markdown("""

@@ -53,6 +53,42 @@ CREATE INDEX IF NOT EXISTS idx_nixara_events_session_id  ON nixara_events (sessi
 ALTER TABLE nixara_events ADD COLUMN IF NOT EXISTS referrer TEXT;
 -- Values: 'linkedin' | 'google' | 'twitter' | 'github' | 'web' | 'direct' | any utm_source value
 
--- ── 5. Verify setup ────────────────────────────────────────
--- Run this after the above to confirm the table exists.
-SELECT COUNT(*) AS total_events FROM nixara_events;
+-- ── 5. Decisions table (Phase 1 — Decision Tracking) ──────
+-- Stores every Approve / Reject / Postpone decision users make on a report.
+
+CREATE TABLE IF NOT EXISTS nixara_decisions (
+    id            BIGSERIAL PRIMARY KEY,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    session_id    TEXT,                            -- matches nixara_events.session_id
+    report_type   TEXT,                            -- 'Executive Summary' | 'Operational Detail' | 'Risk Report'
+    role          TEXT,                            -- the analyst role used when generating the report
+    dataset_name  TEXT,                            -- filename or 'tableau'
+    decision      TEXT,                            -- 'approved' | 'rejected' | 'postponed'
+    notes         TEXT,                            -- optional free-text context from the user
+    timeframe     TEXT,                            -- timeframe used for the report
+    question      TEXT                             -- the business question / decision context
+);
+
+-- RLS: anon key can INSERT (from Streamlit app), only service_role can SELECT (from analytics dashboard)
+ALTER TABLE nixara_decisions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "decisions_allow_anon_insert"
+    ON nixara_decisions
+    FOR INSERT
+    TO anon
+    WITH CHECK (true);
+
+CREATE POLICY "decisions_allow_service_select"
+    ON nixara_decisions
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+-- Indexes for dashboard queries
+CREATE INDEX IF NOT EXISTS idx_nixara_decisions_created_at ON nixara_decisions (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_nixara_decisions_decision   ON nixara_decisions (decision);
+CREATE INDEX IF NOT EXISTS idx_nixara_decisions_session_id ON nixara_decisions (session_id);
+
+-- ── 6. Verify setup ────────────────────────────────────────
+SELECT COUNT(*) AS total_events    FROM nixara_events;
+SELECT COUNT(*) AS total_decisions FROM nixara_decisions;

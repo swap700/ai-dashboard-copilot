@@ -156,6 +156,27 @@
   .badge-upload    { background: #EAFAF1; color: #1E8449; }
   .badge-bi        { background: #FEF9E7; color: #9A7D0A; }
   .badge-report    { background: #F4ECF7; color: #6C3483; }
+  .badge-approved  { background: #D1FAE5; color: #065F46; }
+  .badge-rejected  { background: #FEE2E2; color: #991B1B; }
+  .badge-postponed { background: #FEF3C7; color: #92400E; }
+
+  /* ── Decision KPI mini-row ── */
+  .decision-kpi-row {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1rem; margin-bottom: 1.25rem;
+  }
+  .decision-kpi-card {
+    border-radius: 10px; padding: 1.1rem 1.4rem;
+    box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+  }
+  .dec-approved  { background: #D1FAE5; border: 1px solid #6EE7B7; }
+  .dec-rejected  { background: #FEE2E2; border: 1px solid #FCA5A5; }
+  .dec-postponed { background: #FEF3C7; border: 1px solid #FCD34D; }
+  .decision-kpi-label { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 0.4rem; }
+  .dec-approved  .decision-kpi-label { color: #065F46; }
+  .dec-rejected  .decision-kpi-label { color: #991B1B; }
+  .dec-postponed .decision-kpi-label { color: #92400E; }
+  .decision-kpi-value { font-size: 2rem; font-weight: 300; color: #1A1A2E; line-height: 1; }
 
   /* ── Loading ── */
   #loading-overlay {
@@ -303,6 +324,59 @@
     <div class="section-heading">Sessions Explorer — who used Nixara</div>
     <div id="sessions-grid" class="sessions-grid"></div>
 
+    <!-- ── DECISIONS SECTION ───────────────────────────────────── -->
+    <div class="section-heading">Decision Tracking — what users decided to do</div>
+
+    <!-- Decision KPI mini-cards -->
+    <div class="decision-kpi-row">
+      <div class="decision-kpi-card dec-approved">
+        <div class="decision-kpi-label">✅ Approved</div>
+        <div class="decision-kpi-value" id="dec-kpi-approved">—</div>
+      </div>
+      <div class="decision-kpi-card dec-rejected">
+        <div class="decision-kpi-label">❌ Rejected</div>
+        <div class="decision-kpi-value" id="dec-kpi-rejected">—</div>
+      </div>
+      <div class="decision-kpi-card dec-postponed">
+        <div class="decision-kpi-label">⏸ Postponed</div>
+        <div class="decision-kpi-value" id="dec-kpi-postponed">—</div>
+      </div>
+    </div>
+
+    <!-- Decision breakdown donut + decisions table -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Decision Breakdown</div>
+        <canvas id="chart-decisions"></canvas>
+        <div id="dec-no-data" class="no-data" style="display:none;">No decisions recorded yet.</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Decisions by Report Type</div>
+        <canvas id="chart-dec-by-type"></canvas>
+      </div>
+    </div>
+
+    <!-- Recent Decisions table -->
+    <div class="chart-card" style="margin-bottom:1.25rem;">
+      <div class="chart-title">Recent Decisions (latest 50)</div>
+      <div class="table-wrap">
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Decision</th>
+              <th>Report Type</th>
+              <th>Role</th>
+              <th>Dataset</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="decisions-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- ── END DECISIONS SECTION ─────────────────────────────── -->
+
     <!-- Recent Events table -->
     <div class="chart-card">
       <div class="chart-title">Recent Events (latest 100)</div>
@@ -344,9 +418,9 @@ function clearConfig() { localStorage.removeItem(LS_URL); localStorage.removeIte
 })();
 
 // ═══════════════════════════════════════════════════
-// SUPABASE FETCH — pulls last 5000 events
+// SUPABASE FETCH — pulls last 5000 events + decisions
 // ═══════════════════════════════════════════════════
-let SUPABASE_URL = '', SUPABASE_KEY = '', ALL_EVENTS = [];
+let SUPABASE_URL = '', SUPABASE_KEY = '', ALL_EVENTS = [], ALL_DECISIONS = [];
 
 async function fetchEvents() {
   const url = `${SUPABASE_URL}/rest/v1/nixara_events?select=*&order=created_at.desc&limit=5000`;
@@ -354,6 +428,16 @@ async function fetchEvents() {
     headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
   });
   if (!res.ok) { const msg = await res.text(); throw new Error(`Supabase ${res.status}: ${msg}`); }
+  return res.json();
+}
+
+async function fetchDecisions() {
+  const url = `${SUPABASE_URL}/rest/v1/nixara_decisions?select=*&order=created_at.desc&limit=1000`;
+  const res = await fetch(url, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  // If table doesn't exist yet, return empty gracefully
+  if (!res.ok) return [];
   return res.json();
 }
 
@@ -552,6 +636,100 @@ function renderDashboard(events) {
 
   document.getElementById('last-updated').textContent =
     'Updated ' + new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+
+  // ── Decisions section ──
+  renderDecisions(ALL_DECISIONS, days);
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER DECISIONS
+// ═══════════════════════════════════════════════════
+function renderDecisions(decisions, days) {
+  // Time-filter decisions the same way as events
+  const filtered = filterByDays(decisions, days);
+
+  const approved  = filtered.filter(d => d.decision === 'approved').length;
+  const rejected  = filtered.filter(d => d.decision === 'rejected').length;
+  const postponed = filtered.filter(d => d.decision === 'postponed').length;
+
+  document.getElementById('dec-kpi-approved').textContent  = approved;
+  document.getElementById('dec-kpi-rejected').textContent  = rejected;
+  document.getElementById('dec-kpi-postponed').textContent = postponed;
+
+  // Breakdown donut
+  const total = approved + rejected + postponed;
+  if (total > 0) {
+    document.getElementById('dec-no-data').style.display = 'none';
+    donut('chart-decisions',
+      ['Approved', 'Rejected', 'Postponed'],
+      [approved, rejected, postponed],
+    );
+    // Override colors for this specific chart post-render
+    const inst = chartInstances['chart-decisions'];
+    if (inst) {
+      inst.data.datasets[0].backgroundColor = ['#6EE7B7', '#FCA5A5', '#FCD34D'];
+      inst.update();
+    }
+  } else {
+    destroyChart('chart-decisions');
+    document.getElementById('dec-no-data').style.display = 'block';
+  }
+
+  // Decisions by report type — stacked-ish bar using horizontal bar
+  const typeDecMap = {};
+  filtered.forEach(d => {
+    const rt = d.report_type || 'Unknown';
+    if (!typeDecMap[rt]) typeDecMap[rt] = { approved:0, rejected:0, postponed:0 };
+    if (d.decision) typeDecMap[rt][d.decision] = (typeDecMap[rt][d.decision] || 0) + 1;
+  });
+  const rtLabels = Object.keys(typeDecMap);
+  if (rtLabels.length) {
+    destroyChart('chart-dec-by-type');
+    const ctx = document.getElementById('chart-dec-by-type').getContext('2d');
+    chartInstances['chart-dec-by-type'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: rtLabels,
+        datasets: [
+          { label: 'Approved',  data: rtLabels.map(l => typeDecMap[l].approved),  backgroundColor: '#6EE7B7', borderRadius: 4, maxBarThickness: 26 },
+          { label: 'Rejected',  data: rtLabels.map(l => typeDecMap[l].rejected),  backgroundColor: '#FCA5A5', borderRadius: 4, maxBarThickness: 26 },
+          { label: 'Postponed', data: rtLabels.map(l => typeDecMap[l].postponed), backgroundColor: '#FCD34D', borderRadius: 4, maxBarThickness: 26 },
+        ]
+      },
+      options: {
+        responsive: true,
+        scales: {
+          x: { stacked: true, grid: { display: false }, ticks: { color: '#2E2E4A', font: { size: 11 } } },
+          y: { stacked: true, grid: { color: '#F0EDE8' }, ticks: { color: '#8B8FA8', font: { size: 11 }, stepSize: 1, beginAtZero: true } }
+        },
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, color: '#3A3A5A', padding: 10, boxWidth: 12 } } }
+      }
+    });
+  }
+
+  // Decisions table
+  const tbody = document.getElementById('decisions-tbody');
+  tbody.innerHTML = '';
+  if (!filtered.length) {
+    tbody.insertAdjacentHTML('beforeend', '<tr><td colspan="6" style="text-align:center;color:#B0ADC0;padding:2rem;">No decisions recorded in this period.</td></tr>');
+    return;
+  }
+  filtered.slice(0, 50).forEach(d => {
+    const dt = d.created_at
+      ? new Date(d.created_at).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+      : '—';
+    const badgeCls = { approved:'badge-approved', rejected:'badge-rejected', postponed:'badge-postponed' }[d.decision] || '';
+    const icon = { approved:'✅', rejected:'❌', postponed:'⏸' }[d.decision] || '';
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${dt}</td>
+        <td><span class="badge ${badgeCls}">${icon} ${d.decision || '—'}</span></td>
+        <td>${d.report_type || '—'}</td>
+        <td>${d.role || '—'}</td>
+        <td style="font-size:0.74rem;color:#6B6B8A;">${d.dataset_name || '—'}</td>
+        <td style="font-size:0.74rem;color:#6B6B8A;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.notes || '—'}</td>
+      </tr>`);
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -619,7 +797,7 @@ function showError(msg) {
 async function loadData() {
   showLoading(true);
   try {
-    ALL_EVENTS = await fetchEvents();
+    [ALL_EVENTS, ALL_DECISIONS] = await Promise.all([fetchEvents(), fetchDecisions()]);
     renderDashboard(ALL_EVENTS);
     document.getElementById('config-panel').style.display = 'none';
     document.getElementById('dashboard').style.display    = 'block';
@@ -649,6 +827,7 @@ document.getElementById('refresh-btn').addEventListener('click', loadData);
 // Timeline filter — re-render from already-fetched events, no new fetch needed
 document.getElementById('time-filter').addEventListener('change', () => {
   if (ALL_EVENTS.length) renderDashboard(ALL_EVENTS);
+  // decisions re-rendered inside renderDashboard via renderDecisions(ALL_DECISIONS, days)
 });
 
 document.getElementById('logout-btn').addEventListener('click', () => {
