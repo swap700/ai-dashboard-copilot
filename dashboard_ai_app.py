@@ -122,14 +122,18 @@ def log_decision_record(
                 "apikey": key,
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
-                "Prefer": "return=representation",   # asks Supabase to echo back the inserted row
+                # return=headers-only works with INSERT-only anon key.
+                # Supabase puts the new row's URL in the Location header:
+                #   Location: /nixara_decisions?id=eq.42
+                "Prefer": "return=headers-only",
             },
             timeout=5,
         )
         if res.ok:
-            data = res.json()
-            if data and isinstance(data, list):
-                return data[0].get("id")
+            location = res.headers.get("Location", "")
+            m = re.search(r"id=eq\.(\d+)", location)
+            if m:
+                return int(m.group(1))
     except Exception:
         pass
     return None
@@ -2491,13 +2495,20 @@ with nav_dashboard:
                                 "postponed": ("⏸", "Postponed", "#FEF3C7", "#92400E"),
                             }
                             _ico, _lbl, _bg, _fg = _badge_map.get(_prior_decision, ("◉", _prior_decision, "#F1F5F9", "#334155"))
+                            _stored_id  = st.session_state.get(f"decision_id_{report_type}")
+                            _id_suffix  = (
+                                f'&nbsp;&nbsp;<span style="opacity:0.6;font-weight:400;">·</span>'
+                                f'&nbsp;&nbsp;ID&nbsp;<strong>#{_stored_id}</strong>'
+                            ) if _stored_id else ""
                             st.markdown(
                                 f'<div style="display:inline-flex;align-items:center;gap:8px;'
                                 f'background:{_bg};color:{_fg};border-radius:8px;'
-                                f'padding:8px 18px;font-weight:600;font-size:0.88rem;margin-bottom:12px;">'
-                                f'{_ico} &nbsp;Decision recorded — <strong>{_lbl}</strong></div>',
+                                f'padding:8px 18px;font-weight:600;font-size:0.88rem;margin-bottom:6px;">'
+                                f'{_ico} &nbsp;Decision recorded — <strong>{_lbl}</strong>{_id_suffix}</div>',
                                 unsafe_allow_html=True,
                             )
+                            if _stored_id:
+                                st.caption(f"Save your Decision ID #{_stored_id} — enter it in the Outcomes tab to log what happened after you acted on this.")
                         else:
                             _nt_key = f"d_notes_{report_type}"
                             st.text_input(
