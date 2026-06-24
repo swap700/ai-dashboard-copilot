@@ -2394,96 +2394,143 @@ with nav_dashboard:
                 st.warning(f"{len(anom)} anomalous rows detected in **{col}** — flagged in the Risk Report.")
 
         # --- REPORTS ---
-        if run:
+        # ─────────────────────────────────────────────────────────────────────
+        # Reports are stored in st.session_state so they survive tab switches.
+        # A fingerprint detects when the user changes file/question/role/timeframe
+        # and clears the cached reports so stale output never shows.
+        # ─────────────────────────────────────────────────────────────────────
 
+        _report_fp = (
+            f"{uploaded_file.name if uploaded_file else 'tableau'}"
+            f"|{who}|{decision.strip()}|{timeframe}"
+        )
+        if st.session_state.get("_report_fp") != _report_fp:
+            # Context changed — discard previous reports
+            st.session_state.pop("generated_reports", None)
+            st.session_state.pop("_report_context",   None)
+            st.session_state.pop("_report_fp",        None)
+
+        # ── GENERATION (only runs when button is clicked) ─────────────────
+        if run:
             if not decision.strip():
                 st.warning("Please describe the decision you are trying to make before generating reports.")
             else:
-                summary = build_data_summary(df, filter_col=filter_col, filter_val=filter_val)
-
-                st.markdown("---")
-                st.markdown('<p class="section-label">AI Reports</p>', unsafe_allow_html=True)
-
-                tab1, tab2, tab3 = st.tabs(["Executive Summary", "Operational Detail", "Risk Report"])
-
-                # Count one free report used per button click (not per tab)
+                # Increment free-tier counter once per click, not per tab
                 if not _using_own_key:
                     st.session_state["free_reports_used"] += 1
 
-                for tab, report_type in zip(
-                    [tab1, tab2, tab3],
+                summary = build_data_summary(df, filter_col=filter_col, filter_val=filter_val)
+
+                _gen_progress = st.progress(0, text="Generating Executive Summary…")
+                _fresh = {}
+                for _gi, _rtype in enumerate(
                     ["Executive Summary", "Operational Detail", "Risk Report"]
                 ):
-                    with tab:
-                        with st.spinner(f"Generating {report_type}..."):
-                            report_text = generate_report(summary, who, decision, timeframe, report_type, api_key=user_api_key)
-                        log_event(
-                            "report_generate",
-                            report_type=report_type,
-                            role=who,
-                            timeframe=timeframe,
-                            data_source=_analytics_data_source,
-                            data_rows=len(df),
-                            data_cols=len(df.columns),
+                    _label = ["Executive Summary", "Operational Detail", "Risk Report"][_gi]
+                    _gen_progress.progress(
+                        (_gi) / 3,
+                        text=f"Generating {_label}…",
+                    )
+                    _fresh[_rtype] = generate_report(
+                        summary, who, decision, timeframe, _rtype, api_key=user_api_key
+                    )
+                    log_event(
+                        "report_generate",
+                        report_type=_rtype,
+                        role=who,
+                        timeframe=timeframe,
+                        data_source=_analytics_data_source,
+                        data_rows=len(df),
+                        data_cols=len(df.columns),
+                    )
+                _gen_progress.empty()
+
+                # Cache — persists across reruns until context changes
+                st.session_state["generated_reports"] = _fresh
+                st.session_state["_report_fp"]        = _report_fp
+                st.session_state["_report_context"]   = {
+                    "who":      who,
+                    "decision": decision,
+                    "timeframe": timeframe,
+                    "ds_name":  uploaded_file.name if uploaded_file else "tableau",
+                }
+
+        # ── RENDERING (always runs if reports are cached) ─────────────────
+        if st.session_state.get("generated_reports"):
+            _rctx      = st.session_state.get("_report_context", {})
+            _r_who     = _rctx.get("who",      who)
+            _r_dec     = _rctx.get("decision",  decision)
+            _r_tf      = _rctx.get("timeframe", timeframe)
+            _r_ds      = _rctx.get("ds_name",   uploaded_file.name if uploaded_file else "tableau")
+
+            st.markdown("---")
+            st.markdown('<p class="section-label">AI Reports</p>', unsafe_allow_html=True)
+
+            tab1, tab2, tab3 = st.tabs(["Executive Summary", "Operational Detail", "Risk Report"])
+
+            for tab, report_type in zip(
+                [tab1, tab2, tab3],
+                ["Executive Summary", "Operational Detail", "Risk Report"]
+            ):
+                with tab:
+                    report_text = st.session_state["generated_reports"][report_type]
+
+                    # Clean up raw markdown artifacts before rendering
+                    clean = report_text
+                    clean = re.sub(r'([^\n])\n(### )', r'\1\n\n\2', clean)
+
+                    # Convert to HTML and inject inside styled .report-body card
+                    html_lines = []
+                    for line in clean.split("\n"):
+                        line = line.strip()
+                        if not line:
+                            html_lines.append("<br>")
+                        elif line.startswith("### "):
+                            html_lines.append(f"<h3>{line[4:]}</h3>")
+                        elif re.match(r"^\d+\.", line):
+                            html_lines.append(f"<p>{line}</p>")
+                        elif line.startswith("- ") or line.startswith("• "):
+                            html_lines.append(f"<p>• {line[2:]}</p>")
+                        else:
+                            safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                            safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
+                            safe = re.sub(r'\*(.+?)\*', r'<strong>\1</strong>', safe)
+                            html_lines.append(f"<p>{safe}</p>")
+                    html_body = "\n".join(html_lines)
+                    st.markdown(
+                        f'<div class="report-body">{html_body}</div>',
+                        unsafe_allow_html=True
+                    )
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    dl1, dl2 = st.columns([1, 1])
+
+                    with dl1:
+                        st.download_button(
+                            label="↓  Download as Word",
+                            data=report_to_docx(report_text, report_type, _r_who, _r_dec, _r_tf),
+                            file_name=f"{report_type.lower().replace(' ', '_')}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key=f"docx_{report_type}",
+                            width='stretch',
                         )
 
-                        # Clean up raw markdown artifacts before rendering
-                        clean = report_text
-                        # Ensure ### headers have a blank line before them for proper rendering
-                        clean = re.sub(r'([^\n])\n(### )', r'\1\n\n\2', clean)
-
-                        # Convert to HTML and inject inside styled .report-body card
-                        html_lines = []
-                        for line in clean.split("\n"):
-                            line = line.strip()
-                            if not line:
-                                html_lines.append("<br>")
-                            elif line.startswith("### "):
-                                html_lines.append(f"<h3>{line[4:]}</h3>")
-                            elif re.match(r"^\d+\.", line):
-                                html_lines.append(f"<p>{line}</p>")
-                            elif line.startswith("- ") or line.startswith("• "):
-                                html_lines.append(f"<p>• {line[2:]}</p>")
-                            else:
-                                safe = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                                safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
-                                safe = re.sub(r'\*(.+?)\*', r'<strong>\1</strong>', safe)
-                                html_lines.append(f"<p>{safe}</p>")
-                        html_body = "\n".join(html_lines)
-                        st.markdown(
-                            f'<div class="report-body">{html_body}</div>',
-                            unsafe_allow_html=True
+                    with dl2:
+                        st.download_button(
+                            label="↓  Download as PDF",
+                            data=report_to_pdf(report_text, report_type, _r_who, _r_dec, _r_tf),
+                            file_name=f"{report_type.lower().replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_{report_type}",
+                            width='stretch',
                         )
 
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        dl1, dl2 = st.columns([1, 1])
+                    # ── DECISION PANEL ────────────────────────────────────────────
+                    _dk             = f"decision_made_{report_type}"
+                    _prior_decision = st.session_state.get(_dk)
 
-                        with dl1:
-                            st.download_button(
-                                label="↓  Download as Word",
-                                data=report_to_docx(report_text, report_type, who, decision, timeframe),
-                                file_name=f"{report_type.lower().replace(' ', '_')}.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                key=f"docx_{report_type}",
-                                width='stretch',
-                            )
-
-                        with dl2:
-                            st.download_button(
-                                label="↓  Download as PDF",
-                                data=report_to_pdf(report_text, report_type, who, decision, timeframe),
-                                file_name=f"{report_type.lower().replace(' ', '_')}.pdf",
-                                mime="application/pdf",
-                                key=f"pdf_{report_type}",
-                                width='stretch',
-                            )
-
-                        # ── DECISION PANEL ───────────────────────────────────────────────
-                        _dk = f"decision_made_{report_type}"
-                        _prior_decision = st.session_state.get(_dk)
-
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        st.markdown("""
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown("""
 <div style="background:#F8FAFF;border:1px solid #DBEAFE;border-radius:12px;
             padding:18px 22px 4px;margin-top:4px;">
   <p style="font-weight:700;color:#1E293B;font-size:0.95rem;margin:0 0 2px 0;">
@@ -2495,71 +2542,74 @@ with nav_dashboard:
 </div>
 """, unsafe_allow_html=True)
 
-                        if _prior_decision:
-                            _badge_map = {
-                                "approved":  ("✅", "Approved",  "#D1FAE5", "#065F46"),
-                                "rejected":  ("❌", "Rejected",  "#FEE2E2", "#991B1B"),
-                                "postponed": ("⏸", "Postponed", "#FEF3C7", "#92400E"),
-                            }
-                            _ico, _lbl, _bg, _fg = _badge_map.get(_prior_decision, ("◉", _prior_decision, "#F1F5F9", "#334155"))
-                            _stored_id  = st.session_state.get(f"decision_id_{report_type}")
-                            _id_suffix  = (
-                                f'&nbsp;&nbsp;<span style="opacity:0.6;font-weight:400;">·</span>'
-                                f'&nbsp;&nbsp;ID&nbsp;<strong>#{_stored_id}</strong>'
-                            ) if _stored_id else ""
-                            st.markdown(
-                                f'<div style="display:inline-flex;align-items:center;gap:8px;'
-                                f'background:{_bg};color:{_fg};border-radius:8px;'
-                                f'padding:8px 18px;font-weight:600;font-size:0.88rem;margin-bottom:6px;">'
-                                f'{_ico} &nbsp;Decision recorded — <strong>{_lbl}</strong>{_id_suffix}</div>',
-                                unsafe_allow_html=True,
+                    if _prior_decision:
+                        _badge_map = {
+                            "approved":  ("✅", "Approved",  "#D1FAE5", "#065F46"),
+                            "rejected":  ("❌", "Rejected",  "#FEE2E2", "#991B1B"),
+                            "postponed": ("⏸", "Postponed", "#FEF3C7", "#92400E"),
+                        }
+                        _ico, _lbl, _bg, _fg = _badge_map.get(
+                            _prior_decision, ("◉", _prior_decision, "#F1F5F9", "#334155")
+                        )
+                        _stored_id = st.session_state.get(f"decision_id_{report_type}")
+                        _id_suffix = (
+                            f'&nbsp;&nbsp;<span style="opacity:0.6;font-weight:400;">·</span>'
+                            f'&nbsp;&nbsp;ID&nbsp;<strong>#{_stored_id}</strong>'
+                        ) if _stored_id else ""
+                        st.markdown(
+                            f'<div style="display:inline-flex;align-items:center;gap:8px;'
+                            f'background:{_bg};color:{_fg};border-radius:8px;'
+                            f'padding:8px 18px;font-weight:600;font-size:0.88rem;margin-bottom:6px;">'
+                            f'{_ico} &nbsp;Decision recorded — <strong>{_lbl}</strong>{_id_suffix}</div>',
+                            unsafe_allow_html=True,
+                        )
+                        if _stored_id:
+                            st.caption(
+                                f"Save Decision ID #{_stored_id} — enter it in the "
+                                f"Outcomes tab to log what happened after you acted on this."
                             )
-                            if _stored_id:
-                                st.caption(f"Save your Decision ID #{_stored_id} — enter it in the Outcomes tab to log what happened after you acted on this.")
-                        else:
-                            _nt_key = f"d_notes_{report_type}"
-                            st.text_input(
-                                "Add context (optional)",
-                                key=_nt_key,
-                                placeholder="e.g. Assigned to Sarah, revisit end of Q3…",
+                    else:
+                        _nt_key  = f"d_notes_{report_type}"
+                        _sess_id = st.session_state.get("analytics_session_id", "")
+
+                        st.text_input(
+                            "Add context (optional)",
+                            key=_nt_key,
+                            placeholder="e.g. Assigned to Sarah, revisit end of Q3…",
+                        )
+                        _dc1, _dc2, _dc3 = st.columns(3)
+
+                        def _save_decision(choice, rtype, dk):
+                            _dec_id = log_decision_record(
+                                _sess_id, rtype, _r_who, _r_ds,
+                                choice,
+                                st.session_state.get(_nt_key, ""),
+                                _r_tf, _r_dec,
                             )
-                            _dc1, _dc2, _dc3 = st.columns(3)
+                            st.session_state[dk]                       = choice
+                            st.session_state[f"decision_id_{rtype}"]  = _dec_id
+                            st.session_state[f"dec_role_{rtype}"]     = _r_who
+                            st.session_state[f"dec_dataset_{rtype}"]  = _r_ds
+                            st.session_state[f"dec_question_{rtype}"] = _r_dec
+                            st.session_state[f"dec_timeframe_{rtype}"]= _r_tf
 
-                            _sess_id  = st.session_state.get("analytics_session_id", "")
-                            _ds_name  = uploaded_file.name if uploaded_file else "tableau"
+                        with _dc1:
+                            if st.button("✅  Approve", key=f"dec_approve_{report_type}", use_container_width=True):
+                                _save_decision("approved", report_type, _dk)
+                                st.rerun()
+                        with _dc2:
+                            if st.button("❌  Reject", key=f"dec_reject_{report_type}", use_container_width=True):
+                                _save_decision("rejected", report_type, _dk)
+                                st.rerun()
+                        with _dc3:
+                            if st.button("⏸  Postpone", key=f"dec_postpone_{report_type}", use_container_width=True):
+                                _save_decision("postponed", report_type, _dk)
+                                st.rerun()
 
-                            def _save_decision(choice, rtype, dk):
-                                _dec_id = log_decision_record(
-                                    _sess_id, rtype, who, _ds_name,
-                                    choice,
-                                    st.session_state.get(_nt_key, ""),
-                                    timeframe, decision,
-                                )
-                                st.session_state[dk]                      = choice
-                                st.session_state[f"decision_id_{rtype}"]  = _dec_id
-                                # Store context so the Outcomes tab can display it
-                                st.session_state[f"dec_role_{rtype}"]     = who
-                                st.session_state[f"dec_dataset_{rtype}"]  = _ds_name
-                                st.session_state[f"dec_question_{rtype}"] = decision
-                                st.session_state[f"dec_timeframe_{rtype}"]= timeframe
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    # ── END DECISION PANEL ────────────────────────────────────────
 
-                            with _dc1:
-                                if st.button("✅  Approve", key=f"dec_approve_{report_type}", use_container_width=True):
-                                    _save_decision("approved", report_type, _dk)
-                                    st.rerun()
-                            with _dc2:
-                                if st.button("❌  Reject", key=f"dec_reject_{report_type}", use_container_width=True):
-                                    _save_decision("rejected", report_type, _dk)
-                                    st.rerun()
-                            with _dc3:
-                                if st.button("⏸  Postpone", key=f"dec_postpone_{report_type}", use_container_width=True):
-                                    _save_decision("postponed", report_type, _dk)
-                                    st.rerun()
-
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        # ── END DECISION PANEL ───────────────────────────────────────────
-
-        elif uploaded_file:
+        elif uploaded_file and not st.session_state.get("generated_reports"):
             st.markdown("""
                 <div style="text-align:center; padding: 2rem; color: #B0ADC0;
                             border: 1px dashed #D4D0C8; border-radius: 10px; margin-top: 1rem;
