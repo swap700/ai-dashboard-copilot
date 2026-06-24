@@ -641,17 +641,24 @@ hr { border-color: #E2E8F0 !important; }
 # ---------------------------------------------------
 
 def get_client(user_key=None):
-    # Use the visitor's own key if they provided one.
-    if user_key and user_key.strip() and user_key.strip().startswith("sk-"):
-        return OpenAI(api_key=user_key.strip())
-    # No user key — fall back to the server-side key for the free tier.
-    # The key lives in st.secrets and is never exposed to the visitor.
+    # ── Admin token bypass — admin enters the NIXARA_ADMIN_TOKEN value as their key ──
     try:
-        server_key = st.secrets["OPENAI_API_KEY"]
-        if server_key:
-            return OpenAI(api_key=server_key)
+        _at = st.secrets.get("NIXARA_ADMIN_TOKEN", "")
+        if user_key and _at and user_key.strip() == _at.strip():
+            return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     except Exception:
         pass
+    # ── Visitor's own key ──
+    if user_key and user_key.strip() and user_key.strip().startswith("sk-"):
+        return OpenAI(api_key=user_key.strip())
+    # ── Server-side free-tier key (never exposed to visitor) ──
+    try:
+        server_key = st.secrets.get("OPENAI_API_KEY", "")
+        if server_key and server_key.strip():
+            return OpenAI(api_key=server_key.strip())
+    except Exception:
+        pass
+    # No key available at all — will produce an auth error on first call
     return OpenAI(api_key="")
 
 # ---------------------------------------------------
@@ -2287,7 +2294,7 @@ with nav_dashboard:
         c1.metric("Rows", f"{len(df_display):,}")
         c2.metric("Columns", f"{len(df_display.columns)}")
         c3.metric("Numeric fields", len(numeric_cols))
-        c4.metric("Quality Score", f"{dashboard_score(df_display)}/100")
+        c4.metric("Quality Score", f"{dashboard_score(df_display)} / 100")
 
         st.dataframe(
             df_display.head(10),
