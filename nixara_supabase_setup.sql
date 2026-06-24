@@ -89,6 +89,44 @@ CREATE INDEX IF NOT EXISTS idx_nixara_decisions_created_at ON nixara_decisions (
 CREATE INDEX IF NOT EXISTS idx_nixara_decisions_decision   ON nixara_decisions (decision);
 CREATE INDEX IF NOT EXISTS idx_nixara_decisions_session_id ON nixara_decisions (session_id);
 
--- ── 6. Verify setup ────────────────────────────────────────
+-- ── 6. Outcomes table (Phase 2 — Outcome Tracking) ────────
+-- Stores what actually happened after a user acted on a recommendation.
+-- Links back to nixara_decisions via decision_id.
+
+CREATE TABLE IF NOT EXISTS nixara_outcomes (
+    id             BIGSERIAL PRIMARY KEY,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    decision_id    BIGINT REFERENCES nixara_decisions(id) ON DELETE SET NULL,
+    session_id     TEXT,
+    metric_name    TEXT,      -- e.g. 'Monthly Revenue', 'Conversion Rate', 'Lead Volume'
+    metric_before  NUMERIC,   -- KPI value before implementing the recommendation
+    metric_after   NUMERIC,   -- KPI value after
+    metric_unit    TEXT,      -- '$' | '%' | 'units' | 'leads' | 'customers' | etc.
+    outcome_rating TEXT,      -- 'exceeded' | 'met' | 'missed'
+    outcome_notes  TEXT       -- optional free-text from the user
+);
+
+-- RLS: anon key can INSERT (from Streamlit app), only service_role can SELECT (analytics dashboard)
+ALTER TABLE nixara_outcomes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "outcomes_allow_anon_insert"
+    ON nixara_outcomes
+    FOR INSERT
+    TO anon
+    WITH CHECK (true);
+
+CREATE POLICY "outcomes_allow_service_select"
+    ON nixara_outcomes
+    FOR SELECT
+    TO authenticated
+    USING (true);
+
+-- Indexes for dashboard queries
+CREATE INDEX IF NOT EXISTS idx_nixara_outcomes_created_at  ON nixara_outcomes (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_nixara_outcomes_decision_id ON nixara_outcomes (decision_id);
+CREATE INDEX IF NOT EXISTS idx_nixara_outcomes_rating      ON nixara_outcomes (outcome_rating);
+
+-- ── 7. Verify setup ────────────────────────────────────────
 SELECT COUNT(*) AS total_events    FROM nixara_events;
 SELECT COUNT(*) AS total_decisions FROM nixara_decisions;
+SELECT COUNT(*) AS total_outcomes  FROM nixara_outcomes;

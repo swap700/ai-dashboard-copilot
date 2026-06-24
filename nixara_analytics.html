@@ -159,6 +159,24 @@
   .badge-approved  { background: #D1FAE5; color: #065F46; }
   .badge-rejected  { background: #FEE2E2; color: #991B1B; }
   .badge-postponed { background: #FEF3C7; color: #92400E; }
+  .badge-exceeded  { background: #D1FAE5; color: #065F46; }
+  .badge-met       { background: #EDE9FE; color: #4C1D95; }
+  .badge-missed    { background: #FEE2E2; color: #991B1B; }
+
+  /* ── Outcome KPI row ── */
+  .outcome-kpi-row {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 1rem; margin-bottom: 1.25rem;
+  }
+  .outcome-kpi-card {
+    background: #fff; border: 1px solid #E8E5DC;
+    border-radius: 10px; padding: 1.1rem 1.4rem;
+    box-shadow: 0 1px 4px rgba(26,26,46,0.05);
+  }
+  .outcome-kpi-label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #B8975A; margin-bottom: 0.4rem; }
+  .outcome-kpi-value { font-size: 2rem; font-weight: 300; color: #1A1A2E; line-height: 1; }
+  .outcome-kpi-sub   { font-size: 0.74rem; color: #9B8FA8; margin-top: 0.3rem; }
 
   /* ── Decision KPI mini-row ── */
   .decision-kpi-row {
@@ -377,6 +395,70 @@
     </div>
     <!-- ── END DECISIONS SECTION ─────────────────────────────── -->
 
+    <!-- ── OUTCOMES SECTION ────────────────────────────────────── -->
+    <div class="section-heading">Outcome Tracking — did Nixara's recommendations work?</div>
+
+    <!-- Outcome KPI row -->
+    <div class="outcome-kpi-row">
+      <div class="outcome-kpi-card">
+        <div class="outcome-kpi-label">Outcomes Logged</div>
+        <div class="outcome-kpi-value" id="oc-kpi-total">—</div>
+        <div class="outcome-kpi-sub">vs decisions made</div>
+      </div>
+      <div class="outcome-kpi-card">
+        <div class="outcome-kpi-label">✅ Exceeded</div>
+        <div class="outcome-kpi-value" id="oc-kpi-exceeded" style="color:#059669;">—</div>
+        <div class="outcome-kpi-sub">better than expected</div>
+      </div>
+      <div class="outcome-kpi-card">
+        <div class="outcome-kpi-label">🎯 Met</div>
+        <div class="outcome-kpi-value" id="oc-kpi-met" style="color:#6D28D9;">—</div>
+        <div class="outcome-kpi-sub">matched the recommendation</div>
+      </div>
+      <div class="outcome-kpi-card">
+        <div class="outcome-kpi-label">⚠️ Missed</div>
+        <div class="outcome-kpi-value" id="oc-kpi-missed" style="color:#DC2626;">—</div>
+        <div class="outcome-kpi-sub">fell short of expectation</div>
+      </div>
+    </div>
+
+    <!-- Outcome charts -->
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Outcome Rating Breakdown</div>
+        <canvas id="chart-outcome-rating"></canvas>
+        <div id="oc-no-data" class="no-data" style="display:none;">No outcomes logged yet.</div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">Avg % Change by Report Type</div>
+        <canvas id="chart-outcome-delta"></canvas>
+        <div id="oc-delta-no-data" class="no-data" style="display:none;">No before/after data yet.</div>
+      </div>
+    </div>
+
+    <!-- Recent Outcomes table -->
+    <div class="chart-card" style="margin-bottom:1.25rem;">
+      <div class="chart-title">Recent Outcomes (latest 50)</div>
+      <div class="table-wrap">
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Decision #</th>
+              <th>Metric</th>
+              <th>Before</th>
+              <th>After</th>
+              <th>Δ Change</th>
+              <th>Rating</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="outcomes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- ── END OUTCOMES SECTION ──────────────────────────────── -->
+
     <!-- Recent Events table -->
     <div class="chart-card">
       <div class="chart-title">Recent Events (latest 100)</div>
@@ -420,7 +502,7 @@ function clearConfig() { localStorage.removeItem(LS_URL); localStorage.removeIte
 // ═══════════════════════════════════════════════════
 // SUPABASE FETCH — pulls last 5000 events + decisions
 // ═══════════════════════════════════════════════════
-let SUPABASE_URL = '', SUPABASE_KEY = '', ALL_EVENTS = [], ALL_DECISIONS = [];
+let SUPABASE_URL = '', SUPABASE_KEY = '', ALL_EVENTS = [], ALL_DECISIONS = [], ALL_OUTCOMES = [];
 
 async function fetchEvents() {
   const url = `${SUPABASE_URL}/rest/v1/nixara_events?select=*&order=created_at.desc&limit=5000`;
@@ -436,7 +518,15 @@ async function fetchDecisions() {
   const res = await fetch(url, {
     headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
   });
-  // If table doesn't exist yet, return empty gracefully
+  if (!res.ok) return [];
+  return res.json();
+}
+
+async function fetchOutcomes() {
+  const url = `${SUPABASE_URL}/rest/v1/nixara_outcomes?select=*&order=created_at.desc&limit=1000`;
+  const res = await fetch(url, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
   if (!res.ok) return [];
   return res.json();
 }
@@ -639,6 +729,135 @@ function renderDashboard(events) {
 
   // ── Decisions section ──
   renderDecisions(ALL_DECISIONS, days);
+
+  // ── Outcomes section ──
+  renderOutcomes(ALL_OUTCOMES, days);
+}
+
+// ═══════════════════════════════════════════════════
+// RENDER OUTCOMES
+// ═══════════════════════════════════════════════════
+function renderOutcomes(outcomes, days) {
+  const filtered = filterByDays(outcomes, days);
+
+  const exceeded = filtered.filter(o => o.outcome_rating === 'exceeded').length;
+  const met      = filtered.filter(o => o.outcome_rating === 'met').length;
+  const missed   = filtered.filter(o => o.outcome_rating === 'missed').length;
+  const total    = filtered.length;
+
+  document.getElementById('oc-kpi-total').textContent    = total;
+  document.getElementById('oc-kpi-exceeded').textContent = exceeded;
+  document.getElementById('oc-kpi-met').textContent      = met;
+  document.getElementById('oc-kpi-missed').textContent   = missed;
+
+  // Rating breakdown donut
+  if (total > 0) {
+    document.getElementById('oc-no-data').style.display = 'none';
+    donut('chart-outcome-rating',
+      ['Exceeded', 'Met', 'Missed'],
+      [exceeded, met, missed]
+    );
+    const inst = chartInstances['chart-outcome-rating'];
+    if (inst) {
+      inst.data.datasets[0].backgroundColor = ['#6EE7B7', '#C4B5FD', '#FCA5A5'];
+      inst.update();
+    }
+  } else {
+    destroyChart('chart-outcome-rating');
+    document.getElementById('oc-no-data').style.display = 'block';
+  }
+
+  // Avg % change by report type — only rows with before + after both set and before != 0
+  const deltaByType = {};
+  filtered.forEach(o => {
+    if (o.metric_before == null || o.metric_after == null || o.metric_before === 0) return;
+    // Fetch report type from decisions join — we have decision_id; match from ALL_DECISIONS
+    const dec = ALL_DECISIONS.find(d => d.id === o.decision_id);
+    const rt  = dec ? (dec.report_type || 'Unknown') : 'Unknown';
+    const pct = ((o.metric_after - o.metric_before) / Math.abs(o.metric_before)) * 100;
+    if (!deltaByType[rt]) deltaByType[rt] = [];
+    deltaByType[rt].push(pct);
+  });
+
+  const deltaLabels = Object.keys(deltaByType);
+  if (deltaLabels.length) {
+    document.getElementById('oc-delta-no-data').style.display = 'none';
+    const deltaVals = deltaLabels.map(l => {
+      const arr = deltaByType[l];
+      return parseFloat((arr.reduce((a,b) => a+b, 0) / arr.length).toFixed(1));
+    });
+    destroyChart('chart-outcome-delta');
+    const ctx = document.getElementById('chart-outcome-delta').getContext('2d');
+    chartInstances['chart-outcome-delta'] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: deltaLabels,
+        datasets: [{
+          label: 'Avg % change',
+          data: deltaVals,
+          backgroundColor: deltaVals.map(v => v >= 0 ? '#6EE7B7' : '#FCA5A5'),
+          borderRadius: 5,
+          maxBarThickness: 36,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: {
+          callbacks: { label: ctx => `${ctx.parsed.y >= 0 ? '+' : ''}${ctx.parsed.y}%` }
+        }},
+        scales: {
+          x: { grid: { display: false }, ticks: { color: '#2E2E4A', font: { size: 11 } } },
+          y: { grid: { color: '#F0EDE8' }, ticks: {
+            color: '#8B8FA8', font: { size: 11 },
+            callback: v => `${v >= 0 ? '+' : ''}${v}%`
+          }}
+        }
+      }
+    });
+  } else {
+    destroyChart('chart-outcome-delta');
+    document.getElementById('oc-delta-no-data').style.display = 'block';
+  }
+
+  // Outcomes table
+  const tbody = document.getElementById('outcomes-tbody');
+  tbody.innerHTML = '';
+  if (!filtered.length) {
+    tbody.insertAdjacentHTML('beforeend', '<tr><td colspan="8" style="text-align:center;color:#B0ADC0;padding:2rem;">No outcomes logged in this period.</td></tr>');
+    return;
+  }
+  filtered.slice(0, 50).forEach(o => {
+    const dt = o.created_at
+      ? new Date(o.created_at).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})
+      : '—';
+    const ratingCls = { exceeded:'badge-exceeded', met:'badge-met', missed:'badge-missed' }[o.outcome_rating] || '';
+    const ratingIcon = { exceeded:'✅', met:'🎯', missed:'⚠️' }[o.outcome_rating] || '';
+
+    // Delta calculation
+    let deltaHtml = '—';
+    if (o.metric_before != null && o.metric_after != null && o.metric_before !== 0) {
+      const pct  = ((o.metric_after - o.metric_before) / Math.abs(o.metric_before)) * 100;
+      const sign = pct >= 0 ? '+' : '';
+      const col  = pct >= 0 ? '#059669' : '#DC2626';
+      deltaHtml  = `<span style="color:${col};font-weight:600;">${sign}${pct.toFixed(1)}%</span>`;
+    }
+
+    const unit   = o.metric_unit || '';
+    const before = o.metric_before != null ? `${unit}${parseFloat(o.metric_before).toLocaleString()}` : '—';
+    const after  = o.metric_after  != null ? `${unit}${parseFloat(o.metric_after).toLocaleString()}`  : '—';
+
+    tbody.insertAdjacentHTML('beforeend', `
+      <tr>
+        <td>${dt}</td>
+        <td style="font-family:monospace;color:#6B6B8A;">${o.decision_id != null ? '#'+o.decision_id : '—'}</td>
+        <td><strong>${o.metric_name || '—'}</strong></td>
+        <td>${before}</td>
+        <td>${after}</td>
+        <td>${deltaHtml}</td>
+        <td><span class="badge ${ratingCls}">${ratingIcon} ${o.outcome_rating || '—'}</span></td>
+        <td style="font-size:0.74rem;color:#6B6B8A;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${o.outcome_notes || '—'}</td>
+      </tr>`);
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -797,7 +1016,7 @@ function showError(msg) {
 async function loadData() {
   showLoading(true);
   try {
-    [ALL_EVENTS, ALL_DECISIONS] = await Promise.all([fetchEvents(), fetchDecisions()]);
+    [ALL_EVENTS, ALL_DECISIONS, ALL_OUTCOMES] = await Promise.all([fetchEvents(), fetchDecisions(), fetchOutcomes()]);
     renderDashboard(ALL_EVENTS);
     document.getElementById('config-panel').style.display = 'none';
     document.getElementById('dashboard').style.display    = 'block';

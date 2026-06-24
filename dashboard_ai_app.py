@@ -89,24 +89,6 @@ def log_event(event_type: str, **kwargs):
 
 # ── DECISION TRACKING ────────────────────────────────────────────────────────
 
-def _fire_decision(url: str, key: str, payload: dict):
-    """POST a decision row to Supabase nixara_decisions table. Runs in a background thread."""
-    try:
-        requests.post(
-            f"{url}/rest/v1/nixara_decisions",
-            json=payload,
-            headers={
-                "apikey": key,
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal",
-            },
-            timeout=5,
-        )
-    except Exception:
-        pass  # never surface analytics errors to the user
-
-
 def log_decision_record(
     session_id: str,
     report_type: str,
@@ -116,11 +98,12 @@ def log_decision_record(
     notes: str = "",
     timeframe: str = "",
     question: str = "",
-):
-    """Record a user decision in Supabase. Reads secrets in main thread, fires in daemon thread."""
+) -> int | None:
+    """Record a decision in Supabase synchronously and return the row ID.
+    Returning the ID lets the Outcomes tab link outcomes back to this exact decision."""
     url, key = _get_supabase_cfg()
     if not url:
-        return  # Supabase not configured — skip silently
+        return None
     payload = {
         "session_id": session_id,
         "report_type": report_type,
@@ -131,8 +114,96 @@ def log_decision_record(
         "timeframe": timeframe,
         "question": question,
     }
-    t = threading.Thread(target=_fire_decision, args=(url, key, payload), daemon=True)
+    try:
+        res = requests.post(
+            f"{url}/rest/v1/nixara_decisions",
+            json=payload,
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=representation",   # asks Supabase to echo back the inserted row
+            },
+            timeout=5,
+        )
+        if res.ok:
+            data = res.json()
+            if data and isinstance(data, list):
+                return data[0].get("id")
+    except Exception:
+        pass
+    return None
+
+
+# ── OUTCOME TRACKING ─────────────────────────────────────────────────────────
+
+def _fire_outcome(url: str, key: str, payload: dict):
+    """POST an outcome row to Supabase. Runs in a background thread."""
+    try:
+        requests.post(
+            f"{url}/rest/v1/nixara_outcomes",
+            json=payload,
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal",
+            },
+            timeout=5,
+        )
+    except Exception:
+        pass
+
+
+def log_outcome(
+    decision_id: int | None,
+    session_id: str,
+    metric_name: str,
+    metric_before: float | None,
+    metric_after: float | None,
+    metric_unit: str,
+    outcome_rating: str,   # 'exceeded' | 'met' | 'missed'
+    outcome_notes: str = "",
+):
+    """Log an outcome against a prior decision. Fire-and-forget (outcome ID not needed)."""
+    url, key = _get_supabase_cfg()
+    if not url:
+        return
+    payload = {
+        "decision_id":   decision_id,
+        "session_id":    session_id,
+        "metric_name":   metric_name,
+        "metric_before": metric_before,
+        "metric_after":  metric_after,
+        "metric_unit":   metric_unit,
+        "outcome_rating": outcome_rating,
+        "outcome_notes": outcome_notes,
+    }
+    t = threading.Thread(target=_fire_outcome, args=(url, key, payload), daemon=True)
     t.start()
+
+
+def fetch_decision_by_id(decision_id: int) -> dict | None:
+    """Fetch a single decision row by its Supabase ID — used by the manual lookup form."""
+    url, key = _get_supabase_cfg()
+    if not url:
+        return None
+    try:
+        res = requests.get(
+            f"{url}/rest/v1/nixara_decisions?id=eq.{decision_id}&select=*&limit=1",
+            headers={
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
+            },
+            timeout=5,
+        )
+        if res.ok:
+            data = res.json()
+            if data and isinstance(data, list):
+                return data[0]
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------
@@ -1598,7 +1669,246 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-nav_dashboard, nav_faq = st.tabs(["  Dashboard  ", "  FAQ & Help  "])
+nav_dashboard, nav_outcomes, nav_faq = st.tabs(["  Dashboard  ", "  Outcomes  ", "  FAQ & Help  "])
+
+# ---------------------------------------------------
+# OUTCOMES TAB
+# ---------------------------------------------------
+
+with nav_outcomes:
+
+    st.markdown("""
+<style>
+.outcome-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid #2563EB;
+    border-radius: 0 12px 12px 0;
+    padding: 18px 22px 14px;
+    margin-bottom: 18px;
+}
+.outcome-card.approved  { border-left-color: #059669; }
+.outcome-card.rejected  { border-left-color: #DC2626; }
+.outcome-card.postponed { border-left-color: #D97706; }
+.outcome-card.logged    { border-left-color: #7C3AED; }
+.oc-title { font-weight: 700; font-size: 0.93rem; color: #1E293B; margin-bottom: 4px; }
+.oc-meta  { font-size: 0.76rem; color: #64748B; margin-bottom: 8px; }
+.oc-badge { display:inline-flex; align-items:center; gap:5px;
+            padding: 3px 12px; border-radius: 20px;
+            font-size: 0.72rem; font-weight: 600; }
+.oc-badge.approved  { background:#D1FAE5; color:#065F46; }
+.oc-badge.rejected  { background:#FEE2E2; color:#991B1B; }
+.oc-badge.postponed { background:#FEF3C7; color:#92400E; }
+</style>
+""", unsafe_allow_html=True)
+
+    st.markdown("""
+<div style="margin-bottom:24px;">
+  <p style="font-size:1.55rem;font-weight:800;color:#1E293B;margin:0 0 4px;">
+    Track Outcomes
+  </p>
+  <p style="color:#64748B;font-size:0.88rem;margin:0;">
+    Come back here after implementing a recommendation and log what actually happened.
+    Nixara uses this to show whether its analysis was accurate.
+  </p>
+</div>
+""", unsafe_allow_html=True)
+
+    _REPORT_TYPES = ["Executive Summary", "Operational Detail", "Risk Report"]
+    _dec_icon     = {"approved": "✅", "rejected": "❌", "postponed": "⏸"}
+    _dec_label    = {"approved": "Approved", "rejected": "Rejected", "postponed": "Postponed"}
+    _rating_map   = {
+        "✅  Exceeded expectations": "exceeded",
+        "🎯  Met expectations":       "met",
+        "⚠️  Fell short":             "missed",
+    }
+
+    # ── Current-session decisions ─────────────────────────────────────────
+    _active_decisions = [
+        rt for rt in _REPORT_TYPES
+        if st.session_state.get(f"decision_made_{rt}")
+    ]
+
+    if _active_decisions:
+        st.markdown('<p class="section-label">Decisions from this session</p>', unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        for _rt in _active_decisions:
+            _choice    = st.session_state[f"decision_made_{_rt}"]
+            _dec_id    = st.session_state.get(f"decision_id_{_rt}")
+            _role_ctx  = st.session_state.get(f"dec_role_{_rt}", "—")
+            _ds_ctx    = st.session_state.get(f"dec_dataset_{_rt}", "—")
+            _q_ctx     = st.session_state.get(f"dec_question_{_rt}", "")
+            _tf_ctx    = st.session_state.get(f"dec_timeframe_{_rt}", "")
+            _oc_done   = st.session_state.get(f"outcome_logged_{_rt}", False)
+
+            _id_txt = f" · ID #{_dec_id}" if _dec_id else ""
+            st.markdown(f"""
+<div class="outcome-card {'logged' if _oc_done else _choice}">
+  <div class="oc-title">{_rt}{_id_txt}</div>
+  <div class="oc-meta">{_role_ctx} · {_ds_ctx} · {_tf_ctx}</div>
+  <span class="oc-badge {_choice}">{_dec_icon.get(_choice,'')} {_dec_label.get(_choice,_choice)}</span>
+</div>
+""", unsafe_allow_html=True)
+
+            if _q_ctx:
+                st.caption(f'"{_q_ctx[:120]}{"…" if len(_q_ctx) > 120 else ""}"')
+
+            if _oc_done:
+                _oc = st.session_state.get(f"outcome_data_{_rt}", {})
+                _delta = ""
+                if _oc.get("before") is not None and _oc.get("after") is not None and _oc["before"] != 0:
+                    _pct = ((_oc["after"] - _oc["before"]) / abs(_oc["before"])) * 100
+                    _sign = "+" if _pct >= 0 else ""
+                    _delta = f" · {_sign}{_pct:.1f}% change"
+                st.success(
+                    f"Outcome logged: **{_oc.get('metric','—')}** — "
+                    f"{_oc.get('before','?')} → {_oc.get('after','?')} {_oc.get('unit','')}{_delta}"
+                )
+            else:
+                with st.expander(f"📝  Log outcome for {_rt}", expanded=False):
+                    _oc_col1, _oc_col2 = st.columns(2)
+                    with _oc_col1:
+                        _metric_name = st.text_input(
+                            "Metric tracked",
+                            key=f"oc_metric_{_rt}",
+                            placeholder="e.g. Monthly Revenue, Lead Volume, Conversion Rate",
+                        )
+                        _before_val = st.number_input(
+                            "Value BEFORE implementing",
+                            key=f"oc_before_{_rt}",
+                            value=None, format="%.2f",
+                        )
+                    with _oc_col2:
+                        _metric_unit = st.selectbox(
+                            "Unit",
+                            ["$", "%", "units", "leads", "customers", "€", "£", "other"],
+                            key=f"oc_unit_{_rt}",
+                        )
+                        _after_val = st.number_input(
+                            "Value AFTER implementing",
+                            key=f"oc_after_{_rt}",
+                            value=None, format="%.2f",
+                        )
+                    _rating_choice = st.radio(
+                        "How did the outcome compare to Nixara's recommendation?",
+                        list(_rating_map.keys()),
+                        key=f"oc_rating_{_rt}",
+                        horizontal=True,
+                    )
+                    _oc_notes = st.text_area(
+                        "Additional context (optional)",
+                        key=f"oc_notes_{_rt}",
+                        placeholder="What drove the result? Any surprises?",
+                        height=80,
+                    )
+
+                    if st.button(f"Submit Outcome", key=f"oc_submit_{_rt}", type="primary"):
+                        if not _metric_name.strip():
+                            st.warning("Please enter a metric name before submitting.")
+                        else:
+                            log_outcome(
+                                decision_id   = _dec_id,
+                                session_id    = st.session_state.get("analytics_session_id", ""),
+                                metric_name   = _metric_name.strip(),
+                                metric_before = _before_val,
+                                metric_after  = _after_val,
+                                metric_unit   = _metric_unit,
+                                outcome_rating= _rating_map.get(_rating_choice, "met"),
+                                outcome_notes = _oc_notes.strip(),
+                            )
+                            st.session_state[f"outcome_logged_{_rt}"] = True
+                            st.session_state[f"outcome_data_{_rt}"]   = {
+                                "metric": _metric_name.strip(),
+                                "before": _before_val,
+                                "after":  _after_val,
+                                "unit":   _metric_unit,
+                            }
+                            st.rerun()
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+    else:
+        st.markdown("""
+<div style="text-align:center;padding:3rem 2rem;background:#F8FAFF;
+            border:1px dashed #BFDBFE;border-radius:12px;margin-bottom:2rem;">
+  <p style="font-size:2rem;margin:0 0 8px;">📊</p>
+  <p style="font-weight:600;color:#1E293B;margin:0 0 4px;">No decisions yet this session</p>
+  <p style="color:#64748B;font-size:0.84rem;margin:0;">
+    Generate a report on the Dashboard tab, then Approve, Reject, or Postpone the recommendations.
+    Your decisions will appear here for outcome tracking.
+  </p>
+</div>
+""", unsafe_allow_html=True)
+
+    # ── Manual lookup by decision ID ─────────────────────────────────────
+    st.markdown("---")
+    st.markdown('<p class="section-label">Look up a past decision by ID</p>', unsafe_allow_html=True)
+    st.caption("Each time you log a decision, Nixara assigns it a numeric ID (shown on the decision badge). "
+               "Enter it here to log an outcome for a previous session.")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    _lu_col1, _lu_col2 = st.columns([2, 1])
+    with _lu_col1:
+        _lookup_id = st.number_input("Decision ID", min_value=1, step=1,
+                                     key="lookup_decision_id", value=None,
+                                     placeholder="e.g. 42")
+    with _lu_col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        _do_lookup = st.button("🔍  Find Decision", key="do_lookup")
+
+    if _do_lookup and _lookup_id:
+        with st.spinner("Looking up decision…"):
+            _found = fetch_decision_by_id(int(_lookup_id))
+        if _found:
+            _fc = _found.get("decision", "")
+            st.markdown(f"""
+<div class="outcome-card {_fc}">
+  <div class="oc-title">#{_found.get('id')} — {_found.get('report_type','—')}</div>
+  <div class="oc-meta">{_found.get('role','—')} · {_found.get('dataset_name','—')} · {_found.get('timeframe','—')}</div>
+  <span class="oc-badge {_fc}">{_dec_icon.get(_fc,'')} {_dec_label.get(_fc,_fc)}</span>
+</div>
+""", unsafe_allow_html=True)
+            if _found.get("question"):
+                st.caption(f'"{_found["question"][:120]}"')
+
+            with st.expander("📝  Log outcome for this decision", expanded=True):
+                _lu2a, _lu2b = st.columns(2)
+                with _lu2a:
+                    _lu_metric = st.text_input("Metric tracked", key="lu_metric",
+                                               placeholder="e.g. Monthly Revenue")
+                    _lu_before = st.number_input("Value BEFORE", key="lu_before",
+                                                 value=None, format="%.2f")
+                with _lu2b:
+                    _lu_unit   = st.selectbox("Unit", ["$", "%", "units", "leads", "customers", "€", "£", "other"],
+                                              key="lu_unit")
+                    _lu_after  = st.number_input("Value AFTER", key="lu_after",
+                                                 value=None, format="%.2f")
+                _lu_rating = st.radio(
+                    "Outcome vs recommendation?",
+                    list(_rating_map.keys()), key="lu_rating", horizontal=True,
+                )
+                _lu_notes = st.text_area("Notes (optional)", key="lu_notes", height=72)
+
+                if st.button("Submit Outcome", key="lu_submit", type="primary"):
+                    if not _lu_metric.strip():
+                        st.warning("Please enter a metric name.")
+                    else:
+                        log_outcome(
+                            decision_id    = _found.get("id"),
+                            session_id     = st.session_state.get("analytics_session_id", ""),
+                            metric_name    = _lu_metric.strip(),
+                            metric_before  = _lu_before,
+                            metric_after   = _lu_after,
+                            metric_unit    = _lu_unit,
+                            outcome_rating = _rating_map.get(_lu_rating, "met"),
+                            outcome_notes  = _lu_notes.strip(),
+                        )
+                        st.success(f"Outcome logged for decision #{_found.get('id')}!")
+        elif not _found:
+            st.error(f"No decision found with ID #{int(_lookup_id)}. "
+                     "Check the ID — it's shown on the badge after you record a decision.")
+
 
 # ---------------------------------------------------
 # FAQ TAB
@@ -2200,35 +2510,32 @@ with nav_dashboard:
                             _sess_id  = st.session_state.get("analytics_session_id", "")
                             _ds_name  = uploaded_file.name if uploaded_file else "tableau"
 
+                            def _save_decision(choice, rtype, dk):
+                                _dec_id = log_decision_record(
+                                    _sess_id, rtype, who, _ds_name,
+                                    choice,
+                                    st.session_state.get(_nt_key, ""),
+                                    timeframe, decision,
+                                )
+                                st.session_state[dk]                      = choice
+                                st.session_state[f"decision_id_{rtype}"]  = _dec_id
+                                # Store context so the Outcomes tab can display it
+                                st.session_state[f"dec_role_{rtype}"]     = who
+                                st.session_state[f"dec_dataset_{rtype}"]  = _ds_name
+                                st.session_state[f"dec_question_{rtype}"] = decision
+                                st.session_state[f"dec_timeframe_{rtype}"]= timeframe
+
                             with _dc1:
                                 if st.button("✅  Approve", key=f"dec_approve_{report_type}", use_container_width=True):
-                                    log_decision_record(
-                                        _sess_id, report_type, who, _ds_name,
-                                        "approved",
-                                        st.session_state.get(_nt_key, ""),
-                                        timeframe, decision,
-                                    )
-                                    st.session_state[_dk] = "approved"
+                                    _save_decision("approved", report_type, _dk)
                                     st.rerun()
                             with _dc2:
                                 if st.button("❌  Reject", key=f"dec_reject_{report_type}", use_container_width=True):
-                                    log_decision_record(
-                                        _sess_id, report_type, who, _ds_name,
-                                        "rejected",
-                                        st.session_state.get(_nt_key, ""),
-                                        timeframe, decision,
-                                    )
-                                    st.session_state[_dk] = "rejected"
+                                    _save_decision("rejected", report_type, _dk)
                                     st.rerun()
                             with _dc3:
                                 if st.button("⏸  Postpone", key=f"dec_postpone_{report_type}", use_container_width=True):
-                                    log_decision_record(
-                                        _sess_id, report_type, who, _ds_name,
-                                        "postponed",
-                                        st.session_state.get(_nt_key, ""),
-                                        timeframe, decision,
-                                    )
-                                    st.session_state[_dk] = "postponed"
+                                    _save_decision("postponed", report_type, _dk)
                                     st.rerun()
 
                         st.markdown("<br>", unsafe_allow_html=True)
