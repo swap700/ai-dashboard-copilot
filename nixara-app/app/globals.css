@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+:root{
+  --bg:        #F8F9FC;
+  --surface:   #FFFFFF;
+  --border:    #E2E8F0;
+  --text:      #1E293B;
+  --text-mute: #64748B;
+  --text-dim:  #94A3B8;
+  --accent:    #C2542A;
+  --accent-dk: #9E3F1F;
+  --accent-lt: #D98F5E;
+  --accent-bg: #FBEEE7;
+  --accent-bg-soft: #FDF1EA;
+  --accent-border: #EAC2A8;
+  --accent-text-dk: #7A3414;
+  --success:   #2E7D52;
+  --success-bg:#F0FDF4;
+  --success-border:#BBF7D0;
+  --warn:      #D97706;
+  --warn-bg:   #FFFBEB;
+  --warn-border:#FDE68A;
+  --danger:    #C0392B;
+  --danger-bg: #FEF2F2;
+  --danger-border:#FECACA;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-mute: var(--text-mute);
+  --color-text-dim: var(--text-dim);
+  --color-accent: var(--accent);
+  --color-accent-dk: var(--accent-dk);
+  --color-accent-lt: var(--accent-lt);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-bg-soft: var(--accent-bg-soft);
+  --color-accent-border: var(--accent-border);
+  --color-accent-text-dk: var(--accent-text-dk);
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-border: var(--success-border);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-border: var(--warn-border);
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+@keyframes fadeSlideUp{
+  from{ opacity:0; transform: translateY(16px); }
+  to{ opacity:1; transform: translateY(0); }
+}
+
+html, body{
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}

@@ -241,11 +241,11 @@ st.markdown("""
     0%   { background-position: -600px 0; }
     100% { background-position: 600px 0; }
 }
-@keyframes pulseBlue {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0.30); }
-    50%       { box-shadow: 0 0 0 7px rgba(37,99,235,0); }
+@keyframes pulseAccent {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(194,84,42,0.30); }
+    50%       { box-shadow: 0 0 0 7px rgba(194,84,42,0); }
 }
-@keyframes spinBlue {
+@keyframes spinAccent {
     to { transform: rotate(360deg); }
 }
 
@@ -283,11 +283,11 @@ button[data-testid="stExpandSidebarButton"] {
 [data-testid="stSidebarCollapsedControl"] button,
 button[data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
-    background: #2563EB !important;
+    background: #C2542A !important;
     color: #FFFFFF !important;
     border: none !important;
     border-radius: 8px !important;
-    box-shadow: 0 2px 8px rgba(37,99,235,0.30) !important;
+    box-shadow: 0 2px 8px rgba(194,84,42,0.30) !important;
     cursor: pointer !important;
     transition: opacity 0.2s !important;
 }
@@ -338,7 +338,7 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     font-weight: 500 !important;
 }
 [data-testid="stSidebar"] .stTextArea textarea {
-    background-color: #F0F7FF !important;
+    background-color: #FDF1EA !important;
     border: 1px solid #CBD5E1 !important;
     color: #1E293B !important;
     border-radius: 8px !important;
@@ -346,12 +346,12 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     transition: border-color 0.2s, box-shadow 0.2s !important;
 }
 [data-testid="stSidebar"] .stTextArea textarea:focus {
-    border-color: #2563EB !important;
-    box-shadow: 0 0 0 3px rgba(37,99,235,0.12) !important;
+    border-color: #C2542A !important;
+    box-shadow: 0 0 0 3px rgba(194,84,42,0.12) !important;
 }
 [data-testid="stSidebar"] select,
 [data-testid="stSidebar"] .stSelectbox > div > div {
-    background-color: #F0F7FF !important;
+    background-color: #FDF1EA !important;
     border: 1px solid #CBD5E1 !important;
     color: #1E293B !important;
     border-radius: 8px !important;
@@ -361,21 +361,21 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 .logo-placeholder {
     width: 100%;
     height: 52px;
-    border: 1.5px dashed #93C5FD;
+    border: 1.5px dashed #E3A480;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #93C5FD;
+    color: #E3A480;
     font-size: 0.68rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
     font-weight: 600;
     transition: all 0.2s;
-    background: #F0F7FF;
+    background: #FDF1EA;
     cursor: pointer;
 }
-.logo-placeholder:hover { border-color: #2563EB; color: #2563EB; background: #EEF2FF; }
+.logo-placeholder:hover { border-color: #C2542A; color: #C2542A; background: #FBEEE7; }
 
 /* ── App header ── */
 .app-header {
@@ -406,7 +406,7 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 .accent-bar {
     width: 36px;
     height: 3px;
-    background: linear-gradient(90deg, #2563EB 0%, #60A5FA 100%);
+    background: linear-gradient(90deg, #C2542A 0%, #D98F5E 100%);
     border-radius: 2px;
     margin: 0.5rem 0 0.35rem;
 }
@@ -415,8 +415,8 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: #2563EB;
-    background: #EEF2FF;
+    color: #C2542A;
+    background: #FBEEE7;
     border-radius: 20px;
     padding: 0.2rem 0.75rem;
     margin-bottom: 0.5rem;
@@ -428,7 +428,7 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #2563EB;
+    color: #C2542A;
     margin-bottom: 0.6rem;
     margin-top: 0.25rem;
 }
@@ -437,7 +437,7 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 [data-testid="metric-container"] {
     background: #FFFFFF !important;
     border: 1px solid #E2E8F0 !important;
-    border-top: 3px solid #2563EB !important;
+    border-top: 3px solid #C2542A !important;
     border-radius: 12px !important;
     padding: 1.1rem 1.3rem !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
@@ -446,7 +446,7 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 }
 [data-testid="metric-container"]:hover {
     transform: translateY(-3px) !important;
-    box-shadow: 0 6px 20px rgba(37,99,235,0.13) !important;
+    box-shadow: 0 6px 20px rgba(194,84,42,0.13) !important;
 }
 [data-testid="metric-container"] label {
     color: #64748B !important;
@@ -490,12 +490,12 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     transition: color 0.2s, background 0.2s !important;
 }
 [data-testid="stTabs"] button[role="tab"]:hover {
-    color: #2563EB !important;
-    background: #F0F7FF !important;
+    color: #C2542A !important;
+    background: #FDF1EA !important;
 }
 [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-    color: #2563EB !important;
-    border-bottom: 2px solid #2563EB !important;
+    color: #C2542A !important;
+    border-bottom: 2px solid #C2542A !important;
     font-weight: 600 !important;
 }
 
@@ -519,21 +519,21 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     font-weight: 600;
     margin-top: 1.3rem;
     margin-bottom: 0.4rem;
-    border-left: 3px solid #2563EB;
+    border-left: 3px solid #C2542A;
     padding-left: 0.75rem;
     letter-spacing: -0.01em;
 }
 
-/* ── Spinner — blue ── */
+/* ── Spinner — accent ── */
 [data-testid="stSpinner"] > div > div {
-    border-top-color: #2563EB !important;
-    border-color: #DBEAFE !important;
-    border-top-color: #2563EB !important;
+    border-top-color: #C2542A !important;
+    border-color: #F7E2D3 !important;
+    border-top-color: #C2542A !important;
 }
 
 /* ── Progress shimmer on stStatus/expander loading ── */
 [data-testid="stStatusWidget"] {
-    background: linear-gradient(90deg, #EEF2FF 25%, #DBEAFE 50%, #EEF2FF 75%);
+    background: linear-gradient(90deg, #FBEEE7 25%, #F7E2D3 50%, #FBEEE7 75%);
     background-size: 600px 100%;
     animation: shimmerBar 1.6s infinite linear;
     border-radius: 8px;
@@ -551,15 +551,15 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     transition: all 0.2s !important;
 }
 [data-testid="stDownloadButton"] button:hover {
-    border-color: #2563EB !important;
-    color: #2563EB !important;
-    background: #EEF2FF !important;
-    box-shadow: 0 2px 8px rgba(37,99,235,0.15) !important;
+    border-color: #C2542A !important;
+    color: #C2542A !important;
+    background: #FBEEE7 !important;
+    box-shadow: 0 2px 8px rgba(194,84,42,0.15) !important;
 }
 
-/* ── Generate button — pulsing blue ── */
+/* ── Generate button — pulsing accent ── */
 [data-testid="stSidebar"] [data-testid="stButton"] button {
-    background: #2563EB !important;
+    background: #C2542A !important;
     color: #FFFFFF !important;
     border: none !important;
     font-weight: 600 !important;
@@ -567,11 +567,11 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
     letter-spacing: 0.03em;
     border-radius: 8px !important;
     transition: background 0.2s, transform 0.2s, box-shadow 0.2s !important;
-    animation: pulseBlue 2.8s ease-in-out infinite;
+    animation: pulseAccent 2.8s ease-in-out infinite;
 }
 [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-    background: #1D4ED8 !important;
-    box-shadow: 0 4px 16px rgba(37,99,235,0.40) !important;
+    background: #9E3F1F !important;
+    box-shadow: 0 4px 16px rgba(194,84,42,0.40) !important;
     transform: translateY(-1px) !important;
     animation: none !important;
 }
@@ -581,10 +581,10 @@ button[data-testid="stExpandSidebarButton"] { z-index: 2147483647 !important; }
 
 /* ── Alerts ── */
 [data-testid="stAlert"] {
-    background: #EEF2FF !important;
-    border: 1px solid #BFDBFE !important;
+    background: #FBEEE7 !important;
+    border: 1px solid #EAC2A8 !important;
     border-radius: 10px !important;
-    color: #1E40AF !important;
+    color: #7A3414 !important;
 }
 
 /* ── Divider ── */
@@ -609,29 +609,29 @@ hr { border-color: #E2E8F0 !important; }
     font-weight: 500;
 }
 
-/* ── File uploader — blue dashed ── */
+/* ── File uploader — accent dashed ── */
 [data-testid="stFileUploader"] {
-    background: #F0F7FF !important;
-    border: 1.5px dashed #93C5FD !important;
+    background: #FDF1EA !important;
+    border: 1.5px dashed #E3A480 !important;
     border-radius: 10px !important;
     transition: border-color 0.2s !important;
 }
-[data-testid="stFileUploader"]:hover { border-color: #2563EB !important; }
+[data-testid="stFileUploader"]:hover { border-color: #C2542A !important; }
 [data-testid="stFileUploader"] section {
-    background: #F0F7FF !important;
+    background: #FDF1EA !important;
     border: none !important;
 }
 [data-testid="stFileUploader"] [data-testid="stFileUploaderDropzoneInstructions"] {
-    color: #60A5FA !important;
+    color: #D98F5E !important;
 }
 [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] {
-    background: #DBEAFE !important;
-    border: 1px solid #93C5FD !important;
+    background: #F7E2D3 !important;
+    border: 1px solid #E3A480 !important;
     border-radius: 8px !important;
-    color: #1E40AF !important;
+    color: #7A3414 !important;
 }
 [data-testid="stFileUploader"] [data-testid="stFileUploaderFile"] span {
-    color: #1E40AF !important;
+    color: #7A3414 !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -963,7 +963,7 @@ def report_to_pdf(report_text, title, who, decision, timeframe):
     style_h2 = ParagraphStyle(
         "H2", parent=styles["Heading2"],
         fontSize=12, spaceBefore=12, spaceAfter=4,
-        textColor=colors.HexColor("#1D3557"),
+        textColor=colors.HexColor("#7A3414"),
     )
     style_body = ParagraphStyle(
         "Body", parent=styles["Normal"],
@@ -1348,7 +1348,7 @@ with st.sidebar:
     else:
         # No key — free tier active, counter shown in main area above the tabs
         st.markdown(
-            '<p style="font-size:0.72rem;color:#2563EB;margin-top:3px;">'
+            '<p style="font-size:0.72rem;color:#C2542A;margin-top:3px;">'
             '◉ Free tier active — see counter above</p>',
             unsafe_allow_html=True,
         )
@@ -1614,7 +1614,7 @@ st.markdown("""
         <p class="app-title">Nixara</p>
         <p style="font-size:1rem; color:#94A3B8; letter-spacing:0.08em; text-transform:uppercase;
                   font-weight:500; margin: 0.25rem 0 0.5rem;">
-            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0; font-size:0.95rem;">from <strong style="color:#2563EB;">nix</strong> (clarity, light) + <strong style="color:#2563EB;">ara</strong> (direction) — illuminating the path forward in your data</em>
+            nik·​sa·​ra &nbsp;/nɪkˈsɑːrə/ &nbsp;·&nbsp; <em style="font-style:italic; text-transform:none; letter-spacing:0; font-size:0.95rem;">from <strong style="color:#C2542A;">nix</strong> (clarity, light) + <strong style="color:#C2542A;">ara</strong> (direction) — illuminating the path forward in your data</em>
         </p>
         <div class="accent-bar"></div>
         <p class="app-subtitle">Upload CSV / Excel &nbsp;·&nbsp; Connect Tableau or Power BI &nbsp;·&nbsp; Get executive-grade AI reports</p>
@@ -1645,8 +1645,8 @@ if not _using_own_key and not _is_admin:
 
 # ── Trial banner ────────────────────────────────────────────────────────────
 st.markdown("""
-<div style="display:flex;align-items:center;gap:28px;background:#EFF6FF;
-            border:1px solid #BFDBFE;border-radius:10px;
+<div style="display:flex;align-items:center;gap:28px;background:#FDF1EA;
+            border:1px solid #EAC2A8;border-radius:10px;
             padding:11px 20px;margin-bottom:18px;">
     <div style="display:flex;align-items:center;gap:8px;white-space:nowrap;">
         <span style="font-size:1rem;">🆓</span>
@@ -1654,7 +1654,7 @@ st.markdown("""
             <strong>Try it free</strong> — 3 reports per session, no key needed
         </span>
     </div>
-    <div style="width:1px;height:22px;background:#BFDBFE;flex-shrink:0;"></div>
+    <div style="width:1px;height:22px;background:#EAC2A8;flex-shrink:0;"></div>
     <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:1rem;">🔑</span>
         <span style="font-size:0.82rem;color:#1E293B;font-family:Inter,sans-serif;">
@@ -1693,7 +1693,7 @@ with nav_outcomes:
 .outcome-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-left: 4px solid #2563EB;
+    border-left: 4px solid #C2542A;
     border-radius: 0 12px 12px 0;
     padding: 18px 22px 14px;
     margin-bottom: 18px;
@@ -1841,8 +1841,8 @@ with nav_outcomes:
 
     else:
         st.markdown("""
-<div style="text-align:center;padding:3rem 2rem;background:#F8FAFF;
-            border:1px dashed #BFDBFE;border-radius:12px;margin-bottom:2rem;">
+<div style="text-align:center;padding:3rem 2rem;background:#FCF8F5;
+            border:1px dashed #EAC2A8;border-radius:12px;margin-bottom:2rem;">
   <p style="font-size:2rem;margin:0 0 8px;">📊</p>
   <p style="font-weight:600;color:#1E293B;margin:0 0 4px;">No decisions yet this session</p>
   <p style="color:#64748B;font-size:0.84rem;margin:0;">
@@ -1936,7 +1936,7 @@ with nav_faq:
         color: #1E293B;
         margin-top: 2.2rem;
         margin-bottom: 0.6rem;
-        border-left: 3px solid #2563EB;
+        border-left: 3px solid #C2542A;
         padding-left: 0.75rem;
         letter-spacing: -0.01em;
     }
@@ -1950,7 +1950,7 @@ with nav_faq:
     .trust-card {
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
-        border-top: 3px solid #2563EB;
+        border-top: 3px solid #C2542A;
         border-radius: 10px;
         padding: 1.1rem 1.25rem;
         box-shadow: 0 1px 3px rgba(0,0,0,0.05);
@@ -1960,7 +1960,7 @@ with nav_faq:
         font-weight: 600;
         letter-spacing: 0.12em;
         text-transform: uppercase;
-        color: #2563EB;
+        color: #C2542A;
         margin-bottom: 0.3rem;
     }
     .trust-card-text {
@@ -1980,7 +1980,7 @@ with nav_faq:
         font-weight: 600;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: #2563EB;
+        color: #C2542A;
         margin-bottom: 0.5rem;
     }
     .faq-title {
@@ -2222,7 +2222,7 @@ with nav_faq:
         Built by <strong style="color:#1E293B;">Swapnil Sakorkar</strong> &nbsp;·&nbsp;
         AI Application Developer &nbsp;·&nbsp;
         <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank"
-           style="color:#2563EB; text-decoration:none;">LinkedIn</a>
+           style="color:#C2542A; text-decoration:none;">LinkedIn</a>
         &nbsp;·&nbsp;
         <em>This tool uses your own OpenAI API key. Your data is processed in-session only and is never stored.</em>
     </div>
@@ -2328,7 +2328,7 @@ with nav_dashboard:
                                                tickColor="#E2E8F0")),
                         color=alt.condition(
                             alt.datum.value >= 0,
-                            alt.value("#2563EB"),
+                            alt.value("#C2542A"),
                             alt.value("#DC2626"),
                         ),
                         tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
@@ -2368,7 +2368,7 @@ with nav_dashboard:
                                                    tickColor="#E2E8F0")),
                             color=alt.condition(
                                 alt.datum.value >= 0,
-                                alt.value("#60A5FA"),
+                                alt.value("#D98F5E"),
                                 alt.value("#DC2626"),
                             ),
                             tooltip=["category", alt.Tooltip("value:Q", format=",.2f")],
@@ -2531,7 +2531,7 @@ with nav_dashboard:
 
                     st.markdown("<br>", unsafe_allow_html=True)
                     st.markdown("""
-<div style="background:#F8FAFF;border:1px solid #DBEAFE;border-radius:12px;
+<div style="background:#FCF8F5;border:1px solid #F7E2D3;border-radius:12px;
             padding:18px 22px 4px;margin-top:4px;">
   <p style="font-weight:700;color:#1E293B;font-size:0.95rem;margin:0 0 2px 0;">
     📋 &nbsp;Record Your Decision
