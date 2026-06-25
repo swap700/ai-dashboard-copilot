@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
 import NavTabs from "@/components/NavTabs";
+import { SessionProvider } from "@/lib/session-context";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -23,11 +24,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} antialiased`}>
       <body className="min-h-full flex flex-col">
-        <div className="mx-auto w-full max-w-[1200px] px-6 pt-8 pb-12">
-          <Header />
-          <NavTabs />
-          {children}
-        </div>
+        <SessionProvider>
+          <div className="mx-auto w-full max-w-[1200px] px-6 pt-8 pb-12">
+            <Header />
+            <NavTabs />
+            {children}
+          </div>
+        </SessionProvider>
       </body>
     </html>
   );

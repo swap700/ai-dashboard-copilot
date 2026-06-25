@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { REPORT_TYPES, parseReportLines, type ReportType } from "@/lib/report";
 import type { ReportSetupValue } from "./ReportSetup";
+import DecisionPanel from "./DecisionPanel";
 
 interface Props {
   reports: Record<ReportType, string>;
@@ -115,12 +116,13 @@ export default function ReportTabs({ reports, context }: Props) {
           </button>
         </div>
 
-        <div className="bg-accent-bg-soft border border-accent-border rounded-xl px-5 py-4 mt-4">
-          <p className="font-semibold text-text text-sm mb-0.5">📋 Record Your Decision</p>
-          <p className="text-text-mute text-xs">
-            Decision tracking (Approve / Reject / Postpone with outcome follow-up) lands in Phase 3.
-          </p>
-        </div>
+        <DecisionPanel
+          reportType={active}
+          role={context.who}
+          datasetName={context.datasetName}
+          question={context.decision}
+          timeframe={context.timeframe}
+        />
       </motion.div>
     </div>
   );
