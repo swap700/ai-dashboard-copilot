@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 
 const APP_URL = 'https://ai-dashboard-copilot.streamlit.app'
@@ -25,9 +25,13 @@ const stagger = (delay = 0.12) => ({
   show: { transition: { staggerChildren: delay } },
 })
 
-function Reveal({ as: Tag = motion.div, variants = fadeUp, className, children, style, ...rest }) {
+const Reveal = forwardRef(function Reveal(
+  { as: Tag = motion.div, variants = fadeUp, className, children, style, ...rest },
+  ref
+) {
   return (
     <Tag
+      ref={ref}
       className={className}
       style={style}
       initial="hidden"
@@ -39,6 +43,54 @@ function Reveal({ as: Tag = motion.div, variants = fadeUp, className, children, 
       {children}
     </Tag>
   )
+})
+
+/* ── Scroll progress bar ───────────────────────── */
+function ScrollProgressBar() {
+  const { scrollYProgress } = useScroll()
+  return <motion.div className="scroll-progress" style={{ scaleX: scrollYProgress }} />
+}
+
+/* ── Parallax wrapper — offsets children vertically as the section
+   travels through the viewport, for a depth effect on scroll ── */
+function Parallax({ children, range = [60, -60], className, style }) {
+  const ref = useRef(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
+  const y = useTransform(scrollYProgress, [0, 1], range)
+  return (
+    <motion.div ref={ref} className={className} style={{ ...style, y }}>
+      {children}
+    </motion.div>
+  )
+}
+
+/* ── Word-by-word headline reveal ───────────────────────── */
+function WordReveal({ text, className, delayStart = 0, stagger: gap = 0.05 }) {
+  const words = text.split(' ')
+  return (
+    <span style={{ display: 'inline-block' }}>
+      {words.map((w, i) => (
+        <span key={i} style={{ display: 'inline-block', overflow: 'hidden', marginRight: '0.28em' }}>
+          <motion.span
+            className={className}
+            style={{ display: 'inline-block' }}
+            initial={{ y: '110%' }}
+            animate={{ y: '0%' }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: delayStart + i * gap }}
+          >
+            {w}
+          </motion.span>
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/* ── Scroll-scrubbed connector line (How it works) ───────────────────────── */
+function DrawLine({ targetRef }) {
+  const { scrollYProgress } = useScroll({ target: targetRef, offset: ['start 75%', 'end 55%'] })
+  const scaleX = useTransform(scrollYProgress, [0, 1], [0, 1])
+  return <motion.div className="steps-line" style={{ scaleX }} />
 }
 
 /* ── Scramble stat ───────────────────────── */
@@ -126,20 +178,27 @@ function TypeLabel() {
 /* ── Hero ───────────────────────── */
 function Hero() {
   const heroVars = stagger(0.12)
+  const heroRef = useRef(null)
+  const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] })
+  const visY = useTransform(scrollYProgress, [0, 1], [0, 140])
+  const visScale = useTransform(scrollYProgress, [0, 1], [1, 0.92])
+  const visRotate = useTransform(scrollYProgress, [0, 1], [0, 3])
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0])
+
   return (
-    <div id="hero" className="z1">
-      <motion.div className="hero-text" initial="hidden" animate="show" variants={heroVars}>
+    <div id="hero" className="z1" ref={heroRef}>
+      <motion.div className="hero-text" initial="hidden" animate="show" variants={heroVars} style={{ opacity: heroOpacity }}>
         <motion.div className="hero-eye" variants={fadeUp}>
           <span className="eye-dot"></span>AI Dashboard Copilot
         </motion.div>
 
-        <motion.h1 variants={fadeUp}>
-          Stop reading
+        <h1>
+          <WordReveal text="Stop reading" delayStart={0.15} />
           <br />
-          dashboards.
+          <WordReveal text="dashboards." delayStart={0.3} />
           <br />
-          <span className="h1-c">Start deciding.</span>
-        </motion.h1>
+          <WordReveal text="Start deciding." delayStart={0.45} className="h1-c" />
+        </h1>
 
         <motion.p className="hero-sub" variants={fadeUp}>
           Upload any dataset. Describe your business question. Nixara delivers executive-grade reports tailored to your role — then tracks every decision you make.
@@ -175,6 +234,7 @@ function Hero() {
         animate="show"
         variants={fadeRight}
         transition={{ delay: 0.3 }}
+        style={{ y: visY, scale: visScale, rotate: visRotate }}
       >
         <FloatingCard className="fc fc-1" label="Decision ID" value="#2,847" sub="Approved this week" y={[0, -9, 0]} duration={5} />
         <FloatingCard className="fc fc-2" label="AI Accuracy" value="91%" sub="Across tracked outcomes" y={[0, 7, 0]} duration={6.5} />
@@ -233,16 +293,19 @@ function Cinematic({ tag, line1, line2, sub }) {
   const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
   const scale = useTransform(scrollYProgress, [0, 0.5, 1], [0.85, 1, 0.85])
   const opacity = useTransform(scrollYProgress, [0, 0.25, 0.75, 1], [0.3, 1, 1, 0.3])
+  const line1X = useTransform(scrollYProgress, [0, 1], [-60, 60])
+  const line2X = useTransform(scrollYProgress, [0, 1], [60, -60])
+  const bgScale = useTransform(scrollYProgress, [0, 0.5, 1], [1.15, 1, 1.15])
 
   return (
     <section className="cine z1" ref={ref}>
-      <div className="cine-bg"></div>
+      <motion.div className="cine-bg" style={{ scale: bgScale }}></motion.div>
       <motion.div style={{ scale, opacity }}>
         <div className="cine-tag">{tag}</div>
         <h2 className="cine-h">
-          {line1}
+          <motion.span style={{ display: 'inline-block', x: line1X }}>{line1}</motion.span>
           <br />
-          <span className="dim">{line2}</span>
+          <motion.span className="dim" style={{ display: 'inline-block', x: line2X }}>{line2}</motion.span>
         </h2>
         {sub && <p className="cine-sub">{sub}</p>}
       </motion.div>
@@ -252,6 +315,7 @@ function Cinematic({ tag, line1, line2, sub }) {
 
 /* ── How it works ───────────────────────── */
 function HowItWorks() {
+  const stepsRef = useRef(null)
   return (
     <section id="how" className="z1">
       <div className="inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '6.5rem 0' }}>
@@ -259,7 +323,13 @@ function HowItWorks() {
           <div className="sec-eye">How it works</div>
           <h2 className="sec-h">Three steps from raw data<br />to boardroom-ready decision.</h2>
         </Reveal>
-        <Reveal variants={scaleIn} style={{ marginTop: '3.5rem', position: 'relative' }} className="steps">
+        <Reveal
+          ref={stepsRef}
+          variants={scaleIn}
+          style={{ marginTop: '3.5rem', position: 'relative' }}
+          className="steps"
+        >
+          <DrawLine targetRef={stepsRef} />
           <div className="step">
             <div className="step-n"><div className="step-circle">1</div>Upload</div>
             <div className="step-ico">📂</div>
@@ -312,35 +382,37 @@ function FeatureRoles() {
           <p className="feat-p">A CFO and a CEO looking at the same dataset need completely different intelligence. Nixara recalibrates every prompt by role, timeframe, and your exact business question — never generic, never templated.</p>
           <div className="feat-note">6 built-in analyst roles →</div>
         </Reveal>
-        <motion.div
-          className="role-split"
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={stagger(0.18)}
-        >
-          {cards.map((c) => (
-            <motion.div
-              key={c.id}
-              className="role-card"
-              variants={{ hidden: { opacity: 0, x: 40 }, show: { opacity: 1, x: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } } }}
-            >
-              <div className="rc-top">
-                <div className={`rc-role ${c.id}`}>{c.role}</div>
-                <div className="rc-ts">{c.ts}</div>
-              </div>
-              <div className="rc-insight">{c.insight}</div>
-              <div className="rc-metric">
-                {c.metrics.map(([v, l, color], i) => (
-                  <div className="rcm" key={i}>
-                    <div className="rcm-v" style={color ? { color } : undefined}>{v}</div>
-                    <div className="rcm-l">{l}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
+        <Parallax range={[40, -40]}>
+          <motion.div
+            className="role-split"
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.3 }}
+            variants={stagger(0.18)}
+          >
+            {cards.map((c) => (
+              <motion.div
+                key={c.id}
+                className="role-card"
+                variants={{ hidden: { opacity: 0, x: 40, rotate: 1.5 }, show: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } } }}
+              >
+                <div className="rc-top">
+                  <div className={`rc-role ${c.id}`}>{c.role}</div>
+                  <div className="rc-ts">{c.ts}</div>
+                </div>
+                <div className="rc-insight">{c.insight}</div>
+                <div className="rc-metric">
+                  {c.metrics.map(([v, l, color], i) => (
+                    <div className="rcm" key={i}>
+                      <div className="rcm-v" style={color ? { color } : undefined}>{v}</div>
+                      <div className="rcm-l">{l}</div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </Parallax>
       </div>
     </section>
   )
@@ -363,30 +435,33 @@ function FeatureDecisions() {
           <p className="feat-p">Approve, reject, or postpone every AI recommendation. Each decision gets a unique ID stored in Supabase — an auditable record of what you chose to act on, when, and why.</p>
           <div className="feat-note">Unique ID per decision →</div>
         </Reveal>
-        <motion.div
-          className="decision-flow"
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.3 }}
-          variants={stagger(0.15)}
-        >
-          {rows.map((r, i) => (
-            <motion.div
-              key={i}
-              className={`df-row ${r.type}`}
-              variants={{ hidden: { opacity: 0, x: -30 }, show: { opacity: 1, x: 0, transition: { duration: 0.5, ease: 'easeOut' } } }}
-            >
-              <div className="df-meta">
-                <div className="df-q">{r.q}</div>
-                <div className="df-sub">{r.sub}</div>
-              </div>
-              <div>
-                <div className={`df-badge ${r.type}`}>{r.badge}</div>
-                <div className="df-id">{r.id}</div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
+        <Parallax range={[-40, 40]}>
+          <motion.div
+            className="decision-flow"
+            initial="hidden"
+            whileInView="show"
+            viewport={{ once: true, amount: 0.3 }}
+            variants={stagger(0.15)}
+          >
+            {rows.map((r, i) => (
+              <motion.div
+                key={i}
+                className={`df-row ${r.type}`}
+                variants={{ hidden: { opacity: 0, x: -30, scale: 0.96 }, show: { opacity: 1, x: 0, scale: 1, transition: { duration: 0.55, ease: 'easeOut' } } }}
+                whileHover={{ x: 6 }}
+              >
+                <div className="df-meta">
+                  <div className="df-q">{r.q}</div>
+                  <div className="df-sub">{r.sub}</div>
+                </div>
+                <div>
+                  <div className={`df-badge ${r.type}`}>{r.badge}</div>
+                  <div className="df-id">{r.id}</div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        </Parallax>
       </div>
     </section>
   )
@@ -425,19 +500,21 @@ function FeatureOutcomes() {
           <p className="feat-p">Log what actually happened weeks after acting on a recommendation. Enter your Decision ID, the before and after KPIs, and Nixara builds an accuracy record across every role and report type.</p>
           <div className="feat-note">Live in Phase 2 →</div>
         </Reveal>
-        <Reveal variants={fadeRight} className="outcome-vis">
-          <div className="ov-head">
-            <div className="ov-title">Outcome Report · Decision #2847</div>
-            <div className="ov-acc">91% accuracy</div>
-          </div>
-          <OutcomeBar name="West Coast Pipeline Revenue" delta="+$3.9M actual vs +$4.1M projected" pct={95} />
-          <OutcomeBar name="Deal Close Velocity" delta="+21% vs +18% predicted" pct={100} color="c" />
-          <OutcomeBar name="Headcount Readiness" delta="5 of 6 hires completed by deadline" pct={83} color="linear-gradient(90deg,#FBBD24,#FDE68A)" />
-          <div className="ov-verdict">
-            <div className="ov-ico">✅</div>
-            <div><strong>Outcome: Exceeded</strong> — Nixara's recommendation delivered 95% of projected upside. CFO risk flag was overcautious.</div>
-          </div>
-        </Reveal>
+        <Parallax range={[40, -40]}>
+          <Reveal variants={fadeRight} className="outcome-vis">
+            <div className="ov-head">
+              <div className="ov-title">Outcome Report · Decision #2847</div>
+              <div className="ov-acc">91% accuracy</div>
+            </div>
+            <OutcomeBar name="West Coast Pipeline Revenue" delta="+$3.9M actual vs +$4.1M projected" pct={95} />
+            <OutcomeBar name="Deal Close Velocity" delta="+21% vs +18% predicted" pct={100} color="c" />
+            <OutcomeBar name="Headcount Readiness" delta="5 of 6 hires completed by deadline" pct={83} color="linear-gradient(90deg,#FBBD24,#FDE68A)" />
+            <div className="ov-verdict">
+              <div className="ov-ico">✅</div>
+              <div><strong>Outcome: Exceeded</strong> — Nixara's recommendation delivered 95% of projected upside. CFO risk flag was overcautious.</div>
+            </div>
+          </Reveal>
+        </Parallax>
       </div>
     </section>
   )
@@ -454,33 +531,35 @@ function FeatureReports() {
           <p className="feat-p">Executive Summary, Operational Detail, and Risk Report — all generated simultaneously, all downloadable as Word or PDF. And your first three are free. No API key. No account. No credit card.</p>
           <div className="feat-note">3 formats · Word + PDF export →</div>
         </Reveal>
-        <Reveal variants={stagger(0.1)} className="feat4-grid">
-          <motion.div className="f4c" variants={fadeUp}>
-            <div className="f4c-ico">📄</div>
-            <div className="f4c-h">Three formats, one click</div>
-            <div className="f4c-p">Generated simultaneously for every analysis.</div>
-            <div className="report-types">
-              <div className="rt">Executive Summary</div>
-              <div className="rt">Operational Detail</div>
-              <div className="rt">Risk Report</div>
-            </div>
-          </motion.div>
-          <motion.div className="f4c" variants={fadeUp}>
-            <div className="f4c-big">3</div>
-            <div className="f4c-h">Free reports per session</div>
-            <div className="f4c-p">No API key required. Paste your own for unlimited access — it never leaves your browser.</div>
-          </motion.div>
-          <motion.div className="f4c" variants={fadeUp}>
-            <div className="f4c-ico">🔗</div>
-            <div className="f4c-h">Live Tableau connector</div>
-            <div className="f4c-p">Reads your live Tableau published view directly. No CSV export. No manual refresh.</div>
-          </motion.div>
-          <motion.div className="f4c" variants={fadeUp}>
-            <div className="f4c-ico">↓</div>
-            <div className="f4c-h">Word &amp; PDF export</div>
-            <div className="f4c-p">Download any report as .docx or PDF. Ready to paste into a board deck immediately.</div>
-          </motion.div>
-        </Reveal>
+        <Parallax range={[-30, 30]}>
+          <Reveal variants={stagger(0.1)} className="feat4-grid">
+            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
+              <div className="f4c-ico">📄</div>
+              <div className="f4c-h">Three formats, one click</div>
+              <div className="f4c-p">Generated simultaneously for every analysis.</div>
+              <div className="report-types">
+                <div className="rt">Executive Summary</div>
+                <div className="rt">Operational Detail</div>
+                <div className="rt">Risk Report</div>
+              </div>
+            </motion.div>
+            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
+              <div className="f4c-big">3</div>
+              <div className="f4c-h">Free reports per session</div>
+              <div className="f4c-p">No API key required. Paste your own for unlimited access — it never leaves your browser.</div>
+            </motion.div>
+            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
+              <div className="f4c-ico">🔗</div>
+              <div className="f4c-h">Live Tableau connector</div>
+              <div className="f4c-p">Reads your live Tableau published view directly. No CSV export. No manual refresh.</div>
+            </motion.div>
+            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
+              <div className="f4c-ico">↓</div>
+              <div className="f4c-h">Word &amp; PDF export</div>
+              <div className="f4c-p">Download any report as .docx or PDF. Ready to paste into a board deck immediately.</div>
+            </motion.div>
+          </Reveal>
+        </Parallax>
       </div>
     </section>
   )
@@ -568,6 +647,7 @@ function Footer() {
 function App() {
   return (
     <>
+      <ScrollProgressBar />
       <div id="bg"></div>
       <Nav />
       <Hero />

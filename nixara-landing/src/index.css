@@ -41,6 +41,16 @@ a{color:inherit}
 }
 
 /* ══════════════════════════════════════
+   SCROLL PROGRESS
+══════════════════════════════════════ */
+.scroll-progress{
+  position:fixed;top:0;left:0;right:0;height:2px;z-index:600;
+  background:linear-gradient(90deg,var(--c),#7EE8FF);
+  transform-origin:0% 50%;
+  box-shadow:0 0 8px rgba(0,212,255,0.6);
+}
+
+/* ══════════════════════════════════════
    NAV
 ══════════════════════════════════════ */
 nav{
@@ -289,6 +299,13 @@ h1{
   border:1px solid rgba(0,212,255,0.1);
   border-radius:var(--r);overflow:hidden;
 }
+.steps-line{
+  position:absolute;top:55px;left:calc(16.67% + 1rem);
+  width:calc(66.67% - 2rem);height:2px;
+  background:linear-gradient(to right,var(--c),#7EE8FF);
+  transform-origin:0% 50%;pointer-events:none;z-index:2;
+  box-shadow:0 0 8px rgba(0,212,255,0.5);
+}
 .step{
   padding:2.5rem 1.75rem;background:var(--bg1);
   position:relative;transition:background .3s;
@@ -395,9 +412,7 @@ h1{
   border:1px solid rgba(255,255,255,0.06);
   border-radius:12px;
   position:relative;overflow:hidden;
-  transition:transform .2s;
 }
-.df-row:hover{transform:translateX(4px)}
 
 .df-row::before{
   content:'';position:absolute;left:0;top:0;bottom:0;width:3px;
