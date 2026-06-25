@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform } from 'framer-motion'
+import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion'
 
 const APP_URL = 'https://ai-dashboard-copilot.streamlit.app'
 
@@ -15,10 +15,6 @@ const fadeLeft = {
 const fadeRight = {
   hidden: { opacity: 0, x: 45 },
   show: { opacity: 1, x: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
-}
-const scaleIn = {
-  hidden: { opacity: 0, scale: 0.94 },
-  show: { opacity: 1, scale: 1, transition: { duration: 0.75, ease: [0.16, 1, 0.3, 1] } },
 }
 const stagger = (delay = 0.12) => ({
   hidden: {},
@@ -86,12 +82,6 @@ function WordReveal({ text, className, delayStart = 0, stagger: gap = 0.05 }) {
   )
 }
 
-/* ── Scroll-scrubbed connector line (How it works) ───────────────────────── */
-function DrawLine({ targetRef }) {
-  const { scrollYProgress } = useScroll({ target: targetRef, offset: ['start 75%', 'end 55%'] })
-  const scaleX = useTransform(scrollYProgress, [0, 1], [0, 1])
-  return <motion.div className="steps-line" style={{ scaleX }} />
-}
 
 /* ── Scramble stat ───────────────────────── */
 const NUMS = '0123456789'
@@ -201,7 +191,7 @@ function Hero() {
         </h1>
 
         <motion.p className="hero-sub" variants={fadeUp}>
-          Upload any dataset. Describe your business question. Nixara delivers executive-grade reports tailored to your role — then tracks every decision you make.
+          Upload a dataset, ask a question — get an executive-grade report tailored to your role, with every decision tracked.
         </motion.p>
 
         <motion.div className="hero-btns" variants={fadeUp}>
@@ -314,8 +304,49 @@ function Cinematic({ tag, line1, line2, sub }) {
 }
 
 /* ── How it works ───────────────────────── */
+const STEPS = [
+  { n: 1, label: 'Upload', ico: '📂', h: 'Upload your data', p: 'CSV, Excel, or a live Tableau connection. Nixara handles messy data automatically.' },
+  { n: 2, label: 'Ask', ico: '💬', h: 'Ask your question', p: 'Plain language, your role, your time horizon. No query language, no pivot tables.' },
+  { n: 3, label: 'Decide', ico: '⚡', h: 'Decide & track', p: 'Three AI reports in under 60 seconds. Approve, reject, or postpone — then track the outcome.' },
+]
+
+function Step({ s, i }) {
+  return (
+    <motion.div
+      className="step"
+      initial={{ opacity: 0, y: 40 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.5 }}
+      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: i * 0.2 }}
+    >
+      <div className="step-n">
+        <motion.div
+          className="step-circle"
+          initial={{ scale: 0.6, opacity: 0 }}
+          whileInView={{ scale: 1, opacity: 1 }}
+          viewport={{ once: true, amount: 0.5 }}
+          transition={{ duration: 0.4, delay: i * 0.2 + 0.15 }}
+        >
+          {s.n}
+        </motion.div>
+        {s.label}
+      </div>
+      <motion.div
+        className="step-ico"
+        initial={{ scale: 0, rotate: -8 }}
+        whileInView={{ scale: 1, rotate: 0 }}
+        viewport={{ once: true, amount: 0.5 }}
+        transition={{ duration: 0.5, ease: 'backOut', delay: i * 0.2 + 0.25 }}
+      >
+        {s.ico}
+      </motion.div>
+      <h3 className="step-h">{s.h}</h3>
+      <p className="step-p">{s.p}</p>
+    </motion.div>
+  )
+}
+
 function HowItWorks() {
-  const stepsRef = useRef(null)
   return (
     <section id="how" className="z1">
       <div className="inner" style={{ maxWidth: 1200, margin: '0 auto', padding: '6.5rem 0' }}>
@@ -323,32 +354,9 @@ function HowItWorks() {
           <div className="sec-eye">How it works</div>
           <h2 className="sec-h">Three steps from raw data<br />to boardroom-ready decision.</h2>
         </Reveal>
-        <Reveal
-          ref={stepsRef}
-          variants={scaleIn}
-          style={{ marginTop: '3.5rem', position: 'relative' }}
-          className="steps"
-        >
-          <DrawLine targetRef={stepsRef} />
-          <div className="step">
-            <div className="step-n"><div className="step-circle">1</div>Upload</div>
-            <div className="step-ico">📂</div>
-            <h3 className="step-h">Upload your data</h3>
-            <p className="step-p">CSV, Excel up to 200MB, or connect live to Tableau. Nixara handles messy data, mixed encodings, and non-standard formats automatically.</p>
-          </div>
-          <div className="step">
-            <div className="step-n"><div className="step-circle">2</div>Ask</div>
-            <div className="step-ico">💬</div>
-            <h3 className="step-h">Ask your question</h3>
-            <p className="step-p">Describe your decision in plain language. Choose your analyst role and time horizon. No query language. No pivot tables.</p>
-          </div>
-          <div className="step">
-            <div className="step-n"><div className="step-circle">3</div>Decide</div>
-            <div className="step-ico">⚡</div>
-            <h3 className="step-h">Decide &amp; track</h3>
-            <p className="step-p">Three AI reports in under 60 seconds. Approve, reject, or postpone each. Log outcomes weeks later to measure if Nixara was right.</p>
-          </div>
-        </Reveal>
+        <div className="steps" style={{ marginTop: '3.5rem' }}>
+          {STEPS.map((s, i) => <Step key={s.n} s={s} i={i} />)}
+        </div>
       </div>
     </section>
   )
@@ -373,28 +381,38 @@ function FeatureRoles() {
       metrics: [['40%', 'Capacity Left'], ['6 hires', 'Needed', '#FBBD24'], ['Oct 15', 'Deadline', '#FBBD24']],
     },
   ]
+  const sectionRef = useRef(null)
+  const [active, setActive] = useState(0)
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start 0.7', 'end 0.3'] })
+  const activeMV = useTransform(scrollYProgress, [0, 0.34, 0.67, 1], [0, 1, 2, 2])
+  useMotionValueEvent(activeMV, 'change', (v) => setActive(Math.round(v)))
+
   return (
-    <section className="feat feat-1 z1">
+    <section className="feat feat-1 z1" ref={sectionRef}>
       <div className="feat-inner">
         <Reveal variants={fadeLeft} className="feat-copy">
           <div className="feat-tag">Intelligence Layer</div>
           <h2 className="feat-h">Same data.<br />Completely different insight.</h2>
-          <p className="feat-p">A CFO and a CEO looking at the same dataset need completely different intelligence. Nixara recalibrates every prompt by role, timeframe, and your exact business question — never generic, never templated.</p>
-          <div className="feat-note">6 built-in analyst roles →</div>
+          <p className="feat-p">A CFO and a CEO need different intelligence from the same dataset. Nixara recalibrates by role — never generic.</p>
+          <div className="role-tabs">
+            {cards.map((c, i) => (
+              <button key={c.id} className={`role-tab${i === active ? ' active' : ''}`} type="button" tabIndex={-1}>
+                {c.role.replace(' View', '')}
+              </button>
+            ))}
+          </div>
         </Reveal>
         <Parallax range={[40, -40]}>
-          <motion.div
-            className="role-split"
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, amount: 0.3 }}
-            variants={stagger(0.18)}
-          >
-            {cards.map((c) => (
+          <div className="role-split">
+            {cards.map((c, i) => (
               <motion.div
                 key={c.id}
-                className="role-card"
-                variants={{ hidden: { opacity: 0, x: 40, rotate: 1.5 }, show: { opacity: 1, x: 0, rotate: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } } }}
+                className={`role-card${i === active ? ' active' : ''}`}
+                initial={{ opacity: 0, x: 40, scale: 0.95 }}
+                whileInView={{ opacity: 0.55, x: 0 }}
+                viewport={{ once: true, amount: 0.3 }}
+                transition={{ duration: 0.6, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
+                animate={{ scale: i === active ? 1 : 0.95, opacity: i === active ? 1 : 0.55 }}
               >
                 <div className="rc-top">
                   <div className={`rc-role ${c.id}`}>{c.role}</div>
@@ -402,8 +420,8 @@ function FeatureRoles() {
                 </div>
                 <div className="rc-insight">{c.insight}</div>
                 <div className="rc-metric">
-                  {c.metrics.map(([v, l, color], i) => (
-                    <div className="rcm" key={i}>
+                  {c.metrics.map(([v, l, color], i2) => (
+                    <div className="rcm" key={i2}>
                       <div className="rcm-v" style={color ? { color } : undefined}>{v}</div>
                       <div className="rcm-l">{l}</div>
                     </div>
@@ -411,7 +429,7 @@ function FeatureRoles() {
                 </div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </Parallax>
       </div>
     </section>
@@ -432,7 +450,7 @@ function FeatureDecisions() {
         <Reveal variants={fadeRight} className="feat-copy">
           <div className="feat-tag">Accountability</div>
           <h2 className="feat-h">Every call, logged.<br />Every outcome, tracked.</h2>
-          <p className="feat-p">Approve, reject, or postpone every AI recommendation. Each decision gets a unique ID stored in Supabase — an auditable record of what you chose to act on, when, and why.</p>
+          <p className="feat-p">Approve, reject, or postpone — every call gets a unique ID and an auditable trail of what you acted on, and when.</p>
           <div className="feat-note">Unique ID per decision →</div>
         </Reveal>
         <Parallax range={[-40, 40]}>
@@ -497,7 +515,7 @@ function FeatureOutcomes() {
         <Reveal variants={fadeLeft} className="feat-copy">
           <div className="feat-tag">Intelligence Loop</div>
           <h2 className="feat-h">Was Nixara right?<br />Now you'll know.</h2>
-          <p className="feat-p">Log what actually happened weeks after acting on a recommendation. Enter your Decision ID, the before and after KPIs, and Nixara builds an accuracy record across every role and report type.</p>
+          <p className="feat-p">Log what actually happened. Nixara builds an accuracy record across every role and report type.</p>
           <div className="feat-note">Live in Phase 2 →</div>
         </Reveal>
         <Parallax range={[40, -40]}>
@@ -528,7 +546,7 @@ function FeatureReports() {
         <Reveal variants={fadeRight} className="feat-copy">
           <div className="feat-tag">Output &amp; Access</div>
           <h2 className="feat-h">Three report formats.<br />Zero friction to start.</h2>
-          <p className="feat-p">Executive Summary, Operational Detail, and Risk Report — all generated simultaneously, all downloadable as Word or PDF. And your first three are free. No API key. No account. No credit card.</p>
+          <p className="feat-p">Three formats, generated together, exportable as Word or PDF. Your first three reports are free — no account needed.</p>
           <div className="feat-note">3 formats · Word + PDF export →</div>
         </Reveal>
         <Parallax range={[-30, 30]}>
@@ -570,16 +588,12 @@ function About() {
   return (
     <section id="about" className="z1">
       <Reveal as={motion.div} className="inner" style={{ maxWidth: 760, margin: '0 auto', padding: '6rem 0', textAlign: 'center' }}>
-        <div className="sec-eye" style={{ justifyContent: 'center' }}>
-          <span style={{ width: 18, height: 1, background: 'var(--c)', display: 'inline-block' }}></span>
-          Built by
-          <span style={{ width: 18, height: 1, background: 'var(--c)', display: 'inline-block' }}></span>
-        </div>
+        <div className="sec-eye center" style={{ justifyContent: 'center' }}>Built by</div>
         <div className="ab-av">S</div>
         <div className="ab-name">Swapnil S.</div>
         <div className="ab-role">AI Application Developer</div>
         <p className="ab-bio">
-          Nixara is a production AI application — instrumented with real analytics, connected to live data, and tracking real decisions. Built to show what thoughtful AI development looks like end to end: prompt engineering, database design, secure secrets management, and UX working as one.
+          A production AI application — real analytics, live data, tracked decisions. Prompt engineering, database design, and UX, working as one.
         </p>
         <div className="ab-links">
           <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank" rel="noreferrer" className="al">
@@ -601,11 +615,7 @@ function CTA() {
   return (
     <div className="cta z1">
       <Reveal>
-        <div className="sec-eye" style={{ justifyContent: 'center', marginBottom: '.85rem' }}>
-          <span style={{ width: 18, height: 1, background: 'var(--c)', display: 'inline-block' }}></span>
-          Live now · no signup required
-          <span style={{ width: 18, height: 1, background: 'var(--c)', display: 'inline-block' }}></span>
-        </div>
+        <div className="sec-eye center" style={{ justifyContent: 'center', marginBottom: '.85rem' }}>Live now · no signup required</div>
         <div className="cta-h">Try Nixara free, right now.</div>
         <p className="cta-p">No API key. No account. Your first 3 reports are on us.</p>
         <a href={APP_URL} target="_blank" rel="noreferrer" className="btn-p" style={{ margin: '0 auto', width: 'fit-content', fontSize: '.87rem', padding: '.85rem 2.25rem' }}>
