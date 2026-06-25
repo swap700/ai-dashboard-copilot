@@ -27,6 +27,12 @@ export default function Header() {
       transition={{ duration: 0.42, ease: "easeOut" }}
       className="border-b-[1.5px] border-border pb-5 mb-8"
     >
+      <a
+        href="https://nixara-landing.vercel.app"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-text-mute hover:text-accent transition-colors mb-3"
+      >
+        ← Back to nixara-landing.vercel.app
+      </a>
       <p className="font-sans text-[clamp(2.5rem,6vw,4.5rem)] font-black text-text m-0 leading-[1.1] tracking-tight">
         {title}
         <span className="inline-block w-[2px] h-[0.8em] bg-accent ml-1 animate-pulse align-middle" />
