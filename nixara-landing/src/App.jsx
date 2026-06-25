@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
 import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion'
 
-const APP_URL = 'https://ai-dashboard-copilot.streamlit.app'
+const APP_URL = 'https://nixara-app.vercel.app'
 
 /* ── Reveal helpers ───────────────────────── */
 const fadeUp = {
