@@ -370,11 +370,13 @@ h1{
 .role-tabs{display:flex;gap:.5rem;margin-top:1.5rem}
 .role-tab{
   font-family:inherit;font-size:.68rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  padding:.4rem .9rem;border-radius:8px;cursor:default;
+  padding:.4rem .9rem;border-radius:8px;cursor:pointer;
   background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--d);
   transition:all .3s;
 }
+.role-tab:hover{border-color:rgba(255,255,255,0.18);color:var(--m)}
 .role-tab.active{background:var(--cg);border-color:var(--cb);color:var(--c)}
+.role-tab.active:hover{color:var(--c)}
 
 .role-split{
   position:relative;display:flex;flex-direction:column;gap:1rem;

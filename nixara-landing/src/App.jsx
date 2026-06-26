@@ -323,8 +323,7 @@ function Step({ s, i }) {
         <motion.div
           className="step-circle"
           initial={{ scale: 0.6, opacity: 0 }}
-          whileInView={{ scale: 1, opacity: 1 }}
-          viewport={{ once: true, amount: 0.5 }}
+          animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.4, delay: i * 0.2 + 0.15 }}
         >
           {s.n}
@@ -334,8 +333,7 @@ function Step({ s, i }) {
       <motion.div
         className="step-ico"
         initial={{ scale: 0, rotate: -8 }}
-        whileInView={{ scale: 1, rotate: 0 }}
-        viewport={{ once: true, amount: 0.5 }}
+        animate={{ scale: 1, rotate: 0 }}
         transition={{ duration: 0.5, ease: 'backOut', delay: i * 0.2 + 0.25 }}
       >
         {s.ico}
@@ -396,7 +394,12 @@ function FeatureRoles() {
           <p className="feat-p">A CFO and a CEO need different intelligence from the same dataset. Nixara recalibrates by role — never generic.</p>
           <div className="role-tabs">
             {cards.map((c, i) => (
-              <button key={c.id} className={`role-tab${i === active ? ' active' : ''}`} type="button" tabIndex={-1}>
+              <button
+                key={c.id}
+                className={`role-tab${i === active ? ' active' : ''}`}
+                type="button"
+                onClick={() => setActive(i)}
+              >
                 {c.role.replace(' View', '')}
               </button>
             ))}
@@ -596,7 +599,7 @@ function About() {
           A production AI application — real analytics, live data, tracked decisions. Prompt engineering, database design, and UX, working as one.
         </p>
         <div className="ab-links">
-          <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank" rel="noreferrer" className="al">
+          <a href="https://www.linkedin.com/in/sakorkar-s" target="_blank" rel="noreferrer" className="al">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" /><circle cx="4" cy="4" r="2" /></svg>
             LinkedIn
           </a>
@@ -648,7 +651,7 @@ function Footer() {
       <span>© 2026 Nixara · Swapnil S.</span>
       <div className="fl">
         <a href={APP_URL} target="_blank" rel="noreferrer">Live App</a>
-        <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank" rel="noreferrer">LinkedIn</a>
+        <a href="https://www.linkedin.com/in/sakorkar-s" target="_blank" rel="noreferrer">LinkedIn</a>
       </div>
     </footer>
   )
