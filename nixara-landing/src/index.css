@@ -16,10 +16,15 @@
 }
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth}
+/* overflow-x lives only on <html> — the root element is spec-special-cased
+   to propagate its overflow to the viewport itself rather than becoming a
+   nested scroll container. Setting it on body (or any div) instead forces
+   that element's overflow-y to also become non-"visible" per spec, which
+   silently breaks position:sticky for every descendant. */
+html{scroll-behavior:smooth;overflow-x:hidden}
 body{
   font-family:'Inter',sans-serif;background:var(--bg);color:var(--white);
-  overflow-x:hidden;-webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased;
 }
 #root{position:relative}
 
@@ -165,6 +170,12 @@ h1{
 
 /* Hero visual — mock dashboard */
 .hero-vis{position:relative}
+.hero-vis::before{
+  content:'';position:absolute;inset:-40px;z-index:0;pointer-events:none;
+  background:radial-gradient(circle 260px at var(--mx,50%) var(--my,50%), rgba(224,141,91,0.16), transparent 70%);
+  opacity:0;transition:opacity .4s ease;
+}
+.hero-vis:hover::before{opacity:1}
 
 .mock{
   background:rgba(19,19,22,0.92);
@@ -337,6 +348,8 @@ h1{
   overflow:hidden;
 }
 .feat-1{background:radial-gradient(ellipse 70% 60% at 90% 50%, rgba(224,141,91,0.06) 0%, transparent 70%)}
+.feat-1-scroll{ min-height:230vh; overflow:visible; padding:0; }
+.feat-1-sticky{ position:sticky; top:0; min-height:100vh; display:flex; align-items:center; padding:6rem 6%; }
 .feat-2{background:radial-gradient(ellipse 65% 60% at 10% 50%, rgba(30,100,255,0.07) 0%, transparent 70%)}
 .feat-3{background:radial-gradient(ellipse 60% 55% at 85% 50%, rgba(52,211,153,0.05) 0%, transparent 65%)}
 .feat-4{background:radial-gradient(ellipse 55% 50% at 50% 100%, rgba(224,141,91,0.05) 0%, transparent 65%)}
@@ -479,12 +492,14 @@ h1{
 .ov-verdict strong{color:var(--white);font-style:normal}
 .ov-ico{font-size:1rem}
 
-/* ── Feature 4: Report + Free combined ── */
+/* ── Feature 4: Report + Free combined — horizontal scroll-scrub ── */
+.feat4-scroll{ overflow:hidden; width:100%; }
 .feat4-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:1rem;
-  height:100%;
+  display:flex;gap:1rem;
+  width:max-content;
 }
 .f4c{
+  width:260px;flex-shrink:0;
   padding:1.5rem;
   background:rgba(19,19,22,0.88);
   border:1px solid rgba(255,255,255,0.06);
@@ -590,7 +605,7 @@ footer a:hover{color:var(--m)}
   .step:first-child{border-radius:var(--r) var(--r) 0 0}
   .step:last-child{border-radius:0 0 var(--r) var(--r)}
   .nav-r .nl{display:none}
-  .feat4-grid{grid-template-columns:1fr}
+  .f4c{width:220px}
   footer{flex-direction:column;gap:1rem;text-align:center}
   .cine-h{font-size:clamp(2.2rem,12vw,4rem)}
 }

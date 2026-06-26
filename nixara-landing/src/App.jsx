@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion'
+import { motion, useScroll, useTransform, useMotionValueEvent, useInView } from 'framer-motion'
 
 const APP_URL = 'https://nixara-app.vercel.app'
 
@@ -129,6 +129,37 @@ function ScrambleStat({ value, delay }) {
   )
 }
 
+/* ── Count-up metric — animates the numeric part of a value like
+   "-18%", "+23%", "3.2×", "8.2mo" from 0 when it scrolls into view.
+   Values with no parseable leading number (e.g. "Review", "Oct 15")
+   just render as plain text. ── */
+function CountUp({ text }) {
+  const ref = useRef(null)
+  const inView = useInView(ref, { once: true, amount: 0.6 })
+  const match = text.match(/^([+-]?)(\d+(?:\.\d+)?)(.*)$/)
+  const [display, setDisplay] = useState(match ? `${match[1]}0${match[3]}` : text)
+
+  useEffect(() => {
+    if (!inView || !match) return
+    const [, sign, numStr, suffix] = match
+    const target = parseFloat(numStr)
+    const decimals = numStr.includes('.') ? numStr.split('.')[1].length : 0
+    const duration = 900
+    const start = performance.now()
+    let raf
+    function tick(now) {
+      const p = Math.min((now - start) / duration, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setDisplay(`${sign}${(target * eased).toFixed(decimals)}${suffix}`)
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [inView])
+
+  return <span ref={ref}>{display}</span>
+}
+
 function TypeLabel() {
   const [text, setText] = useState('')
   const full = 'running analysis...'
@@ -174,6 +205,7 @@ function Hero() {
   const visScale = useTransform(scrollYProgress, [0, 1], [1, 0.92])
   const visRotate = useTransform(scrollYProgress, [0, 1], [0, 3])
   const heroOpacity = useTransform(scrollYProgress, [0, 0.7], [1, 0])
+  const [glow, setGlow] = useState({ x: '50%', y: '50%' })
 
   return (
     <div id="hero" className="z1" ref={heroRef}>
@@ -224,7 +256,11 @@ function Hero() {
         animate="show"
         variants={fadeRight}
         transition={{ delay: 0.3 }}
-        style={{ y: visY, scale: visScale, rotate: visRotate }}
+        style={{ y: visY, scale: visScale, rotate: visRotate, '--mx': glow.x, '--my': glow.y }}
+        onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setGlow({ x: `${((e.clientX - r.left) / r.width) * 100}%`, y: `${((e.clientY - r.top) / r.height) * 100}%` })
+        }}
       >
         <FloatingCard className="fc fc-1" label="Decision ID" value="#2,847" sub="Approved this week" y={[0, -9, 0]} duration={5} />
         <FloatingCard className="fc fc-2" label="AI Accuracy" value="91%" sub="Across tracked outcomes" y={[0, 7, 0]} duration={6.5} />
@@ -381,12 +417,13 @@ function FeatureRoles() {
   ]
   const sectionRef = useRef(null)
   const [active, setActive] = useState(0)
-  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start 0.7', 'end 0.3'] })
+  const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] })
   const activeMV = useTransform(scrollYProgress, [0, 0.34, 0.67, 1], [0, 1, 2, 2])
   useMotionValueEvent(activeMV, 'change', (v) => setActive(Math.round(v)))
 
   return (
-    <section className="feat feat-1 z1" ref={sectionRef}>
+    <section className="feat feat-1 feat-1-scroll z1" ref={sectionRef}>
+      <div className="feat-1-sticky">
       <div className="feat-inner">
         <Reveal variants={fadeLeft} className="feat-copy">
           <div className="feat-tag">Intelligence Layer</div>
@@ -425,7 +462,7 @@ function FeatureRoles() {
                 <div className="rc-metric">
                   {c.metrics.map(([v, l, color], i2) => (
                     <div className="rcm" key={i2}>
-                      <div className="rcm-v" style={color ? { color } : undefined}>{v}</div>
+                      <div className="rcm-v" style={color ? { color } : undefined}><CountUp text={v} /></div>
                       <div className="rcm-l">{l}</div>
                     </div>
                   ))}
@@ -434,6 +471,7 @@ function FeatureRoles() {
             ))}
           </div>
         </Parallax>
+      </div>
       </div>
     </section>
   )
@@ -543,8 +581,19 @@ function FeatureOutcomes() {
 
 /* ── Feature 4 ───────────────────────── */
 function FeatureReports() {
+  const ref = useRef(null)
+  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'end start'] })
+  const x = useTransform(scrollYProgress, [0, 1], ['1%', '-62%'])
+
+  const cards = [
+    { ico: '📄', h: 'Three formats, one click', p: 'Generated simultaneously for every analysis.', types: ['Executive Summary', 'Operational Detail', 'Risk Report'] },
+    { big: '3', h: 'Free reports per session', p: 'No API key required. Paste your own for unlimited access — it never leaves your browser.' },
+    { ico: '🔗', h: 'Live Tableau connector', p: 'Reads your live Tableau published view directly. No CSV export. No manual refresh.' },
+    { ico: '↓', h: 'Word & PDF export', p: 'Download any report as .docx or PDF. Ready to paste into a board deck immediately.' },
+  ]
+
   return (
-    <section className="feat feat-4 z1">
+    <section className="feat feat-4 z1" ref={ref}>
       <div className="feat-inner rev">
         <Reveal variants={fadeRight} className="feat-copy">
           <div className="feat-tag">Output &amp; Access</div>
@@ -552,35 +601,30 @@ function FeatureReports() {
           <p className="feat-p">Three formats, generated together, exportable as Word or PDF. Your first three reports are free — no account needed.</p>
           <div className="feat-note">3 formats · Word + PDF export →</div>
         </Reveal>
-        <Parallax range={[-30, 30]}>
-          <Reveal variants={stagger(0.1)} className="feat4-grid">
-            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
-              <div className="f4c-ico">📄</div>
-              <div className="f4c-h">Three formats, one click</div>
-              <div className="f4c-p">Generated simultaneously for every analysis.</div>
-              <div className="report-types">
-                <div className="rt">Executive Summary</div>
-                <div className="rt">Operational Detail</div>
-                <div className="rt">Risk Report</div>
-              </div>
-            </motion.div>
-            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
-              <div className="f4c-big">3</div>
-              <div className="f4c-h">Free reports per session</div>
-              <div className="f4c-p">No API key required. Paste your own for unlimited access — it never leaves your browser.</div>
-            </motion.div>
-            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
-              <div className="f4c-ico">🔗</div>
-              <div className="f4c-h">Live Tableau connector</div>
-              <div className="f4c-p">Reads your live Tableau published view directly. No CSV export. No manual refresh.</div>
-            </motion.div>
-            <motion.div className="f4c" variants={fadeUp} whileHover={{ y: -4 }}>
-              <div className="f4c-ico">↓</div>
-              <div className="f4c-h">Word &amp; PDF export</div>
-              <div className="f4c-p">Download any report as .docx or PDF. Ready to paste into a board deck immediately.</div>
-            </motion.div>
-          </Reveal>
-        </Parallax>
+        <div className="feat4-scroll">
+          <motion.div className="feat4-grid" style={{ x }}>
+            {cards.map((c, i) => (
+              <motion.div
+                key={i}
+                className="f4c"
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.5 }}
+                transition={{ duration: 0.5, delay: i * 0.08 }}
+                whileHover={{ y: -4 }}
+              >
+                {c.big ? <div className="f4c-big">{c.big}</div> : <div className="f4c-ico">{c.ico}</div>}
+                <div className="f4c-h">{c.h}</div>
+                <div className="f4c-p">{c.p}</div>
+                {c.types && (
+                  <div className="report-types">
+                    {c.types.map((t) => <div className="rt" key={t}>{t}</div>)}
+                  </div>
+                )}
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
       </div>
     </section>
   )
