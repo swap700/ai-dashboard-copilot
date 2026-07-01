@@ -114,6 +114,17 @@ export type ReportLine =
   | { kind: "bullet"; text: string }
   | { kind: "text"; text: string };
 
+/**
+ * Extracts numbered recommendations/actions from a cleaned report.
+ * Returns the full "1. Some action…" strings so they can be shown as selectable options.
+ */
+export function parseRecommendations(reportText: string): string[] {
+  return parseReportLines(reportText)
+    .filter((l): l is { kind: "numbered"; text: string } => l.kind === "numbered")
+    .map((l) => l.text)
+    .slice(0, 8); // safety cap
+}
+
 /** Splits cleaned report text into structured lines for rendering or document export. */
 export function parseReportLines(reportText: string): ReportLine[] {
   // Mirrors the render-time fix-up: ensure a blank line precedes every "### " header.

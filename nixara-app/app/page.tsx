@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useNixaraStore } from "@/lib/store";
 import FileUploader from "@/components/FileUploader";
 import MetricsRow from "@/components/MetricsRow";
 import DataPreview from "@/components/DataPreview";
@@ -14,30 +15,24 @@ import { REPORT_TYPES, type ReportType } from "@/lib/report";
 import { incrementFreeReportsUsed } from "@/lib/free-tier";
 
 export default function DashboardPage() {
-  const [dataset, setDataset] = useState<Dataset | null>(null);
-  const [fileName, setFileName] = useState<string>("");
-  const [setup, setSetup] = useState<ReportSetupValue>({
-    who: "COO",
-    decision: "",
-    timeframe: "This quarter",
-  });
-  const [apiKey, setApiKey] = useState("");
+  // ── Global store — survives navigation to Outcomes and back ──────────────
+  const { dataset, fileName, setup, apiKey, reports, setDataset, setSetup, setApiKey, setReports } =
+    useNixaraStore();
+
+  // ── Transient UI state (don't need to survive navigation) ────────────────
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reports, setReports] = useState<Record<ReportType, string> | null>(null);
 
   const handleLoaded = (raw: Dataset, name: string) => {
-    setDataset(cleanDataset(raw));
-    setFileName(name);
-    setReports(null);
+    setDataset(cleanDataset(raw), name);
   };
 
   const metrics = useMemo(() => {
     if (!dataset) return [];
     return [
-      { label: "Rows", value: dataset.rows.length },
-      { label: "Columns", value: dataset.columns.length },
-      { label: "Numeric fields", value: numericColumns(dataset).length },
+      { label: "Rows",          value: dataset.rows.length },
+      { label: "Columns",       value: dataset.columns.length },
+      { label: "Numeric fields",value: numericColumns(dataset).length },
       { label: "Quality score", value: dashboardScore(dataset) },
     ];
   }, [dataset]);
@@ -78,6 +73,9 @@ export default function DashboardPage() {
     }
   };
 
+  // ReportSetup calls onApiKeyResolved which needs the setter signature
+  const handleSetup = (v: ReportSetupValue) => setSetup(v);
+
   return (
     <div>
       <FileUploader onLoaded={handleLoaded} />
@@ -94,7 +92,7 @@ export default function DashboardPage() {
 
           <ReportSetup
             value={setup}
-            onChange={setSetup}
+            onChange={handleSetup}
             apiKey={apiKey}
             onApiKeyResolved={setApiKey}
             onGenerate={handleGenerate}

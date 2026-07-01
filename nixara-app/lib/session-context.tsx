@@ -13,6 +13,11 @@ export interface RecordedDecision {
   datasetName: string;
   question: string;
   timeframe: string;
+  // Task 13: linked recommendation + responsible owner
+  recommendation?: string;
+  owner?: string;
+  // Task 14: reason when postponed
+  postponeReason?: string;
 }
 
 export interface RecordedOutcome {
@@ -30,7 +35,16 @@ interface SessionState {
   recordDecision: (
     reportType: ReportType,
     choice: DecisionChoice,
-    ctx: { role: string; datasetName: string; question: string; timeframe: string; notes?: string }
+    ctx: {
+      role: string;
+      datasetName: string;
+      question: string;
+      timeframe: string;
+      notes?: string;
+      recommendation?: string;
+      owner?: string;
+      postponeReason?: string;
+    }
   ) => Promise<void>;
   recordOutcome: (
     reportType: ReportType,
@@ -75,10 +89,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       notes: ctx.notes,
       timeframe: ctx.timeframe,
       question: ctx.question,
+      recommendation: ctx.recommendation,
+      owner: ctx.owner,
+      postponeReason: ctx.postponeReason,
     });
-    const next = {
+    const next: typeof decisions = {
       ...decisions,
-      [reportType]: { choice, decisionId, role: ctx.role, datasetName: ctx.datasetName, question: ctx.question, timeframe: ctx.timeframe },
+      [reportType]: {
+        choice,
+        decisionId,
+        role: ctx.role,
+        datasetName: ctx.datasetName,
+        question: ctx.question,
+        timeframe: ctx.timeframe,
+        recommendation: ctx.recommendation,
+        owner: ctx.owner,
+        postponeReason: ctx.postponeReason,
+      },
     };
     setDecisions(next);
     window.sessionStorage.setItem(DECISIONS_KEY, JSON.stringify(next));

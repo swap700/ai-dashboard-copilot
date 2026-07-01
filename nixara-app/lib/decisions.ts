@@ -26,6 +26,11 @@ export interface LogDecisionParams {
   notes?: string;
   timeframe: string;
   question: string;
+  // Added Task 13: which recommendation was acted on, and who owns it
+  recommendation?: string;
+  owner?: string;
+  // Added Task 14: reason for postponing (Budget constraint / Need more data / Not a priority now)
+  postponeReason?: string;
 }
 
 /** Mirrors log_decision_record (lines 92-139) — returns the new row's id, or null if Supabase isn't configured. */
@@ -42,6 +47,9 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<numb
       notes: params.notes ?? "",
       timeframe: params.timeframe,
       question: params.question,
+      owner: params.owner ?? null,
+      recommendation: params.recommendation ?? null,
+      postpone_reason: params.postponeReason ?? null,
     })
     .select("id")
     .single();

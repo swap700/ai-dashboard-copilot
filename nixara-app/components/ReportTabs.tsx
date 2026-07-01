@@ -122,6 +122,7 @@ export default function ReportTabs({ reports, context }: Props) {
           datasetName={context.datasetName}
           question={context.decision}
           timeframe={context.timeframe}
+          reportText={reports[active]}
         />
       </motion.div>
     </div>
