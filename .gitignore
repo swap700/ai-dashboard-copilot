@@ -22,3 +22,9 @@ env/
 data_cache/
 notebooks/
 utils/
+# Test datasets and local documents
+*.csv
+*.docx
+*.xlsx
+*.md
+!README.md
