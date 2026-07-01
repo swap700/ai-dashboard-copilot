@@ -147,14 +147,59 @@ export type ReportLine =
   | { kind: "text"; text: string };
 
 /**
+ * Sections whose numbered items are the primary decision/action options.
+ * Items here appear as-is: "1. [This week] …"
+ */
+const PRIMARY_ACTION_SECTIONS = new Set([
+  "Recommended Actions",   // Executive Summary
+  "Process Recommendations", // Operational Detail
+  "Top Risks Identified",  // Risk Report
+]);
+
+/**
+ * Sections whose numbered items are secondary — displayed with a clear prefix
+ * so they don't collide with the primary 1/2/3 numbering.
+ * e.g. "Quick Win 1: …" instead of a bare "1. …"
+ */
+const SECONDARY_SECTION_LABEL: Record<string, string> = {
+  "Quick Wins": "Quick Win",
+  "Mitigation Actions": "Mitigation",
+  "Early Warning Signs": "Signal",
+};
+
+/**
  * Extracts numbered recommendations/actions from a cleaned report.
- * Returns the full "1. Some action…" strings so they can be shown as selectable options.
+ * Tracks the current section heading so Quick Wins (1, 2) are prefixed as
+ * "Quick Win 1: …" rather than appearing as bare "1. …" alongside the primary
+ * Process Recommendations (1, 2, 3) — which caused duplicate numbering in the UI.
  */
 export function parseRecommendations(reportText: string): string[] {
-  return parseReportLines(reportText)
-    .filter((l): l is { kind: "numbered"; text: string } => l.kind === "numbered")
-    .map((l) => l.text)
-    .slice(0, 8); // safety cap
+  const lines = parseReportLines(reportText);
+  const results: string[] = [];
+  let currentSection = "";
+
+  for (const line of lines) {
+    if (line.kind === "heading") {
+      currentSection = line.text;
+      continue;
+    }
+    if (line.kind !== "numbered") continue;
+
+    if (PRIMARY_ACTION_SECTIONS.has(currentSection)) {
+      // Primary action — show as-is
+      results.push(line.text);
+    } else {
+      const label = SECONDARY_SECTION_LABEL[currentSection];
+      if (label) {
+        // Re-label: "Quick Win 1: [body]" instead of "1. [body]"
+        const m = line.text.match(/^(\d+)\.\s*([\s\S]*)/);
+        results.push(m ? `${label} ${m[1]}: ${m[2]}` : `${label}: ${line.text}`);
+      }
+      // Numbered items in unrecognised sections are skipped
+    }
+  }
+
+  return results.slice(0, 10);
 }
 
 /** Splits cleaned report text into structured lines for rendering or document export. */
