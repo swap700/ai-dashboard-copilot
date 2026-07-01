@@ -26,6 +26,7 @@ Recommended Actions
 
 BANNED phrases in this section: "Analyze", "Conduct a review", "Investigate", "Consider", "Monitor", "Explore", "Assess", "Evaluate".
 BANNED words anywhere in this report: "correlation", "z-score", "regression", "coefficient", "statistical", "outlier", "anomaly".
+BANNED FABRICATIONS: Never state specific percentages, growth rates, or dollar projections that cannot be directly calculated from the data summary provided. Do not write "profitability may decrease by 10%" or "sales could grow by 8%" — these numbers cannot be verified and will destroy credibility with finance-trained readers. Instead use directional language: "profitability is on a declining trajectory" or "Technology margins are compressing." Honest uncertainty is more credible than invented precision.
 
 Each action format: "[Decide / Restrict / Approve / Mandate] [what specifically] [by when]."
 Example of correct action: "Cap discounts above 25% to director approval only, effective immediately."
@@ -73,7 +74,9 @@ Rank from highest to lowest combined risk level. Explicitly differentiate: opera
 CRITICAL RULES for risk identification:
 — A large number of customers in one category is NOT concentration risk — that is distribution breadth, which is positive. Concentration risk only applies when a small number of CUSTOMERS generate a disproportionate share of REVENUE (e.g. top 5 customers = 70% of sales). Never flag healthy distribution as a risk.
 — Do not flag things that are performing well as risks.
-— Separate operational risks from strategic risks explicitly.)
+— Separate operational risks from strategic risks explicitly.
+— Likelihood must describe a FUTURE event, not a current state. If something is already true (e.g. margins are already low), the risk is that it worsens — not that it exists. Rephrase as: "Likelihood of further margin deterioration: High, given no current pricing intervention." Never assign Likelihood: High to something that is already a present fact.
+— NEVER invent dollar amounts. Any specific dollar figure in this report must come directly from the data summary. If no specific amount is computable from the data, use directional language instead — "significant profit erosion" not "$8,000 at risk." Fabricated dollar figures are worse than no figures at all.)
 
 Early Warning Signs
 (3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them.)

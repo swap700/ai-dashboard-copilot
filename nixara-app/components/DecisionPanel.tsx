@@ -35,7 +35,8 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
   // Form state
   const [notes, setNotes] = useState("");
   const [owner, setOwner] = useState("");
-  const [selectedRec, setSelectedRec] = useState("All recommendations");
+  const [selectedRec, setSelectedRec] = useState<string | null>(null);
+  const [recError, setRecError] = useState(false);
 
   // Task 14: two-step postpone
   const [pendingPostpone, setPendingPostpone] = useState(false);
@@ -48,6 +49,16 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
   // Parse numbered recommendations out of the report text
   const recs = parseRecommendations(reportText);
 
+  // Guard: if recommendations are shown, user must pick one before deciding
+  const requireRec = (): boolean => {
+    if (recs.length > 0 && selectedRec === null) {
+      setRecError(true);
+      return false;
+    }
+    setRecError(false);
+    return true;
+  };
+
   const handleDecide = async (choice: DecisionChoice, overridePostponeReason?: string) => {
     setSaving(choice);
     await recordDecision(reportType, choice, {
@@ -57,7 +68,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
       timeframe,
       notes,
       owner: owner.trim() || undefined,
-      recommendation: selectedRec,
+      recommendation: selectedRec ?? undefined,
       postponeReason: overridePostponeReason,
     });
     setSaving(null);
@@ -151,11 +162,12 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
       <p className="font-semibold text-text text-sm mb-0.5">📋 Record Your Decision</p>
       <p className="text-text-mute text-xs mb-4">What did you decide to do with these recommendations?</p>
 
-      {/* Task 13: Recommendation selector */}
+      {/* Recommendation selector — required before deciding */}
       {recs.length > 0 && (
         <div className="mb-3">
           <label className="block text-xs font-medium text-text-mute mb-1.5">
-            Which recommendation does this apply to?
+            Which recommendation does this apply to?{" "}
+            <span className="text-danger">*</span>
           </label>
           <div className="space-y-1.5">
             <label className="flex items-center gap-2 text-sm text-text cursor-pointer">
@@ -163,7 +175,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
                 type="radio"
                 name={`rec_${reportType}`}
                 checked={selectedRec === "All recommendations"}
-                onChange={() => setSelectedRec("All recommendations")}
+                onChange={() => { setSelectedRec("All recommendations"); setRecError(false); }}
                 className="accent-accent"
               />
               All recommendations
@@ -174,13 +186,18 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
                   type="radio"
                   name={`rec_${reportType}`}
                   checked={selectedRec === rec}
-                  onChange={() => setSelectedRec(rec)}
+                  onChange={() => { setSelectedRec(rec); setRecError(false); }}
                   className="accent-accent mt-0.5 shrink-0"
                 />
                 <span className="leading-snug">{rec}</span>
               </label>
             ))}
           </div>
+          {recError && (
+            <p className="text-danger text-xs mt-1.5">
+              Select which recommendation this decision applies to before proceeding.
+            </p>
+          )}
         </div>
       )}
 
@@ -216,7 +233,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
         <button
           type="button"
           disabled={saving !== null}
-          onClick={() => handleDecide("approved")}
+          onClick={() => { if (requireRec()) handleDecide("approved"); }}
           className="rounded-lg border border-success-border bg-success-bg text-success font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
         >
           {saving === "approved" ? "Saving…" : "✅ Approve"}
@@ -224,16 +241,16 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
         <button
           type="button"
           disabled={saving !== null}
-          onClick={() => handleDecide("rejected")}
+          onClick={() => { if (requireRec()) handleDecide("rejected"); }}
           className="rounded-lg border border-danger-border bg-danger-bg text-danger font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
         >
           {saving === "rejected" ? "Saving…" : "❌ Reject"}
         </button>
-        {/* Task 14: Postpone opens "Why?" step instead of saving immediately */}
+        {/* Postpone opens "Why?" step — also guarded by requireRec */}
         <button
           type="button"
           disabled={saving !== null}
-          onClick={() => setPendingPostpone(true)}
+          onClick={() => { if (requireRec()) setPendingPostpone(true); }}
           className="rounded-lg border border-warn-border bg-warn-bg text-warn font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
         >
           ⏸ Postpone
