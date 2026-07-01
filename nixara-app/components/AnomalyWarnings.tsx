@@ -1,10 +1,10 @@
 "use client";
 
 import type { Dataset } from "@/lib/data-analysis";
-import { detectAnomalies, numericColumns } from "@/lib/data-analysis";
+import { detectAnomalies, businessMetricColumns } from "@/lib/data-analysis";
 
 export default function AnomalyWarnings({ dataset }: { dataset: Dataset }) {
-  const findings = numericColumns(dataset)
+  const findings = businessMetricColumns(dataset)
     .map((col) => ({ col, count: detectAnomalies(dataset, col).length }))
     .filter((w) => w.count > 0);
 

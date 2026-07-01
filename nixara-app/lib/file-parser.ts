@@ -2,8 +2,16 @@ import Papa from "papaparse";
 import ExcelJS from "exceljs";
 import type { Dataset, Row } from "./data-analysis";
 
+// Fix M2: enforce file size limit before loading into memory
+const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
+
 /** Mirrors load_file: parses CSV or Excel into a row/column dataset. */
 export async function loadFile(file: File): Promise<Dataset> {
+  if (file.size > MAX_FILE_BYTES) {
+    throw new Error(
+      `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB) — maximum allowed size is 20 MB.`
+    );
+  }
   const name = file.name.toLowerCase();
   if (name.endsWith(".csv")) return parseCsv(file);
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) return parseExcel(file);

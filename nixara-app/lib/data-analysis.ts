@@ -54,6 +54,31 @@ export function numericColumns(dataset: Dataset): string[] {
   );
 }
 
+/**
+ * Subset of numericColumns that are genuine business metrics worth analysing
+ * for anomalies and charting. Excludes:
+ *   - ID / key columns (Row ID, Customer ID, Order ID …)
+ *   - Count / distinct-count aggregations (added by Tableau, Excel pivot tables …)
+ *   - Rank / index helper columns
+ * These would produce misleading anomaly signals if included.
+ */
+const NON_METRIC_PATTERNS = [
+  /\bid\b/i,
+  /\bcount\b/i,
+  /\bdistinct\b/i,
+  /\bkey\b/i,
+  /\bindex\b/i,
+  /\brank\b/i,
+  /\bnumber\b/i,
+  /\bno\b\.?$/i,    // "Order No.", "Row No."
+];
+
+export function businessMetricColumns(dataset: Dataset): string[] {
+  return numericColumns(dataset).filter(
+    (col) => !NON_METRIC_PATTERNS.some((pattern) => pattern.test(col))
+  );
+}
+
 export function categoricalColumns(dataset: Dataset): string[] {
   const numeric = new Set(numericColumns(dataset));
   return dataset.columns.filter((col) => !numeric.has(col));
@@ -198,8 +223,10 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     }
   }
 
+  // Only run anomaly detection on genuine business metrics, not ID/count columns
+  const metricCols = businessMetricColumns(filtered);
   const anomalyLines: string[] = [];
-  for (const col of numericCols.slice(0, 3)) {
+  for (const col of metricCols.slice(0, 5)) {
     const anomalies = detectAnomalies(filtered, col);
     if (anomalies.length > 0) {
       anomalyLines.push(`  ${col}: ${anomalies.length} anomalous rows (z > 2)`);
