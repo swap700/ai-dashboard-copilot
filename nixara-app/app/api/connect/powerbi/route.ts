@@ -108,8 +108,7 @@ async function fetchTable(
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
-interface ListBody {
-  action: "list-tables";
+interface BaseBody {
   tenantId: string;
   clientId: string;
   clientSecret: string;
@@ -117,7 +116,11 @@ interface ListBody {
   datasetId: string;
 }
 
-interface FetchBody extends ListBody {
+interface ListBody extends BaseBody {
+  action: "list-tables";
+}
+
+interface FetchBody extends BaseBody {
   action: "fetch-table";
   tableName: string;
 }
