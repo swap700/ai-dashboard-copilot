@@ -190,6 +190,17 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   lines.push(`Categorical columns: [${catCols.join(", ")}]`);
   lines.push("");
 
+  // Identify profit/revenue/sales columns — these should always be summed, never averaged
+  const profitKeywords = ["profit", "revenue", "sales", "income", "earnings", "margin"];
+  const profitCols = numericCols.filter(col =>
+    profitKeywords.some(k => col.toLowerCase().includes(k))
+  );
+  // Primary dollar metric: first profit-like col, or first sum-type numeric col
+  const primaryMetric =
+    profitCols[0] ??
+    numericCols.find(c => smartAgg(c) === "sum") ??
+    numericCols[0];
+
   if (numericCols.length > 0) {
     lines.push("NUMERIC SUMMARY");
     for (const col of numericCols) {
@@ -199,18 +210,42 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
       const s = std(values, m);
       const min = Math.min(...values);
       const max = Math.max(...values);
+      // Show absolute total for sum-type columns (profit, sales, revenue, etc.)
+      const aggType = smartAgg(col);
+      const total = aggType === "sum" ? values.reduce((a, b) => a + b, 0) : null;
       lines.push(
-        `  ${col}: count=${values.length} mean=${m.toFixed(2)} std=${s.toFixed(2)} min=${min.toFixed(2)} max=${max.toFixed(2)}`
+        `  ${col}: count=${values.length} mean=${m.toFixed(2)} std=${s.toFixed(2)} ` +
+        `min=${min.toFixed(2)} max=${max.toFixed(2)}` +
+        (total !== null ? ` TOTAL=${total.toFixed(2)}` : "")
       );
     }
     lines.push("");
   }
 
-  for (const cat of catCols.slice(0, 3)) {
-    const uniqueValues = new Set(rows.map((r) => r[cat]));
-    if (uniqueValues.size > 20) continue;
+  // Prioritise profit/sales cols in breakdowns so AI always sees dollar totals
+  const breakdownMetrics = [
+    ...profitCols,
+    ...numericCols.filter(c => !profitCols.includes(c) && smartAgg(c) === "sum"),
+    ...numericCols.filter(c => !profitCols.includes(c) && smartAgg(c) !== "sum"),
+  ].slice(0, 4);
+
+  // Find the most useful categorical columns: prefer low-cardinality (2–20 unique values)
+  // Skip ID/date/name columns, scan ALL catCols (not just first 3)
+  const lowCardCats = catCols.filter(col => {
+    const u = new Set(rows.map(r => r[col])).size;
+    return u >= 2 && u <= 20;
+  });
+  const highCardCats = catCols.filter(col => {
+    const u = new Set(rows.map(r => r[col])).size;
+    return u > 20 && u <= 200; // e.g. State/Province — too many for full table but useful top/bottom
+  });
+
+  // Standard breakdowns for low-cardinality categories
+  let breakdownCount = 0;
+  for (const cat of lowCardCats) {
+    if (breakdownCount >= 4) break;
     const breakdownLines: string[] = [];
-    for (const nc of numericCols.slice(0, 3)) {
+    for (const nc of breakdownMetrics) {
       const agg = aggregateBy(filtered, cat, nc);
       breakdownLines.push(
         `  ${nc} by ${cat}: ` + agg.map((a) => `${a.key}=${a.value.toFixed(2)}`).join(", ")
@@ -219,6 +254,48 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     if (breakdownLines.length > 0) {
       lines.push(`BREAKDOWN BY ${cat.toUpperCase()}`);
       lines.push(...breakdownLines);
+      lines.push("");
+      breakdownCount++;
+    }
+  }
+
+  // Top/bottom breakdown for high-cardinality columns (e.g. State) — surfaces loss-makers
+  if (primaryMetric) {
+    for (const cat of highCardCats.slice(0, 2)) {
+      const agg = aggregateBy(filtered, cat, primaryMetric);
+      if (agg.length < 3) continue;
+      const top5    = agg.slice(0, 5);
+      const bottom5 = agg.slice(-5).reverse();
+      lines.push(`TOP/BOTTOM BY ${cat.toUpperCase()} (${primaryMetric})`);
+      lines.push(`  Top 5:    ` + top5.map(a => `${a.key}=${a.value.toFixed(2)}`).join(", "));
+      lines.push(`  Bottom 5: ` + bottom5.map(a => `${a.key}=${a.value.toFixed(2)}`).join(", "));
+      lines.push("");
+    }
+  }
+
+  // Cross-breakdown: first two low-cardinality cats (e.g. Region × Category)
+  if (lowCardCats.length >= 2 && primaryMetric) {
+    const cat1 = lowCardCats[0];
+    const cat2 = lowCardCats[1];
+    const groups = new Map<string, number[]>();
+    for (const row of rows) {
+      const key = `${row[cat1]} × ${row[cat2]}`;
+      const v = row[primaryMetric];
+      if (typeof v !== "number") continue;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(v);
+    }
+    const aggType = smartAgg(primaryMetric);
+    const crossAgg = Array.from(groups.entries())
+      .map(([key, vals]) => ({
+        key,
+        value: aggType === "sum" ? vals.reduce((a, b) => a + b, 0) : mean(vals),
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 12);
+    if (crossAgg.length > 0) {
+      lines.push(`CROSS-BREAKDOWN ${cat1.toUpperCase()} × ${cat2.toUpperCase()} (${primaryMetric})`);
+      lines.push("  " + crossAgg.map(a => `${a.key}=${a.value.toFixed(2)}`).join(", "));
       lines.push("");
     }
   }
