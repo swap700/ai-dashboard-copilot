@@ -50,6 +50,8 @@ interface SessionState {
     reportType: ReportType,
     outcome: RecordedOutcome & { notes?: string }
   ) => Promise<void>;
+  /** Clear all in-memory and sessionStorage decisions + outcomes when new data is loaded. */
+  clearDecisions: () => void;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -128,8 +130,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.sessionStorage.setItem(OUTCOMES_KEY, JSON.stringify(next));
   };
 
+  const clearDecisions = () => {
+    setDecisions({});
+    setOutcomes({});
+    window.sessionStorage.removeItem(DECISIONS_KEY);
+    window.sessionStorage.removeItem(OUTCOMES_KEY);
+  };
+
   const value = useMemo(
-    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome }),
+    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, clearDecisions }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId, decisions, outcomes]
   );

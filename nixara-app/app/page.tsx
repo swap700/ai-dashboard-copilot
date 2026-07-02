@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useNixaraStore } from "@/lib/store";
+import { useSession } from "@/lib/session-context";
 import BIConnector from "@/components/BIConnector";
 import MetricsRow from "@/components/MetricsRow";
 import DataPreview from "@/components/DataPreview";
@@ -19,13 +20,18 @@ export default function DashboardPage() {
   const { dataset, fileName, setup, apiKey, reports, setDataset, setSetup, setApiKey, setReports } =
     useNixaraStore();
 
+  // ── Session context — decisions + outcomes ────────────────────────────────
+  const { clearDecisions } = useSession();
+
   // ── Transient UI state (don't need to survive navigation) ────────────────
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // BIConnector already calls cleanDataset before calling onLoaded
+  // BIConnector already calls cleanDataset before calling onLoaded.
+  // Clear prior decisions so they don't ghost-persist from a previous dataset.
   const handleLoaded = (dataset: Dataset, name: string) => {
     setDataset(dataset, name);
+    clearDecisions();
   };
 
   const metrics = useMemo(() => {
