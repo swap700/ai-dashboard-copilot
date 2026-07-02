@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useNixaraStore } from "@/lib/store";
-import FileUploader from "@/components/FileUploader";
+import BIConnector from "@/components/BIConnector";
 import MetricsRow from "@/components/MetricsRow";
 import DataPreview from "@/components/DataPreview";
 import Charts from "@/components/Charts";
 import AnomalyWarnings from "@/components/AnomalyWarnings";
 import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
-import { buildDataSummary, cleanDataset, dashboardScore, numericColumns } from "@/lib/data-analysis";
+import { buildDataSummary, dashboardScore, numericColumns } from "@/lib/data-analysis";
 import type { Dataset } from "@/lib/data-analysis";
 import { REPORT_TYPES, type ReportType } from "@/lib/report";
 import { incrementFreeReportsUsed } from "@/lib/free-tier";
@@ -23,8 +23,9 @@ export default function DashboardPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleLoaded = (raw: Dataset, name: string) => {
-    setDataset(cleanDataset(raw), name);
+  // BIConnector already calls cleanDataset before calling onLoaded
+  const handleLoaded = (dataset: Dataset, name: string) => {
+    setDataset(dataset, name);
   };
 
   const metrics = useMemo(() => {
@@ -78,7 +79,7 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <FileUploader onLoaded={handleLoaded} />
+      <BIConnector onLoaded={handleLoaded} />
 
       {dataset && (
         <>

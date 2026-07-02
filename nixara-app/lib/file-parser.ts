@@ -5,6 +5,16 @@ import type { Dataset, Row } from "./data-analysis";
 // Fix M2: enforce file size limit before loading into memory
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
 
+/** Parse a raw CSV string (returned from Tableau / Power BI API routes). */
+export function parseCsvText(text: string): Dataset {
+  const result = Papa.parse<Row>(text, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: true,
+  });
+  return { rows: result.data, columns: result.meta.fields ?? [] };
+}
+
 /** Mirrors load_file: parses CSV or Excel into a row/column dataset. */
 export async function loadFile(file: File): Promise<Dataset> {
   if (file.size > MAX_FILE_BYTES) {
