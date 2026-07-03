@@ -53,6 +53,10 @@ export default function DashboardPage() {
       const usingOwnKey = apiKey.trim().startsWith("sk-");
       const next: Partial<Record<ReportType, string>> = {};
 
+      // One UUID per button click — shared across all report-type calls so the
+      // server counts this as a single generate SESSION, not 3 separate uses.
+      const sessionId = crypto.randomUUID();
+
       for (const reportType of REPORT_TYPES) {
         const res = await fetch("/api/generate-report", {
           method: "POST",
@@ -64,6 +68,7 @@ export default function DashboardPage() {
             reportType,
             summary,
             userKey: apiKey,
+            sessionId,
           }),
         });
         const data = await res.json();
