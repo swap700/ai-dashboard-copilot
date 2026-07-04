@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { fetchDecisionById, fetchOutcomeForDecision, logOutcome, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
+import { fetchDecisionById, fetchOutcomeForDecision, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
 import OutcomeForm from "@/components/OutcomeForm";
 import DecisionCard from "@/components/DecisionCard";
 import { REPORT_TYPES } from "@/lib/report";
@@ -91,7 +91,7 @@ export default function OutcomesPage() {
             type="number"
             value={lookupId}
             onChange={(e) => setLookupId(e.target.value)}
-            placeholder="Decision ID, e.g. 2847"
+            placeholder="Numeric ID, e.g. 19 (from ES-19, OD-19, RR-19)"
             className="flex-1 rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text"
           />
           <button
@@ -110,7 +110,7 @@ export default function OutcomesPage() {
           <div className="border-t border-border pt-4 mt-2">
             {/* Decision context — confirms which decision this is */}
             <p className="font-semibold text-text text-sm mb-1">
-              {lookupResult.report_type} · ID #{lookupResult.id}
+              {lookupResult.report_type} · ID {formatDecisionId(lookupResult.report_type, lookupResult.id)}
             </p>
             <p className="text-text-mute text-xs mb-2">
               {lookupResult.role} · {lookupResult.dataset_name} · {lookupResult.timeframe}

@@ -4,6 +4,19 @@ import type { ReportType } from "./report";
 export type DecisionChoice = "approved" | "rejected" | "postponed";
 export type OutcomeRating = "exceeded" | "met" | "missed";
 
+const REPORT_PREFIX: Record<string, string> = {
+  "Executive Summary":  "ES",
+  "Operational Detail": "OD",
+  "Risk Report":        "RR",
+};
+
+/** Returns a display ID like "ES-19" given a report type and numeric DB id. */
+export function formatDecisionId(reportType: string | null | undefined, id: number | null | undefined): string {
+  if (!id) return "—";
+  const prefix = (reportType && REPORT_PREFIX[reportType]) ?? "D";
+  return `${prefix}-${id}`;
+}
+
 export interface DecisionRow {
   id: number;
   created_at: string;

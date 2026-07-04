@@ -3,6 +3,7 @@
 import OutcomeForm from "./OutcomeForm";
 import type { RecordedDecision, RecordedOutcome } from "@/lib/session-context";
 import type { DecisionChoice, OutcomeRating } from "@/lib/decisions";
+import { formatDecisionId } from "@/lib/decisions";
 
 const BORDER: Record<DecisionChoice, string> = {
   approved:  "border-l-success",
@@ -43,7 +44,7 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
         <p className="font-semibold text-text text-sm">
           {reportType}
           {decision.decisionId && (
-            <span className="text-text-dim font-normal"> · ID #{decision.decisionId}</span>
+            <span className="text-text-dim font-normal"> · ID {formatDecisionId(reportType, decision.decisionId)}</span>
           )}
         </p>
         <div className="flex items-center gap-2">

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSession } from "@/lib/session-context";
 import { parseRecommendations } from "@/lib/report";
 import type { DecisionChoice } from "@/lib/decisions";
+import { formatDecisionId } from "@/lib/decisions";
 import type { ReportType } from "@/lib/report";
 
 interface Props {
@@ -86,7 +87,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
             {prior.decisionId && (
               <>
                 <span className="opacity-60 font-normal">·</span>
-                ID <strong>#{prior.decisionId}</strong>
+                ID <strong>{formatDecisionId(reportType, prior.decisionId)}</strong>
               </>
             )}
           </span>
@@ -108,7 +109,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
         )}
         {prior.decisionId && (
           <p className="text-text-dim text-xs">
-            Save Decision ID #{prior.decisionId} — enter it in the Outcomes tab to log what happened.
+            Save Decision ID {formatDecisionId(reportType, prior.decisionId)} — enter it in the Outcomes tab to log what happened.
           </p>
         )}
       </div>
