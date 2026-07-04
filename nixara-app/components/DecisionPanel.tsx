@@ -31,7 +31,7 @@ const POSTPONE_REASONS = [
 ] as const;
 
 export default function DecisionPanel({ reportType, role, datasetName, question, timeframe, reportText }: Props) {
-  const { decisions, recordDecision } = useSession();
+  const { decisions, recordDecision, updateDecision } = useSession();
 
   // Form state
   const [notes, setNotes] = useState("");
@@ -44,6 +44,11 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
   const [postponeReason, setPostponeReason] = useState<typeof POSTPONE_REASONS[number]>(POSTPONE_REASONS[0]);
 
   const [saving, setSaving] = useState<DecisionChoice | null>(null);
+
+  // Edit mode for already-recorded decisions
+  const [editing, setEditing] = useState(false);
+  const [editPostpone, setEditPostpone] = useState(false);
+  const [editPostponeReason, setEditPostponeReason] = useState<typeof POSTPONE_REASONS[number]>(POSTPONE_REASONS[0]);
 
   const prior = decisions[reportType];
 
@@ -78,9 +83,125 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
 
   if (prior) {
     const badge = BADGE[prior.choice];
+
+    // ── Edit-postpone reason picker ──────────────────────────────────────────
+    if (editPostpone) {
+      return (
+        <div className="bg-warn-bg border border-warn-border rounded-xl px-5 py-4 mt-4">
+          <p className="font-semibold text-text text-sm mb-0.5">⏸ Why are you postponing?</p>
+          <p className="text-text-mute text-xs mb-3">Pick the closest reason.</p>
+          <div className="space-y-2 mb-4">
+            {POSTPONE_REASONS.map((reason) => (
+              <label key={reason} className="flex items-center gap-2.5 text-sm text-text cursor-pointer">
+                <input
+                  type="radio"
+                  name="edit_postpone_reason"
+                  checked={editPostponeReason === reason}
+                  onChange={() => setEditPostponeReason(reason)}
+                  className="accent-accent"
+                />
+                {reason}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={saving !== null}
+              onClick={async () => {
+                setSaving("postponed");
+                await updateDecision(reportType, "postponed", editPostponeReason);
+                setSaving(null);
+                setEditing(false);
+                setEditPostpone(false);
+              }}
+              className="flex-1 rounded-lg border border-warn-border bg-warn-bg text-warn font-semibold text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
+            >
+              {saving === "postponed" ? "Saving…" : "⏸ Confirm Postpone"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditPostpone(false)}
+              className="px-3 rounded-lg border border-border text-text-mute text-sm hover:bg-surface transition-colors"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Inline edit picker ───────────────────────────────────────────────────
+    if (editing) {
+      return (
+        <div className="bg-accent-bg-soft border border-accent-border rounded-xl px-5 py-4 mt-4">
+          <p className="font-semibold text-text text-sm mb-0.5">✏️ Change your decision</p>
+          <p className="text-text-mute text-xs mb-4">
+            Currently: <span className="font-medium">{badge.icon} {badge.label}</span>
+            {prior.decisionId && <span> · ID {formatDecisionId(reportType, prior.decisionId)}</span>}
+          </p>
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <button
+              type="button"
+              disabled={saving !== null}
+              onClick={async () => {
+                setSaving("approved");
+                await updateDecision(reportType, "approved");
+                setSaving(null);
+                setEditing(false);
+              }}
+              className="rounded-lg border border-success-border bg-success-bg text-success font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
+            >
+              {saving === "approved" ? "Saving…" : "✅ Approve"}
+            </button>
+            <button
+              type="button"
+              disabled={saving !== null}
+              onClick={async () => {
+                setSaving("rejected");
+                await updateDecision(reportType, "rejected");
+                setSaving(null);
+                setEditing(false);
+              }}
+              className="rounded-lg border border-danger-border bg-danger-bg text-danger font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
+            >
+              {saving === "rejected" ? "Saving…" : "❌ Reject"}
+            </button>
+            <button
+              type="button"
+              disabled={saving !== null}
+              onClick={() => setEditPostpone(true)}
+              className="rounded-lg border border-warn-border bg-warn-bg text-warn font-medium text-sm py-2 hover:opacity-80 disabled:opacity-40 transition-opacity"
+            >
+              ⏸ Postpone
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-text-mute text-xs hover:text-text transition-colors"
+          >
+            ← Cancel
+          </button>
+        </div>
+      );
+    }
+
+    // ── Confirmed state (default) ────────────────────────────────────────────
     return (
       <div className="bg-accent-bg-soft border border-accent-border rounded-xl px-5 py-4 mt-4">
-        <p className="font-semibold text-text text-sm mb-2">📋 Decision Recorded</p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="font-semibold text-text text-sm">📋 Decision Recorded</p>
+          {prior.decisionId && (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-xs text-accent hover:text-accent-dk font-medium transition-colors"
+            >
+              ✏️ Edit
+            </button>
+          )}
+        </div>
         <div className="flex flex-wrap items-center gap-3 mb-2">
           <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${badge.bg} ${badge.fg}`}>
             {badge.icon} {badge.label}

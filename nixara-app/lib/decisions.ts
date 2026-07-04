@@ -118,6 +118,25 @@ export async function fetchDecisionById(id: number): Promise<DecisionRow | null>
   return row as DecisionRow | null;
 }
 
+/**
+ * Updates the choice (approved/rejected/postponed) on an existing decision row
+ * via the update_decision_choice SECURITY DEFINER RPC.
+ * Returns true on success, false if the update failed or Supabase isn't configured.
+ */
+export async function updateDecisionChoice(
+  id: number,
+  newChoice: DecisionChoice,
+  postponeReason?: string
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { error } = await supabase.rpc("update_decision_choice", {
+    p_id:             id,
+    p_decision:       newChoice,
+    p_postpone_reason: postponeReason ?? null,
+  });
+  return !error;
+}
+
 export interface OutcomeRow {
   id: number;
   metric_name: string;

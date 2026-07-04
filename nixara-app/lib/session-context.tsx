@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { logDecisionRecord, logOutcome, type DecisionChoice, type OutcomeRating } from "./decisions";
+import { logDecisionRecord, logOutcome, updateDecisionChoice, type DecisionChoice, type OutcomeRating } from "./decisions";
 import type { ReportType } from "./report";
 
 const SESSION_ID_KEY = "nixara_analytics_session_id";
@@ -49,6 +49,12 @@ interface SessionState {
   recordOutcome: (
     reportType: ReportType,
     outcome: RecordedOutcome & { notes?: string }
+  ) => Promise<void>;
+  /** Change the choice on an already-recorded decision (updates DB + local state). */
+  updateDecision: (
+    reportType: ReportType,
+    newChoice: DecisionChoice,
+    postponeReason?: string
   ) => Promise<void>;
   /** Clear all in-memory and sessionStorage decisions + outcomes when new data is loaded. */
   clearDecisions: () => void;
@@ -130,6 +136,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     window.sessionStorage.setItem(OUTCOMES_KEY, JSON.stringify(next));
   };
 
+  const updateDecision: SessionState["updateDecision"] = async (reportType, newChoice, postponeReason) => {
+    const decision = decisions[reportType];
+    if (!decision) return;
+    // Update DB if a decision ID exists
+    if (decision.decisionId) {
+      await updateDecisionChoice(decision.decisionId, newChoice, postponeReason);
+    }
+    const next: typeof decisions = {
+      ...decisions,
+      [reportType]: {
+        ...decision,
+        choice: newChoice,
+        postponeReason: newChoice === "postponed" ? postponeReason : undefined,
+      },
+    };
+    setDecisions(next);
+    window.sessionStorage.setItem(DECISIONS_KEY, JSON.stringify(next));
+  };
+
   const clearDecisions = () => {
     setDecisions({});
     setOutcomes({});
@@ -138,7 +163,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, clearDecisions }),
+    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, updateDecision, clearDecisions }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId, decisions, outcomes]
   );
