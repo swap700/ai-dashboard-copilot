@@ -87,12 +87,17 @@ export async function logOutcome(params: LogOutcomeParams): Promise<void> {
  * Mirrors fetch_decision_by_id (lines 190-210), but via the get_decision_by_id
  * RPC rather than a direct table SELECT — anon has no SELECT grant on
  * nixara_decisions (see migration note), only EXECUTE on this function.
+ *
+ * Note: supabase.rpc() always returns an array, even for single-row results.
+ * We unwrap the first element and return null if the array is empty (not found).
  */
 export async function fetchDecisionById(id: number): Promise<DecisionRow | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("get_decision_by_id", { p_id: id });
   if (error || !data) return null;
-  return data as DecisionRow;
+  // RPC returns an array — unwrap the first row (null if not found)
+  const row = Array.isArray(data) ? (data[0] ?? null) : data;
+  return row as DecisionRow | null;
 }
 
 interface LogEventParams {
