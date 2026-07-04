@@ -2,16 +2,23 @@
 
 import { useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { fetchDecisionById, logOutcome, type DecisionRow } from "@/lib/decisions";
+import { fetchDecisionById, fetchOutcomeForDecision, logOutcome, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
 import OutcomeForm from "@/components/OutcomeForm";
 import DecisionCard from "@/components/DecisionCard";
 import { REPORT_TYPES } from "@/lib/report";
 import type { RecordedOutcome } from "@/lib/session-context";
 
+const ACCURACY_BADGE: Record<string, { label: string; bg: string; fg: string }> = {
+  exceeded: { label: "🟢 Exceeded",   bg: "bg-success-bg", fg: "text-success" },
+  met:      { label: "🎯 Met",        bg: "bg-accent-bg-soft", fg: "text-accent" },
+  missed:   { label: "🔴 Fell Short", bg: "bg-danger-bg",  fg: "text-danger"  },
+};
+
 export default function OutcomesPage() {
   const { sessionId, decisions, outcomes, recordOutcome } = useSession();
   const [lookupId, setLookupId] = useState("");
   const [lookupResult, setLookupResult] = useState<DecisionRow | null>(null);
+  const [lookupOutcome, setLookupOutcome] = useState<OutcomeRow | null | "none">(null);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [lookupOutcomeLogged, setLookupOutcomeLogged] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -24,16 +31,18 @@ export default function OutcomesPage() {
     setSearching(true);
     setLookupError(null);
     setLookupResult(null);
+    setLookupOutcome(null);
     setLookupOutcomeLogged(false);
     const row = await fetchDecisionById(id);
     setSearching(false);
     if (!row) {
-      setLookupError(
-        "Decision not found. Double-check the ID, or ask the admin to enable the lookup function (see get_decision_by_id in the project notes)."
-      );
+      setLookupError("Decision not found. Double-check the ID.");
       return;
     }
     setLookupResult(row);
+    // Also fetch any outcome already linked to this decision
+    const existing = await fetchOutcomeForDecision(id);
+    setLookupOutcome(existing ?? "none");
   };
 
   const handleLookupOutcome = async (outcome: RecordedOutcome & { notes?: string }) => {
@@ -99,19 +108,49 @@ export default function OutcomesPage() {
 
         {lookupResult && (
           <div className="border-t border-border pt-4 mt-2">
+            {/* Decision context — confirms which decision this is */}
             <p className="font-semibold text-text text-sm mb-1">
               {lookupResult.report_type} · ID #{lookupResult.id}
             </p>
-            <p className="text-text-mute text-xs mb-3">
+            <p className="text-text-mute text-xs mb-2">
               {lookupResult.role} · {lookupResult.dataset_name} · {lookupResult.timeframe}
             </p>
             {lookupResult.question && (
-              <p className="text-text text-sm italic mb-3">&quot;{lookupResult.question}&quot;</p>
+              <p className="text-text-mute text-xs italic mb-4">&quot;{lookupResult.question}&quot;</p>
             )}
+
+            {/* Outcome section — show existing outcome OR form to log one */}
             {lookupOutcomeLogged ? (
               <p className="text-success text-sm font-medium">✓ Outcome logged. Thanks!</p>
-            ) : (
+            ) : lookupOutcome && lookupOutcome !== "none" ? (
+              // Already has an outcome — show it read-only
+              <div className="space-y-2">
+                <div className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-sm text-text">
+                  <strong>{lookupOutcome.metric_name}</strong>:{" "}
+                  {lookupOutcome.metric_before ?? "—"} → {lookupOutcome.metric_after ?? "—"}{" "}
+                  {lookupOutcome.metric_unit}
+                  {lookupOutcome.metric_before && lookupOutcome.metric_before !== 0 && lookupOutcome.metric_after !== null && (
+                    <span className="text-success font-medium">
+                      {" "}({(((lookupOutcome.metric_after - lookupOutcome.metric_before) / Math.abs(lookupOutcome.metric_before)) * 100) > 0 ? "+" : ""}
+                      {(((lookupOutcome.metric_after - lookupOutcome.metric_before) / Math.abs(lookupOutcome.metric_before)) * 100).toFixed(1)}%)
+                    </span>
+                  )}
+                </div>
+                {ACCURACY_BADGE[lookupOutcome.outcome_rating] && (
+                  <div className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${ACCURACY_BADGE[lookupOutcome.outcome_rating].bg} ${ACCURACY_BADGE[lookupOutcome.outcome_rating].fg}`}>
+                    Accuracy: {ACCURACY_BADGE[lookupOutcome.outcome_rating].label}
+                  </div>
+                )}
+                {lookupOutcome.outcome_notes && (
+                  <p className="text-text-mute text-xs">{lookupOutcome.outcome_notes}</p>
+                )}
+              </div>
+            ) : lookupOutcome === "none" ? (
+              // No outcome yet — show the form
               <OutcomeForm onSubmit={handleLookupOutcome} />
+            ) : (
+              // Still loading outcome
+              <p className="text-text-mute text-xs">Loading outcome…</p>
             )}
           </div>
         )}

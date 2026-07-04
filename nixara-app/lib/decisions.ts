@@ -105,6 +105,29 @@ export async function fetchDecisionById(id: number): Promise<DecisionRow | null>
   return row as DecisionRow | null;
 }
 
+export interface OutcomeRow {
+  id: number;
+  metric_name: string;
+  metric_before: number | null;
+  metric_after: number | null;
+  metric_unit: string;
+  outcome_rating: string;
+  outcome_notes: string;
+}
+
+/**
+ * Fetches the most recent outcome linked to a decision, via the
+ * get_outcome_for_decision SECURITY DEFINER RPC (anon has no SELECT on
+ * nixara_outcomes directly).  Returns null if none exists yet.
+ */
+export async function fetchOutcomeForDecision(decisionId: number): Promise<OutcomeRow | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.rpc("get_outcome_for_decision", { p_decision_id: decisionId });
+  if (error || !data) return null;
+  const row = Array.isArray(data) ? (data[0] ?? null) : data;
+  return row as OutcomeRow | null;
+}
+
 interface LogEventParams {
   sessionId: string;
   eventType: string;
