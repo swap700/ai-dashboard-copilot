@@ -33,28 +33,33 @@ export interface LogDecisionParams {
   postponeReason?: string;
 }
 
-/** Mirrors log_decision_record (lines 92-139) — returns the new row's id, or null if Supabase isn't configured. */
+/**
+ * Mirrors log_decision_record (lines 92-139) — returns the new row's id, or null if Supabase isn't configured.
+ *
+ * Uses the log_decision_record() SECURITY DEFINER RPC instead of a direct
+ * .insert().select("id") call, because anon has no SELECT grant on
+ * nixara_decisions. A plain .insert().select() would be rolled back when the
+ * subsequent SELECT fails RLS, leaving the table empty.  The RPC runs as the
+ * table owner, does the INSERT internally, and returns the new id — anon only
+ * needs EXECUTE on the function.
+ */
 export async function logDecisionRecord(params: LogDecisionParams): Promise<number | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase
-    .from("nixara_decisions")
-    .insert({
-      session_id: params.sessionId,
-      report_type: params.reportType,
-      role: params.role,
-      dataset_name: params.datasetName,
-      decision: params.choice,
-      notes: params.notes ?? "",
-      timeframe: params.timeframe,
-      question: params.question,
-      owner: params.owner ?? null,
-      recommendation: params.recommendation ?? null,
-      postpone_reason: params.postponeReason ?? null,
-    })
-    .select("id")
-    .single();
-  if (error || !data) return null;
-  return data.id as number;
+  const { data, error } = await supabase.rpc("log_decision_record", {
+    p_session_id:      params.sessionId,
+    p_report_type:     params.reportType,
+    p_role:            params.role,
+    p_dataset_name:    params.datasetName,
+    p_decision:        params.choice,
+    p_notes:           params.notes ?? "",
+    p_timeframe:       params.timeframe,
+    p_question:        params.question,
+    p_owner:           params.owner ?? null,
+    p_recommendation:  params.recommendation ?? null,
+    p_postpone_reason: params.postponeReason ?? null,
+  });
+  if (error || data === null || data === undefined) return null;
+  return data as number;
 }
 
 export interface LogOutcomeParams {
