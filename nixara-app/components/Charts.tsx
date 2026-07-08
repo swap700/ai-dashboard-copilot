@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import type { Dataset } from "@/lib/data-analysis";
-import { aggregateBy, categoricalColumns, numericColumns } from "@/lib/data-analysis";
+import { aggregateBy, selectChartColumns } from "@/lib/data-analysis";
 
 function BarPanel({ title, data, color }: { title: string; data: { key: string; value: number }[]; color: string }) {
   const height = Math.max(220, data.length * 32);
@@ -44,22 +44,18 @@ function BarPanel({ title, data, color }: { title: string; data: { key: string; 
   );
 }
 
-export default function Charts({ dataset }: { dataset: Dataset }) {
-  const cats = categoricalColumns(dataset);
-  const nums = numericColumns(dataset);
+export default function Charts({ dataset, decisionText = "" }: { dataset: Dataset; decisionText?: string }) {
+  const { category, metrics } = selectChartColumns(dataset, decisionText);
 
-  if (cats.length === 0 || nums.length === 0) return null;
-  const firstCat = cats[0];
-  const uniqueCount = new Set(dataset.rows.map((r) => r[firstCat])).size;
-  if (uniqueCount > 25) return null;
+  if (!category || metrics.length === 0) return null;
 
-  const chart1 = aggregateBy(dataset, firstCat, nums[0]);
-  const chart2 = nums[1] ? aggregateBy(dataset, firstCat, nums[1]) : null;
+  const chart1 = aggregateBy(dataset, category, metrics[0]);
+  const chart2 = metrics[1] ? aggregateBy(dataset, category, metrics[1]) : null;
 
   return (
     <div className="grid md:grid-cols-2 gap-4 mb-8">
-      <BarPanel title={`${nums[0]} by ${firstCat}`} data={chart1} color="#C2542A" />
-      {chart2 && <BarPanel title={`${nums[1]} by ${firstCat}`} data={chart2} color="#D98F5E" />}
+      <BarPanel title={`${metrics[0]} by ${category}`} data={chart1} color="#C2542A" />
+      {chart2 && <BarPanel title={`${metrics[1]} by ${category}`} data={chart2} color="#D98F5E" />}
     </div>
   );
 }

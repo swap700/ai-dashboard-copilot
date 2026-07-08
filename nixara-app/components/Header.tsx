@@ -29,14 +29,14 @@ export default function Header() {
     >
       <a
         href="https://nixara-landing.vercel.app"
-        className="inline-flex items-center gap-1.5 text-xs font-medium text-text-mute hover:text-accent transition-colors mb-3"
+        aria-label="Back to the Nixara landing page"
+        className="inline-block no-underline hover:opacity-80 transition-opacity"
       >
-        ← Back to nixara-landing.vercel.app
+        <p className="font-sans text-[clamp(2.5rem,6vw,4.5rem)] font-black text-text m-0 leading-[1.1] tracking-tight">
+          {title}
+          <span className="inline-block w-[2px] h-[0.8em] bg-accent ml-1 animate-pulse align-middle" />
+        </p>
       </a>
-      <p className="font-sans text-[clamp(2.5rem,6vw,4.5rem)] font-black text-text m-0 leading-[1.1] tracking-tight">
-        {title}
-        <span className="inline-block w-[2px] h-[0.8em] bg-accent ml-1 animate-pulse align-middle" />
-      </p>
       <p className="text-sm text-text-dim uppercase tracking-[0.08em] font-medium mt-1 mb-2">
         nik·sa·ra /nɪkˈsɑːrə/ ·{" "}
         <em className="italic normal-case tracking-normal text-[0.95em]">

@@ -99,7 +99,7 @@ export default function DashboardPage() {
           </p>
           <MetricsRow metrics={metrics} />
           <DataPreview dataset={dataset} />
-          <Charts dataset={dataset} />
+          <Charts dataset={dataset} decisionText={setup.decision} />
           <AnomalyWarnings dataset={dataset} />
 
           <ReportSetup

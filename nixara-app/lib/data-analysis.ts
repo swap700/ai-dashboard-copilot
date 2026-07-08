@@ -84,6 +84,95 @@ export function categoricalColumns(dataset: Dataset): string[] {
   return dataset.columns.filter((col) => !numeric.has(col));
 }
 
+// ── Generic (industry-agnostic) column relevance matching ──────────────────
+//
+// Deliberately contains NO domain vocabulary (no "profit"/"revenue"/etc). It only
+// knows generic English grammar (stopwords, plural stripping, camelCase splitting)
+// so it works the same whether the uploaded data is retail, healthcare, construction,
+// legal, or anything else — relevance comes entirely from the user's own words.
+
+const GENERIC_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "in", "on", "for", "to", "is", "are",
+  "was", "were", "be", "been", "being", "we", "you", "your", "our", "it",
+  "its", "this", "that", "these", "those", "with", "by", "at", "as", "should",
+  "which", "what", "where", "when", "who", "whom", "how", "do", "does", "did",
+  "if", "than", "then", "so", "not", "no", "yes", "into", "about", "over",
+  "under", "up", "down", "out", "vs", "versus", "us", "i", "have", "has",
+  "had", "will", "would", "can", "could", "may", "might", "must", "need",
+  "any", "all", "each", "per",
+]);
+
+/** Naive English singularization — strips common plural suffixes. Generic, not domain-specific. */
+function singularize(word: string): string {
+  if (word.length > 5 && word.endsWith("ies")) return word.slice(0, -3) + "y";
+  // Only strip "-es" for the sibilant-plural pattern (boxes->box, matches->match,
+  // wishes->wish) — NOT for words that just add "s" to a base ending in "e"
+  // (rates->rate, sales->sale), which the "s"-strip rule below already handles.
+  if (word.length > 4 && /(?:[sxz]|[cs]h)es$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+
+/** Splits a string (free text OR a column name, including camelCase/snake_case) into normalized tokens. */
+function tokenize(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // camelCase -> camel Case
+    .split(/[^a-zA-Z0-9]+/)
+    .map((t) => singularize(t.toLowerCase()))
+    .filter((t) => t.length > 2 && !GENERIC_STOPWORDS.has(t));
+}
+
+/** Number of overlapping tokens between a free-text question and a column name. */
+function relevanceScore(questionTokens: Set<string>, columnName: string): number {
+  if (questionTokens.size === 0) return 0;
+  const colTokens = tokenize(columnName);
+  let score = 0;
+  for (const t of colTokens) {
+    if (questionTokens.has(t)) score++;
+  }
+  return score;
+}
+
+export interface ChartColumnSelection {
+  category: string | null;
+  metrics: string[]; // up to 2, ordered by relevance/priority
+}
+
+/**
+ * Picks which categorical column and up to 2 numeric metric columns to chart.
+ *
+ * When decisionText overlaps with column names, those columns are preferred —
+ * so "Which regions are driving readmission rates?" surfaces Region / Readmission
+ * Rate for a hospital dataset just as well as "which regions drive profit" surfaces
+ * Region / Profit for a retail one. No industry vocabulary is hardcoded.
+ *
+ * Falls back to structural defaults (file column order, excluding ID/count/key/rank
+ * columns via businessMetricColumns) when there's no question text yet or no overlap.
+ */
+export function selectChartColumns(dataset: Dataset, decisionText: string): ChartColumnSelection {
+  const cats = categoricalColumns(dataset);
+  const metricCols = businessMetricColumns(dataset);
+  if (cats.length === 0 || metricCols.length === 0) return { category: null, metrics: [] };
+
+  const questionTokens = new Set(tokenize(decisionText ?? ""));
+
+  // Only a categorical column with a manageable number of distinct values makes a
+  // readable bar chart — try candidates in relevance order, skipping high-cardinality ones
+  // (e.g. "Customer Name") rather than bailing out entirely on the first miss.
+  const catCandidates = [...cats].sort(
+    (a, b) => relevanceScore(questionTokens, b) - relevanceScore(questionTokens, a)
+  );
+  const category =
+    catCandidates.find((c) => new Set(dataset.rows.map((r) => r[c])).size <= 25) ?? null;
+
+  const metricCandidates = [...metricCols].sort(
+    (a, b) => relevanceScore(questionTokens, b) - relevanceScore(questionTokens, a)
+  );
+  const metrics = metricCandidates.slice(0, 2);
+
+  return { category, metrics };
+}
+
 function mean(values: number[]): number {
   return values.reduce((a, b) => a + b, 0) / values.length;
 }
