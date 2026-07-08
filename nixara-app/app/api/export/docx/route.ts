@@ -50,6 +50,13 @@ export async function POST(req: NextRequest) {
       case "bullet":
         children.push(new Paragraph({ text: line.text, bullet: { level: 0 } }));
         break;
+      case "tag":
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: line.text, bold: true, italics: true, size: 18 })],
+          })
+        );
+        break;
       case "text":
         children.push(new Paragraph({ text: line.text }));
         break;

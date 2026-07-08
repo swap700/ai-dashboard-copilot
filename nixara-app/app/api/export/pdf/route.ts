@@ -41,6 +41,14 @@ export async function POST(req: NextRequest) {
       case "heading":
         doc.moveDown(0.6).fontSize(12).fillColor("#7A3414").text(line.text, { lineGap: 4 });
         break;
+      case "tag":
+        doc
+          .font("Helvetica-BoldOblique")
+          .fontSize(8)
+          .fillColor("#C2542A")
+          .text(line.text.toUpperCase(), { lineGap: 4 });
+        doc.font("Helvetica");
+        break;
       default:
         doc.fontSize(10).fillColor("#111111").text(line.text, { lineGap: 4 });
         break;

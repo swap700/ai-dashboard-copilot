@@ -112,6 +112,8 @@ Report type: ${reportType}
 
 ${instruction}
 
+Currency formatting rule (applies everywhere in this report): write every currency value as "$" followed by the number with exactly two decimal places, e.g. $12,345.67. Never wrap numbers in parentheses or brackets. Write negative values with a minus sign directly before the dollar sign — e.g. -$12,345.67 — never $-12,345.67 or ($12,345.67).
+
 Write for a ${who} — direct and specific, not academic.
 
 Dashboard data:
@@ -126,6 +128,53 @@ const SECTION_HEADERS = [
   "Early Warning Signs", "Mitigation Actions", "Data Quality Risks",
 ];
 
+/**
+ * Rounds a numeric string to exactly two decimal places and (re)applies
+ * thousands-separator commas, regardless of whether the source had them.
+ */
+function formatTwoDecimals(numStr: string): string {
+  const value = parseFloat(numStr.replace(/,/g, ""));
+  if (Number.isNaN(value)) return numStr;
+  const [intPart, decPart] = value.toFixed(2).split(".");
+  const withCommas = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `${withCommas}.${decPart}`;
+}
+
+/**
+ * Normalizes every currency figure in the report text to a single consistent
+ * format: "$" + number with exactly two decimal places, no thousands-parentheses,
+ * and negative values written with a minus sign BEFORE the dollar sign
+ * (e.g. -$12,345.67). This is a deterministic safety net — the prompt also asks
+ * the model to follow this format, but LLM output isn't 100% reliable, so we
+ * enforce it here regardless of what the model actually returned.
+ */
+function normalizeCurrency(text: string): string {
+  let out = text;
+
+  // 1. Parenthesized amounts (accounting-style negatives), e.g. "($1,234.5)",
+  //    "(1,234.50)", "($-1,234)" → "-$1,234.50"
+  out = out.replace(
+    /\(\s*-?\$?\s*([\d,]+(?:\.\d+)?)\s*\)/g,
+    (_m, num: string) => `-$${formatTwoDecimals(num)}`
+  );
+
+  // 2. "$-1,234.5" (dollar sign before the minus) → "-$1,234.50"
+  out = out.replace(
+    /\$-\s*([\d,]+(?:\.\d+)?)/g,
+    (_m, num: string) => `-$${formatTwoDecimals(num)}`
+  );
+
+  // 3. Any remaining "$" amount (optionally already minus-prefixed) →
+  //    enforce exactly two decimal places, e.g. "$1,234" → "$1,234.00",
+  //    "-$1,234.5" → "-$1,234.50", "$1,234.567" → "$1,234.57" (rounded)
+  out = out.replace(
+    /(-?)\$([\d,]+(?:\.\d+)?)/g,
+    (_m, sign: string, num: string) => `${sign}$${formatTwoDecimals(num)}`
+  );
+
+  return out;
+}
+
 /** Mirrors clean_ai_output: normalizes the AI's markdown into consistent "### Header" sections. */
 export function cleanAiOutput(raw: string): string {
   let text = raw;
@@ -136,6 +185,7 @@ export function cleanAiOutput(raw: string): string {
     const re = new RegExp(h, "gi");
     text = text.replace(re, `\n### ${h}`);
   }
+  text = normalizeCurrency(text);
   return text.trim();
 }
 
@@ -144,6 +194,7 @@ export type ReportLine =
   | { kind: "heading"; text: string }
   | { kind: "numbered"; text: string }
   | { kind: "bullet"; text: string }
+  | { kind: "tag"; text: string }
   | { kind: "text"; text: string };
 
 /**
@@ -213,6 +264,11 @@ export function parseReportLines(reportText: string): ReportLine[] {
     if (line.startsWith("### ")) return { kind: "heading", text: line.slice(4) };
     if (/^\d+\./.test(line)) return { kind: "numbered", text: line };
     if (line.startsWith("- ") || line.startsWith("• ")) return { kind: "bullet", text: line.slice(2) };
+    // Standalone markdown-italic label, e.g. "_Strategic Risk_" or "_Operational Risk_" —
+    // the AI emits these as its own line to differentiate risk types (see Risk Report
+    // prompt rules). Render as a tag/badge instead of printing the raw underscores.
+    const tagMatch = /^_([^_\n]+)_$/.exec(line);
+    if (tagMatch) return { kind: "tag", text: tagMatch[1].trim() };
     return { kind: "text", text: line };
   });
 }

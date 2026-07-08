@@ -28,6 +28,22 @@ function ReportBody({ text }: { text: string }) {
                 {line.text}
               </h3>
             );
+          case "tag": {
+            const isOperational = /operational/i.test(line.text);
+            return (
+              <span
+                key={i}
+                className={
+                  "inline-block mb-2 px-2.5 py-0.5 rounded-full text-[0.72rem] font-semibold tracking-wide uppercase " +
+                  (isOperational
+                    ? "bg-amber-100 text-amber-800"
+                    : "bg-accent-bg-soft text-accent")
+                }
+              >
+                {line.text}
+              </span>
+            );
+          }
           default:
             return (
               <p key={i} className="mb-1.5 text-[1rem]">
