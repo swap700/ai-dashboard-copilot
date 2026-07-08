@@ -55,7 +55,10 @@ Process Recommendations
 Label each item with its timeframe in brackets.)
 
 Quick Wins
-(EXACTLY 2 items doable in the next 2 weeks with zero new budget. Each must cite a specific number from the data as the justification.)
+(EXACTLY 2 items doable in the next 2 weeks with zero new budget. Each must cite a specific number from the data as the justification. The cited number must be a direct business metric — revenue, profit, margin %, discount %, units, or a customer/order count. NEVER cite a correlation coefficient, statistical test value, or any other analytical/data-science output as if it were an actionable business figure.)
+
+BANNED words anywhere in this report: "correlation", "z-score", "regression", "coefficient", "statistical", "outlier", "anomaly", "anomalous". If the data summary contains statistical or correlation figures, ignore them entirely for this report — they are not business metrics and must never be presented as one.
+Describe every metric in plain business language, not internal data-processing terminology — write "number of unique customers" not "distinct count of Customer ID", "total orders" not "count of Order ID".
 
 Rules: under 500 words. Operational language. Every point references data. The total action items across all sections must not exceed 5.`,
 
@@ -68,18 +71,21 @@ Likelihood: High / Medium / Low
 Impact: High / Medium / Low
 Signal: [the specific metric or number from the data that flags this]
 Consequence: [what happens if unaddressed, with a number]
+_Strategic Risk_ or _Operational Risk_
 
-Rank from highest to lowest combined risk level. Explicitly differentiate: operational risks (fixable this week) vs strategic risks (require quarterly attention).
+The last line of every risk MUST be exactly one of these two literal strings, underscores included, on its own line: "_Strategic Risk_" or "_Operational Risk_". Do not use any other wording, label, or format for this (e.g. never write "Type: Strategic" or "This is an operational risk") — it must match one of those two exact strings so it renders correctly.
+
+Rank from highest to lowest combined risk level.
 
 CRITICAL RULES for risk identification:
 — A large number of customers in one category is NOT concentration risk — that is distribution breadth, which is positive. Concentration risk only applies when a small number of CUSTOMERS generate a disproportionate share of REVENUE (e.g. top 5 customers = 70% of sales). Never flag healthy distribution as a risk.
 — Do not flag things that are performing well as risks.
-— Separate operational risks from strategic risks explicitly.
 — Likelihood must describe a FUTURE event, not a current state. If something is already true (e.g. margins are already low), the risk is that it worsens — not that it exists. Rephrase as: "Likelihood of further margin deterioration: High, given no current pricing intervention." Never assign Likelihood: High to something that is already a present fact.
-— NEVER invent dollar amounts. Any specific dollar figure in this report must come directly from the data summary. If no specific amount is computable from the data, use directional language instead — "significant profit erosion" not "$8,000 at risk." Fabricated dollar figures are worse than no figures at all.)
+— NEVER invent dollar amounts. Any specific dollar figure in this report must come directly from the data summary. If no specific amount is computable from the data, use directional language instead — "significant profit erosion" not "$8,000 at risk." Fabricated dollar figures are worse than no figures at all.
+— Every Signal must be a direct business metric (revenue, profit, margin %, discount %, units, customer/order counts). NEVER cite a correlation coefficient, statistical test value, or count of "anomalous rows" as a Signal — describe the underlying business fact instead (e.g. "a 65.60% discount applied to this order" not "an anomalous row").)
 
 Early Warning Signs
-(3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them.)
+(3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them. Each metric must be a direct business measure, described in plain business language — write "number of unique customers" not "distinct count of Customer ID". Never list a correlation coefficient or other statistical output as an early warning sign.)
 
 Mitigation Actions
 (One concrete action per risk. Format: "Role responsible: Action — Start within [timeframe].")
@@ -88,7 +94,11 @@ Data Quality Risks
 (Apply this rule strictly:
 — If the data quality score is above 90/100 AND detected anomalies are explainable as normal business variation (seasonality, promotions, pricing tiers), write: "Data quality is strong (score: [X]/100). Detected outliers in [field] reflect business patterns — treat as signals, not data errors."
 — Only flag genuine data integrity problems: missing values in critical fields, impossible values, duplicates that distort totals, or conflicting summary statistics.
-— NEVER say data quality is both high AND a risk in the same report. Pick one position and defend it.)
+— NEVER say data quality is both high AND a risk in the same report. Pick one position and defend it.
+— This is the ONLY section of the report allowed to use the words "outlier" or "anomalies"/"anomalous".)
+
+BANNED words everywhere in this report EXCEPT the Data Quality Risks section above: "correlation", "z-score", "regression", "coefficient", "statistical", "outlier", "anomaly", "anomalous". If the data summary contains statistical or correlation figures, ignore them entirely outside Data Quality Risks — they are not business metrics.
+Do not write a closing or summary paragraph after Data Quality Risks — the report ends there.
 
 Rules: under 500 words. Risk language. Every claim references a specific number. Never present operational fixes and strategic concerns at the same severity level.`,
 };
@@ -151,17 +161,26 @@ function formatTwoDecimals(numStr: string): string {
 function normalizeCurrency(text: string): string {
   let out = text;
 
-  // 1. Parenthesized amounts (accounting-style negatives), e.g. "($1,234.5)",
-  //    "(1,234.50)", "($-1,234)" → "-$1,234.50"
-  out = out.replace(
-    /\(\s*-?\$?\s*([\d,]+(?:\.\d+)?)\s*\)/g,
-    (_m, num: string) => `-$${formatTwoDecimals(num)}`
-  );
-
-  // 2. "$-1,234.5" (dollar sign before the minus) → "-$1,234.50"
+  // 1. "$-1,234.5" (dollar sign before the minus) → "-$1,234.50". Runs BEFORE the
+  //    bracket-stripping pass below so that "($-1,234.5)" is normalized to
+  //    "(-$1,234.5)" first, letting step 2 recognize the leading minus correctly
+  //    regardless of whether the source wrote "-$" or "$-".
   out = out.replace(
     /\$-\s*([\d,]+(?:\.\d+)?)/g,
     (_m, num: string) => `-$${formatTwoDecimals(num)}`
+  );
+
+  // 2. Parenthesized dollar amounts. Only treat as a negative (accounting-style)
+  //    figure when an explicit minus sign is present inside the parens, e.g.
+  //    "(-$1,234.5)" or "(-1,234.50)" → "-$1,234.50". A bare "($1,234.5)" with no
+  //    minus is NOT assumed to be negative — some models use parentheses as a
+  //    stylistic aside rather than an accounting negative, and forcing a sign
+  //    there would silently turn a positive figure into a wrong negative one.
+  //    Either way, the brackets themselves are always stripped per the "never
+  //    use brackets around numbers" rule.
+  out = out.replace(
+    /\(\s*(-?)\$?\s*([\d,]+(?:\.\d+)?)\s*\)/g,
+    (_m, sign: string, num: string) => `${sign === "-" ? "-" : ""}$${formatTwoDecimals(num)}`
   );
 
   // 3. Any remaining "$" amount (optionally already minus-prefixed) →
