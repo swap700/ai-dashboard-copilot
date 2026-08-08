@@ -5,29 +5,24 @@ import { useEffect, useState } from "react";
 const LS_KEY = "nixara_oai_key";
 
 /**
- * Mirrors the sidebar's API-key + "remember in browser" behavior
- * (lines 1268-1326), simplified — a plain React app doesn't need the
- * Streamlit iframe's localStorage<->query-param reload bridge.
+ * SECURITY FIX (2026-08): this hook used to persist the pasted OpenAI key to
+ * localStorage via a "remember in this browser" checkbox. An unencrypted API
+ * key sitting in localStorage is readable by any script that runs on the
+ * page (XSS) and by anyone with devtools access to that machine, and it
+ * survives indefinitely until manually cleared. Persistence has been removed
+ * — the key now lives only in React state for the lifetime of the tab. The
+ * one-time migration below clears any key a returning browser had stored
+ * under the old behavior, so it doesn't linger on disk.
  */
 export function useApiKey() {
   const [apiKey, setApiKey] = useState("");
-  const [remember, setRemember] = useState(false);
 
+  // One-time cleanup: remove any key persisted by the old "remember" behavior.
   useEffect(() => {
-    const saved = window.localStorage.getItem(LS_KEY);
-    if (saved) {
-      setApiKey(saved);
-      setRemember(true);
+    if (window.localStorage.getItem(LS_KEY)) {
+      window.localStorage.removeItem(LS_KEY);
     }
   }, []);
 
-  useEffect(() => {
-    if (remember && apiKey) {
-      window.localStorage.setItem(LS_KEY, apiKey);
-    } else {
-      window.localStorage.removeItem(LS_KEY);
-    }
-  }, [remember, apiKey]);
-
-  return { apiKey, setApiKey, remember, setRemember };
+  return { apiKey, setApiKey };
 }

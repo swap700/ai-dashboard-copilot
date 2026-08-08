@@ -138,7 +138,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
           <p className="font-semibold text-text text-sm mb-0.5">✏️ Change your decision</p>
           <p className="text-text-mute text-xs mb-4">
             Currently: <span className="font-medium">{badge.icon} {badge.label}</span>
-            {prior.decisionId && <span> · ID {formatDecisionId(reportType, prior.decisionId)}</span>}
+            {prior.publicId && <span> · ID {formatDecisionId(reportType, prior.publicId)}</span>}
           </p>
           <div className="grid grid-cols-3 gap-2 mb-3">
             <button
@@ -192,7 +192,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
       <div className="bg-accent-bg-soft border border-accent-border rounded-xl px-5 py-4 mt-4">
         <div className="flex items-center justify-between mb-2">
           <p className="font-semibold text-text text-sm">📋 Decision Recorded</p>
-          {prior.decisionId && (
+          {prior.publicId && (
             <button
               type="button"
               onClick={() => setEditing(true)}
@@ -205,10 +205,10 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
         <div className="flex flex-wrap items-center gap-3 mb-2">
           <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${badge.bg} ${badge.fg}`}>
             {badge.icon} {badge.label}
-            {prior.decisionId && (
+            {prior.publicId && (
               <>
                 <span className="opacity-60 font-normal">·</span>
-                ID <strong>{formatDecisionId(reportType, prior.decisionId)}</strong>
+                ID <strong>{formatDecisionId(reportType, prior.publicId)}</strong>
               </>
             )}
           </span>
@@ -228,9 +228,9 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
             Applied to: <span className="text-text">{prior.recommendation}</span>
           </p>
         )}
-        {prior.decisionId && (
+        {prior.publicId && (
           <p className="text-text-dim text-xs">
-            Save Decision ID {formatDecisionId(reportType, prior.decisionId)} — enter it in the Outcomes tab to log what happened.
+            Save Decision ID {formatDecisionId(reportType, prior.publicId)} — enter it in the Outcomes tab to log what happened.
           </p>
         )}
       </div>

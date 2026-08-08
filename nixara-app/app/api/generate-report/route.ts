@@ -157,8 +157,7 @@ export async function POST(req: NextRequest) {
       });
       return res;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "OpenAI request failed.";
-      return NextResponse.json({ error: message }, { status: 502 });
+      return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
     }
   }
 
@@ -175,7 +174,28 @@ export async function POST(req: NextRequest) {
     const text = cleanAiOutput(raw);
     return NextResponse.json({ text, tier });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "OpenAI request failed.";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
   }
+}
+
+/**
+ * SECURITY FIX (2026-08): info disclosure via error passthrough.
+ *
+ * This used to return `err.message` from the OpenAI SDK straight to the
+ * browser. Depending on the failure, that string can include billing/quota
+ * details, org identifiers, or other account-specific text tied to
+ * whichever key served the request (Nixara's own key on the free tier, or
+ * the caller's own pasted key) — none of which should end up in a client
+ * network tab. We classify into a few safe, generic buckets instead. Full
+ * detail still isn't logged anywhere server-side today (no logger is wired
+ * up) — that's a separate follow-up, not something this function can fix.
+ */
+function safeOpenAiErrorMessage(err: unknown): string {
+  const status =
+    err && typeof err === "object" && "status" in err ? (err as { status?: number }).status : undefined;
+
+  if (status === 401) return "The OpenAI key on file was rejected. Check the key and try again.";
+  if (status === 429) return "OpenAI rate or quota limit reached. Wait a moment and try again.";
+  if (status && status >= 500) return "OpenAI is temporarily unavailable. Please try again shortly.";
+  return "Report generation failed. Please try again.";
 }

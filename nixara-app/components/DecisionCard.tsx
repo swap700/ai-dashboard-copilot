@@ -43,8 +43,8 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
       <div className="flex items-center justify-between mb-1">
         <p className="font-semibold text-text text-sm">
           {reportType}
-          {decision.decisionId && (
-            <span className="text-text-dim font-normal"> · ID {formatDecisionId(reportType, decision.decisionId)}</span>
+          {decision.publicId && (
+            <span className="text-text-dim font-normal"> · ID {formatDecisionId(reportType, decision.publicId)}</span>
           )}
         </p>
         <div className="flex items-center gap-2">

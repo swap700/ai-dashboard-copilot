@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "@/lib/session-context";
-import { fetchDecisionById, fetchOutcomeForDecision, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
+import { fetchDecisionByPublicId, fetchOutcomeForPublicId, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
 import OutcomeForm from "@/components/OutcomeForm";
 import DecisionCard from "@/components/DecisionCard";
 import { REPORT_TYPES } from "@/lib/report";
@@ -26,14 +26,14 @@ export default function OutcomesPage() {
   const recordedTypes = REPORT_TYPES.filter((t) => decisions[t]);
 
   const handleLookup = async () => {
-    const id = Number(lookupId);
-    if (!id) return;
+    const token = lookupId.trim();
+    if (!token) return;
     setSearching(true);
     setLookupError(null);
     setLookupResult(null);
     setLookupOutcome(null);
     setLookupOutcomeLogged(false);
-    const row = await fetchDecisionById(id);
+    const row = await fetchDecisionByPublicId(token);
     setSearching(false);
     if (!row) {
       setLookupError("Decision not found. Double-check the ID.");
@@ -41,7 +41,7 @@ export default function OutcomesPage() {
     }
     setLookupResult(row);
     // Also fetch any outcome already linked to this decision
-    const existing = await fetchOutcomeForDecision(id);
+    const existing = await fetchOutcomeForPublicId(token);
     setLookupOutcome(existing ?? "none");
   };
 
@@ -88,10 +88,10 @@ export default function OutcomesPage() {
         <p className="font-semibold text-text text-sm mb-1">🔍 Find a decision from a previous session</p>
         <div className="flex gap-2 mb-3">
           <input
-            type="number"
+            type="text"
             value={lookupId}
             onChange={(e) => setLookupId(e.target.value)}
-            placeholder="Numeric ID, e.g. 19 (from ES-19, OD-19, RR-19)"
+            placeholder="Decision ID, e.g. a3f9c1d2e4 (from ES-a3f9c1d2e4)"
             className="flex-1 rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text"
           />
           <button
@@ -110,7 +110,7 @@ export default function OutcomesPage() {
           <div className="border-t border-border pt-4 mt-2">
             {/* Decision context — confirms which decision this is */}
             <p className="font-semibold text-text text-sm mb-1">
-              {lookupResult.report_type} · ID {formatDecisionId(lookupResult.report_type, lookupResult.id)}
+              {lookupResult.report_type} · ID {formatDecisionId(lookupResult.report_type, lookupResult.public_id)}
             </p>
             <p className="text-text-mute text-xs mb-2">
               {lookupResult.role} · {lookupResult.dataset_name} · {lookupResult.timeframe}

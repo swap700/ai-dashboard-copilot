@@ -1,0 +1,758 @@
+diff --git a/nixara-app/app/api/generate-report/route.ts b/nixara-app/app/api/generate-report/route.ts
+index 094ddf9..2874efb 100644
+--- a/nixara-app/app/api/generate-report/route.ts
++++ b/nixara-app/app/api/generate-report/route.ts
+@@ -157,8 +157,7 @@ export async function POST(req: NextRequest) {
+       });
+       return res;
+     } catch (err) {
+-      const message = err instanceof Error ? err.message : "OpenAI request failed.";
+-      return NextResponse.json({ error: message }, { status: 502 });
++      return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
+     }
+   }
+ 
+@@ -175,7 +174,28 @@ export async function POST(req: NextRequest) {
+     const text = cleanAiOutput(raw);
+     return NextResponse.json({ text, tier });
+   } catch (err) {
+-    const message = err instanceof Error ? err.message : "OpenAI request failed.";
+-    return NextResponse.json({ error: message }, { status: 502 });
++    return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
+   }
+ }
++
++/**
++ * SECURITY FIX (2026-08): info disclosure via error passthrough.
++ *
++ * This used to return `err.message` from the OpenAI SDK straight to the
++ * browser. Depending on the failure, that string can include billing/quota
++ * details, org identifiers, or other account-specific text tied to
++ * whichever key served the request (Nixara's own key on the free tier, or
++ * the caller's own pasted key) — none of which should end up in a client
++ * network tab. We classify into a few safe, generic buckets instead. Full
++ * detail still isn't logged anywhere server-side today (no logger is wired
++ * up) — that's a separate follow-up, not something this function can fix.
++ */
++function safeOpenAiErrorMessage(err: unknown): string {
++  const status =
++    err && typeof err === "object" && "status" in err ? (err as { status?: number }).status : undefined;
++
++  if (status === 401) return "The OpenAI key on file was rejected. Check the key and try again.";
++  if (status === 429) return "OpenAI rate or quota limit reached. Wait a moment and try again.";
++  if (status && status >= 500) return "OpenAI is temporarily unavailable. Please try again shortly.";
++  return "Report generation failed. Please try again.";
++}
+diff --git a/nixara-app/app/outcomes/page.tsx b/nixara-app/app/outcomes/page.tsx
+index 4c38f5e..0d3f6c6 100644
+--- a/nixara-app/app/outcomes/page.tsx
++++ b/nixara-app/app/outcomes/page.tsx
+@@ -2,7 +2,7 @@
+ 
+ import { useState } from "react";
+ import { useSession } from "@/lib/session-context";
+-import { fetchDecisionById, fetchOutcomeForDecision, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
++import { fetchDecisionByPublicId, fetchOutcomeForPublicId, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
+ import OutcomeForm from "@/components/OutcomeForm";
+ import DecisionCard from "@/components/DecisionCard";
+ import { REPORT_TYPES } from "@/lib/report";
+@@ -26,14 +26,14 @@ export default function OutcomesPage() {
+   const recordedTypes = REPORT_TYPES.filter((t) => decisions[t]);
+ 
+   const handleLookup = async () => {
+-    const id = Number(lookupId);
+-    if (!id) return;
++    const token = lookupId.trim();
++    if (!token) return;
+     setSearching(true);
+     setLookupError(null);
+     setLookupResult(null);
+     setLookupOutcome(null);
+     setLookupOutcomeLogged(false);
+-    const row = await fetchDecisionById(id);
++    const row = await fetchDecisionByPublicId(token);
+     setSearching(false);
+     if (!row) {
+       setLookupError("Decision not found. Double-check the ID.");
+@@ -41,7 +41,7 @@ export default function OutcomesPage() {
+     }
+     setLookupResult(row);
+     // Also fetch any outcome already linked to this decision
+-    const existing = await fetchOutcomeForDecision(id);
++    const existing = await fetchOutcomeForPublicId(token);
+     setLookupOutcome(existing ?? "none");
+   };
+ 
+@@ -88,10 +88,10 @@ export default function OutcomesPage() {
+         <p className="font-semibold text-text text-sm mb-1">🔍 Find a decision from a previous session</p>
+         <div className="flex gap-2 mb-3">
+           <input
+-            type="number"
++            type="text"
+             value={lookupId}
+             onChange={(e) => setLookupId(e.target.value)}
+-            placeholder="Numeric ID, e.g. 19 (from ES-19, OD-19, RR-19)"
++            placeholder="Decision ID, e.g. a3f9c1d2e4 (from ES-a3f9c1d2e4)"
+             className="flex-1 rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text"
+           />
+           <button
+@@ -110,7 +110,7 @@ export default function OutcomesPage() {
+           <div className="border-t border-border pt-4 mt-2">
+             {/* Decision context — confirms which decision this is */}
+             <p className="font-semibold text-text text-sm mb-1">
+-              {lookupResult.report_type} · ID {formatDecisionId(lookupResult.report_type, lookupResult.id)}
++              {lookupResult.report_type} · ID {formatDecisionId(lookupResult.report_type, lookupResult.public_id)}
+             </p>
+             <p className="text-text-mute text-xs mb-2">
+               {lookupResult.role} · {lookupResult.dataset_name} · {lookupResult.timeframe}
+diff --git a/nixara-app/app/page.tsx b/nixara-app/app/page.tsx
+index 1713855..55ae03b 100644
+--- a/nixara-app/app/page.tsx
++++ b/nixara-app/app/page.tsx
+@@ -2,6 +2,7 @@
+ 
+ import { useMemo, useState } from "react";
+ import { useNixaraStore } from "@/lib/store";
++import { useDebouncedValue } from "@/lib/use-debounced-value";
+ import { useSession } from "@/lib/session-context";
+ import BIConnector from "@/components/BIConnector";
+ import MetricsRow from "@/components/MetricsRow";
+@@ -27,6 +28,10 @@ export default function DashboardPage() {
+   const [generating, setGenerating] = useState(false);
+   const [error, setError] = useState<string | null>(null);
+ 
++  // Bug fix (React error #185): only feed Charts a new decision text after
++  // the user pauses typing — see use-debounced-value.ts for the full story.
++  const debouncedDecision = useDebouncedValue(setup.decision, 400);
++
+   // BIConnector already calls cleanDataset before calling onLoaded.
+   // Clear prior decisions so they don't ghost-persist from a previous dataset.
+   const handleLoaded = (dataset: Dataset, name: string) => {
+@@ -99,7 +104,7 @@ export default function DashboardPage() {
+           </p>
+           <MetricsRow metrics={metrics} />
+           <DataPreview dataset={dataset} />
+-          <Charts dataset={dataset} decisionText={setup.decision} />
++          <Charts dataset={dataset} decisionText={debouncedDecision} />
+           <AnomalyWarnings dataset={dataset} />
+ 
+           <ReportSetup
+diff --git a/nixara-app/components/DecisionCard.tsx b/nixara-app/components/DecisionCard.tsx
+index 8fa440a..2bcce4c 100644
+--- a/nixara-app/components/DecisionCard.tsx
++++ b/nixara-app/components/DecisionCard.tsx
+@@ -43,8 +43,8 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
+       <div className="flex items-center justify-between mb-1">
+         <p className="font-semibold text-text text-sm">
+           {reportType}
+-          {decision.decisionId && (
+-            <span className="text-text-dim font-normal"> · ID {formatDecisionId(reportType, decision.decisionId)}</span>
++          {decision.publicId && (
++            <span className="text-text-dim font-normal"> · ID {formatDecisionId(reportType, decision.publicId)}</span>
+           )}
+         </p>
+         <div className="flex items-center gap-2">
+diff --git a/nixara-app/components/DecisionPanel.tsx b/nixara-app/components/DecisionPanel.tsx
+index f26e023..a6d7b63 100644
+--- a/nixara-app/components/DecisionPanel.tsx
++++ b/nixara-app/components/DecisionPanel.tsx
+@@ -138,7 +138,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
+           <p className="font-semibold text-text text-sm mb-0.5">✏️ Change your decision</p>
+           <p className="text-text-mute text-xs mb-4">
+             Currently: <span className="font-medium">{badge.icon} {badge.label}</span>
+-            {prior.decisionId && <span> · ID {formatDecisionId(reportType, prior.decisionId)}</span>}
++            {prior.publicId && <span> · ID {formatDecisionId(reportType, prior.publicId)}</span>}
+           </p>
+           <div className="grid grid-cols-3 gap-2 mb-3">
+             <button
+@@ -192,7 +192,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
+       <div className="bg-accent-bg-soft border border-accent-border rounded-xl px-5 py-4 mt-4">
+         <div className="flex items-center justify-between mb-2">
+           <p className="font-semibold text-text text-sm">📋 Decision Recorded</p>
+-          {prior.decisionId && (
++          {prior.publicId && (
+             <button
+               type="button"
+               onClick={() => setEditing(true)}
+@@ -205,10 +205,10 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
+         <div className="flex flex-wrap items-center gap-3 mb-2">
+           <span className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold ${badge.bg} ${badge.fg}`}>
+             {badge.icon} {badge.label}
+-            {prior.decisionId && (
++            {prior.publicId && (
+               <>
+                 <span className="opacity-60 font-normal">·</span>
+-                ID <strong>{formatDecisionId(reportType, prior.decisionId)}</strong>
++                ID <strong>{formatDecisionId(reportType, prior.publicId)}</strong>
+               </>
+             )}
+           </span>
+@@ -228,9 +228,9 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
+             Applied to: <span className="text-text">{prior.recommendation}</span>
+           </p>
+         )}
+-        {prior.decisionId && (
++        {prior.publicId && (
+           <p className="text-text-dim text-xs">
+-            Save Decision ID {formatDecisionId(reportType, prior.decisionId)} — enter it in the Outcomes tab to log what happened.
++            Save Decision ID {formatDecisionId(reportType, prior.publicId)} — enter it in the Outcomes tab to log what happened.
+           </p>
+         )}
+       </div>
+diff --git a/nixara-app/components/ReportSetup.tsx b/nixara-app/components/ReportSetup.tsx
+index 09ee35f..ba77ab2 100644
+--- a/nixara-app/components/ReportSetup.tsx
++++ b/nixara-app/components/ReportSetup.tsx
+@@ -23,7 +23,7 @@ interface Props {
+ }
+ 
+ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGenerate, generating }: Props) {
+-  const { apiKey, setApiKey, remember, setRemember } = useApiKey();
++  const { apiKey, setApiKey } = useApiKey();
+   const [freeUsed, setFreeUsed] = useState(0);
+ 
+   useEffect(() => {
+@@ -100,15 +100,7 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
+           className="w-full rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+         />
+         <div className="flex items-center justify-between mt-1.5">
+-          <label className="flex items-center gap-1.5 text-xs text-text-mute">
+-            <input
+-              type="checkbox"
+-              checked={remember}
+-              onChange={(e) => setRemember(e.target.checked)}
+-              disabled={!apiKey}
+-            />
+-            Remember key in this browser
+-          </label>
++          <span className="text-xs text-text-mute">Not stored — cleared when you close or refresh this tab.</span>
+           {keyStatus && <span className={`text-xs font-medium ${keyStatus.className}`}>{keyStatus.text}</span>}
+         </div>
+       </div>
+diff --git a/nixara-app/lib/decisions.ts b/nixara-app/lib/decisions.ts
+index 5243473..529716d 100644
+--- a/nixara-app/lib/decisions.ts
++++ b/nixara-app/lib/decisions.ts
+@@ -10,15 +10,16 @@ const REPORT_PREFIX: Record<string, string> = {
+   "Risk Report":        "RR",
+ };
+ 
+-/** Returns a display ID like "ES-19" given a report type and numeric DB id. */
+-export function formatDecisionId(reportType: string | null | undefined, id: number | null | undefined): string {
+-  if (!id) return "—";
++/** Returns a display ID like "ES-a3f9c1d2e4" given a report type and public_id token. */
++export function formatDecisionId(reportType: string | null | undefined, publicId: string | null | undefined): string {
++  if (!publicId) return "—";
+   const prefix = (reportType && REPORT_PREFIX[reportType]) ?? "D";
+-  return `${prefix}-${id}`;
++  return `${prefix}-${publicId}`;
+ }
+ 
+ export interface DecisionRow {
+   id: number;
++  public_id: string;
+   created_at: string;
+   session_id: string | null;
+   report_type: string | null;
+@@ -46,8 +47,16 @@ export interface LogDecisionParams {
+   postponeReason?: string;
+ }
+ 
++export interface LoggedDecision {
++  id: number;
++  publicId: string;
++}
++
+ /**
+- * Mirrors log_decision_record (lines 92-139) — returns the new row's id, or null if Supabase isn't configured.
++ * Mirrors log_decision_record — returns the new row's internal id (used for
++ * local write operations like outcome inserts) and its public_id token (used
++ * for display and any cross-session lookup), or null if Supabase isn't
++ * configured.
+  *
+  * Uses the log_decision_record() SECURITY DEFINER RPC instead of a direct
+  * .insert().select("id") call, because anon has no SELECT grant on
+@@ -56,7 +65,7 @@ export interface LogDecisionParams {
+  * table owner, does the INSERT internally, and returns the new id — anon only
+  * needs EXECUTE on the function.
+  */
+-export async function logDecisionRecord(params: LogDecisionParams): Promise<number | null> {
++export async function logDecisionRecord(params: LogDecisionParams): Promise<LoggedDecision | null> {
+   if (!supabase) return null;
+   const { data, error } = await supabase.rpc("log_decision_record", {
+     p_session_id:      params.sessionId,
+@@ -71,8 +80,11 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<numb
+     p_recommendation:  params.recommendation ?? null,
+     p_postpone_reason: params.postponeReason ?? null,
+   });
+-  if (error || data === null || data === undefined) return null;
+-  return data as number;
++  if (error || !data) return null;
++  // RPC returns an array — unwrap the first row.
++  const row = Array.isArray(data) ? data[0] : data;
++  if (!row) return null;
++  return { id: row.id as number, publicId: row.public_id as string };
+ }
+ 
+ export interface LogOutcomeParams {
+@@ -102,39 +114,43 @@ export async function logOutcome(params: LogOutcomeParams): Promise<void> {
+ }
+ 
+ /**
+- * Mirrors fetch_decision_by_id (lines 190-210), but via the get_decision_by_id
+- * RPC rather than a direct table SELECT — anon has no SELECT grant on
+- * nixara_decisions (see migration note), only EXECUTE on this function.
+- *
+- * Note: supabase.rpc() always returns an array, even for single-row results.
+- * We unwrap the first element and return null if the array is empty (not found).
++ * Looks up a decision by its public_id token via the get_decision_by_public_id
++ * RPC. This is an intentionally cross-session lookup (the "find a decision
++ * from a previous session" feature) — the token is a short random value
++ * rather than the sequential internal id specifically so it can't be
++ * enumerated. Returns null if not found or Supabase isn't configured.
+  */
+-export async function fetchDecisionById(id: number): Promise<DecisionRow | null> {
++export async function fetchDecisionByPublicId(publicId: string): Promise<DecisionRow | null> {
+   if (!supabase) return null;
+-  const { data, error } = await supabase.rpc("get_decision_by_id", { p_id: id });
++  const { data, error } = await supabase.rpc("get_decision_by_public_id", { p_public_id: publicId });
+   if (error || !data) return null;
+-  // RPC returns an array — unwrap the first row (null if not found)
+   const row = Array.isArray(data) ? (data[0] ?? null) : data;
+   return row as DecisionRow | null;
+ }
+ 
+ /**
+  * Updates the choice (approved/rejected/postponed) on an existing decision row
+- * via the update_decision_choice SECURITY DEFINER RPC.
+- * Returns true on success, false if the update failed or Supabase isn't configured.
++ * via the update_decision_choice SECURITY DEFINER RPC. The RPC now requires
++ * the caller's sessionId to match the row's session_id — this is a WRITE, so
++ * (unlike the public_id lookups above) there's no legitimate reason for one
++ * session to be able to flip another session's decision. Returns true only
++ * if a row was actually updated; false on error, missing config, or an
++ * ownership mismatch.
+  */
+ export async function updateDecisionChoice(
+   id: number,
++  sessionId: string,
+   newChoice: DecisionChoice,
+   postponeReason?: string
+ ): Promise<boolean> {
+   if (!supabase) return false;
+-  const { error } = await supabase.rpc("update_decision_choice", {
+-    p_id:             id,
+-    p_decision:       newChoice,
++  const { data, error } = await supabase.rpc("update_decision_choice", {
++    p_id:              id,
++    p_decision:        newChoice,
+     p_postpone_reason: postponeReason ?? null,
++    p_session_id:      sessionId,
+   });
+-  return !error;
++  return !error && data === true;
+ }
+ 
+ export interface OutcomeRow {
+@@ -149,12 +165,15 @@ export interface OutcomeRow {
+ 
+ /**
+  * Fetches the most recent outcome linked to a decision, via the
+- * get_outcome_for_decision SECURITY DEFINER RPC (anon has no SELECT on
+- * nixara_outcomes directly).  Returns null if none exists yet.
++ * get_outcome_for_public_id SECURITY DEFINER RPC (anon has no SELECT on
++ * nixara_outcomes directly). Keyed by the same public_id token as
++ * fetchDecisionByPublicId, for the same enumeration-resistance reason —
++ * the old sequential-id version of this RPC has been revoked server-side.
++ * Returns null if none exists yet.
+  */
+-export async function fetchOutcomeForDecision(decisionId: number): Promise<OutcomeRow | null> {
++export async function fetchOutcomeForPublicId(publicId: string): Promise<OutcomeRow | null> {
+   if (!supabase) return null;
+-  const { data, error } = await supabase.rpc("get_outcome_for_decision", { p_decision_id: decisionId });
++  const { data, error } = await supabase.rpc("get_outcome_for_public_id", { p_public_id: publicId });
+   if (error || !data) return null;
+   const row = Array.isArray(data) ? (data[0] ?? null) : data;
+   return row as OutcomeRow | null;
+diff --git a/nixara-app/lib/file-parser.ts b/nixara-app/lib/file-parser.ts
+index 5f8aa70..337056e 100644
+--- a/nixara-app/lib/file-parser.ts
++++ b/nixara-app/lib/file-parser.ts
+@@ -5,6 +5,47 @@ import type { Dataset, Row } from "./data-analysis";
+ // Fix M2: enforce file size limit before loading into memory
+ const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
+ 
++/**
++ * SECURITY FIX (2026-08): CSV/Excel formula injection.
++ *
++ * A cell value that starts with =, +, -, @, tab, or CR is interpreted as a
++ * formula by Excel/Sheets/LibreOffice if that value is ever re-opened in a
++ * spreadsheet (including a future CSV/XLSX export feature, or a user who
++ * copy-pastes a report table back into Excel). Classic payloads look like
++ * `=cmd|'/c calc'!A1` or `=HYPERLINK("http://evil","click")`. We neutralize
++ * this once, at ingestion, by prefixing a straight quote — spreadsheet apps
++ * then render it as inert text instead of evaluating it. Applied to every
++ * string cell AND header name from both the CSV and Excel parse paths, so
++ * every downstream consumer (charts, the OpenAI prompt, docx/pdf export)
++ * automatically inherits the sanitized value. Numbers/booleans pass through
++ * untouched.
++ */
++const FORMULA_TRIGGER_CHARS = ["=", "+", "-", "@", "\t", "\r"];
++
++function sanitizeCell<T>(value: T): T {
++  if (typeof value !== "string") return value;
++  if (value.length === 0) return value;
++  if (FORMULA_TRIGGER_CHARS.includes(value[0])) {
++    return ("'" + value) as unknown as T;
++  }
++  return value;
++}
++
++function sanitizeRow(row: Row): Row {
++  const clean: Row = {};
++  for (const [key, value] of Object.entries(row)) {
++    clean[sanitizeCell(key)] = sanitizeCell(value);
++  }
++  return clean;
++}
++
++function sanitizeDataset(dataset: Dataset): Dataset {
++  return {
++    columns: dataset.columns.map((c) => sanitizeCell(c)),
++    rows: dataset.rows.map(sanitizeRow),
++  };
++}
++
+ /** Parse a raw CSV string (returned from Tableau / Power BI API routes). */
+ export function parseCsvText(text: string): Dataset {
+   const result = Papa.parse<Row>(text, {
+@@ -12,7 +53,7 @@ export function parseCsvText(text: string): Dataset {
+     skipEmptyLines: true,
+     dynamicTyping: true,
+   });
+-  return { rows: result.data, columns: result.meta.fields ?? [] };
++  return sanitizeDataset({ rows: result.data, columns: result.meta.fields ?? [] });
+ }
+ 
+ /** Mirrors load_file: parses CSV or Excel into a row/column dataset. */
+@@ -36,7 +77,7 @@ function parseCsv(file: File): Promise<Dataset> {
+       dynamicTyping: true,
+       complete: (result) => {
+         const columns = result.meta.fields ?? [];
+-        resolve({ rows: result.data, columns });
++        resolve(sanitizeDataset({ rows: result.data, columns }));
+       },
+       error: (err: Error) => reject(err),
+     });
+@@ -69,5 +110,5 @@ async function parseExcel(file: File): Promise<Dataset> {
+     rows.push(obj);
+   });
+ 
+-  return { rows, columns };
++  return sanitizeDataset({ rows, columns });
+ }
+diff --git a/nixara-app/lib/session-context.tsx b/nixara-app/lib/session-context.tsx
+index 74f7cc2..c1e2d49 100644
+--- a/nixara-app/lib/session-context.tsx
++++ b/nixara-app/lib/session-context.tsx
+@@ -9,6 +9,7 @@ const SESSION_ID_KEY = "nixara_analytics_session_id";
+ export interface RecordedDecision {
+   choice: DecisionChoice;
+   decisionId: number | null;
++  publicId: string | null;
+   role: string;
+   datasetName: string;
+   question: string;
+@@ -88,7 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
+   }, []);
+ 
+   const recordDecision: SessionState["recordDecision"] = async (reportType, choice, ctx) => {
+-    const decisionId = await logDecisionRecord({
++    const logged = await logDecisionRecord({
+       sessionId,
+       reportType,
+       role: ctx.role,
+@@ -105,7 +106,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
+       ...decisions,
+       [reportType]: {
+         choice,
+-        decisionId,
++        decisionId: logged?.id ?? null,
++        publicId: logged?.publicId ?? null,
+         role: ctx.role,
+         datasetName: ctx.datasetName,
+         question: ctx.question,
+@@ -141,7 +143,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
+     if (!decision) return;
+     // Update DB if a decision ID exists
+     if (decision.decisionId) {
+-      await updateDecisionChoice(decision.decisionId, newChoice, postponeReason);
++      await updateDecisionChoice(decision.decisionId, sessionId, newChoice, postponeReason);
+     }
+     const next: typeof decisions = {
+       ...decisions,
+diff --git a/nixara-app/lib/use-api-key.ts b/nixara-app/lib/use-api-key.ts
+index a3aebf0..e8c4bd7 100644
+--- a/nixara-app/lib/use-api-key.ts
++++ b/nixara-app/lib/use-api-key.ts
+@@ -5,29 +5,24 @@ import { useEffect, useState } from "react";
+ const LS_KEY = "nixara_oai_key";
+ 
+ /**
+- * Mirrors the sidebar's API-key + "remember in browser" behavior
+- * (lines 1268-1326), simplified — a plain React app doesn't need the
+- * Streamlit iframe's localStorage<->query-param reload bridge.
++ * SECURITY FIX (2026-08): this hook used to persist the pasted OpenAI key to
++ * localStorage via a "remember in this browser" checkbox. An unencrypted API
++ * key sitting in localStorage is readable by any script that runs on the
++ * page (XSS) and by anyone with devtools access to that machine, and it
++ * survives indefinitely until manually cleared. Persistence has been removed
++ * — the key now lives only in React state for the lifetime of the tab. The
++ * one-time migration below clears any key a returning browser had stored
++ * under the old behavior, so it doesn't linger on disk.
+  */
+ export function useApiKey() {
+   const [apiKey, setApiKey] = useState("");
+-  const [remember, setRemember] = useState(false);
+ 
++  // One-time cleanup: remove any key persisted by the old "remember" behavior.
+   useEffect(() => {
+-    const saved = window.localStorage.getItem(LS_KEY);
+-    if (saved) {
+-      setApiKey(saved);
+-      setRemember(true);
+-    }
+-  }, []);
+-
+-  useEffect(() => {
+-    if (remember && apiKey) {
+-      window.localStorage.setItem(LS_KEY, apiKey);
+-    } else {
++    if (window.localStorage.getItem(LS_KEY)) {
+       window.localStorage.removeItem(LS_KEY);
+     }
+-  }, [remember, apiKey]);
++  }, []);
+ 
+-  return { apiKey, setApiKey, remember, setRemember };
++  return { apiKey, setApiKey };
+ }
+diff --git a/nixara-app/lib/use-debounced-value.ts b/nixara-app/lib/use-debounced-value.ts
+new file mode 100644
+index 0000000..a9018b9
+--- /dev/null
++++ b/nixara-app/lib/use-debounced-value.ts
+@@ -0,0 +1,30 @@
++"use client";
++
++import { useEffect, useState } from "react";
++
++/**
++ * BUG FIX (2026-08): React error #185 ("Maximum update depth exceeded").
++ *
++ * Root cause: `Charts` re-runs `selectChartColumns(dataset, decisionText)`
++ * on every render, and that function re-scores every categorical/metric
++ * column against the current decision text — so which columns get charted
++ * (and each chart's data/height) could change on *every keystroke* in the
++ * Decision Context textarea. That data/dimension churn, combined with
++ * Recharts' internal redux-based store re-dispatching for every prop
++ * change, was enough to exceed React's nested-update limit and crash the
++ * whole tree — reproducible with plain text, nothing adversarial required.
++ *
++ * Fix: debounce the text before it reaches chart-column selection, so
++ * recharts only re-renders after the user pauses typing instead of on
++ * every character.
++ */
++export function useDebouncedValue<T>(value: T, delayMs = 400): T {
++  const [debounced, setDebounced] = useState(value);
++
++  useEffect(() => {
++    const handle = setTimeout(() => setDebounced(value), delayMs);
++    return () => clearTimeout(handle);
++  }, [value, delayMs]);
++
++  return debounced;
++}
+diff --git a/nixara_supabase_setup.sql b/nixara_supabase_setup.sql
+index d387ab0..18434cf 100644
+--- a/nixara_supabase_setup.sql
++++ b/nixara_supabase_setup.sql
+@@ -160,7 +160,177 @@ ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS recommendation  TEXT;
+ ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS owner           TEXT;
+ ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS postpone_reason TEXT;
+ 
+--- ── 9. Verify setup ────────────────────────────────────────
++-- ============================================================
++-- 10. Previously-undocumented RPCs — reconstructed from the live database
++-- (2026-08). These existed only in the Supabase SQL editor and were never
++-- committed here, which is itself a gap worth avoiding going forward: this
++-- file should be the source of truth for schema/RPCs, not a partial record
++-- of it. Definitions below match what's deployed as of this commit,
++-- including the 2026-08 security fixes (see section 11).
++-- ============================================================
++
++CREATE OR REPLACE FUNCTION log_decision_record(
++  p_session_id TEXT,
++  p_report_type TEXT,
++  p_role TEXT,
++  p_dataset_name TEXT,
++  p_decision TEXT,
++  p_notes TEXT DEFAULT '',
++  p_timeframe TEXT DEFAULT '',
++  p_question TEXT DEFAULT '',
++  p_owner TEXT DEFAULT NULL,
++  p_recommendation TEXT DEFAULT NULL,
++  p_postpone_reason TEXT DEFAULT NULL
++)
++RETURNS TABLE (id BIGINT, public_id TEXT)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++DECLARE
++  v_id BIGINT;
++  v_public_id TEXT;
++BEGIN
++  INSERT INTO nixara_decisions (
++    session_id, report_type, role, dataset_name, decision,
++    notes, timeframe, question, owner, recommendation, postpone_reason
++  ) VALUES (
++    p_session_id, p_report_type, p_role, p_dataset_name, p_decision,
++    p_notes, p_timeframe, p_question, p_owner, p_recommendation, p_postpone_reason
++  ) RETURNING nixara_decisions.id, nixara_decisions.public_id INTO v_id, v_public_id;
++
++  RETURN QUERY SELECT v_id, v_public_id;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) TO anon;
++GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) TO authenticated;
++
++-- ============================================================
++-- 11. Security fixes (2026-08) — sequential-ID enumeration + write IDOR.
++--
++-- Prior state: get_decision_by_id(bigint) and get_outcome_for_decision(bigint)
++-- were SECURITY DEFINER + anon-executable, keyed on the sequential BIGSERIAL
++-- id — anyone could script id=1,2,3... and harvest every decision/outcome
++-- ever logged, across all sessions. update_decision_choice(bigint,...) had
++-- the same shape of problem but as a WRITE — no ownership check meant any
++-- caller could overwrite any other session's decision.
++--
++-- The "find a decision from a previous session" feature is an intentional
++-- cross-session READ, so the fix for the two lookups is not session-scoping
++-- (that would break the feature) — it's replacing the guessable sequential
++-- key with an unguessable random token (public_id). The WRITE path
++-- (update_decision_choice) has no such legitimate cross-session use case, so
++-- it's fixed with session_id ownership scoping instead.
++-- ============================================================
++
++ALTER TABLE nixara_decisions
++  ADD COLUMN IF NOT EXISTS public_id TEXT;
++
++UPDATE nixara_decisions
++SET public_id = substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)
++WHERE public_id IS NULL;
++
++ALTER TABLE nixara_decisions
++  ALTER COLUMN public_id SET DEFAULT substr(replace(gen_random_uuid()::text, '-', ''), 1, 10),
++  ALTER COLUMN public_id SET NOT NULL;
++
++CREATE UNIQUE INDEX IF NOT EXISTS idx_nixara_decisions_public_id ON nixara_decisions (public_id);
++
++CREATE OR REPLACE FUNCTION get_decision_by_public_id(p_public_id TEXT)
++RETURNS TABLE (
++  id BIGINT, created_at TIMESTAMPTZ, session_id TEXT, report_type TEXT,
++  role TEXT, dataset_name TEXT, decision TEXT, notes TEXT, timeframe TEXT,
++  question TEXT, recommendation TEXT, owner TEXT, postpone_reason TEXT, public_id TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++BEGIN
++  RETURN QUERY
++  SELECT d.id, d.created_at, d.session_id, d.report_type, d.role,
++         d.dataset_name, d.decision, d.notes, d.timeframe, d.question,
++         d.recommendation, d.owner, d.postpone_reason, d.public_id
++  FROM nixara_decisions d
++  WHERE d.public_id = p_public_id
++  LIMIT 1;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION get_decision_by_public_id(TEXT) TO anon;
++GRANT EXECUTE ON FUNCTION get_decision_by_public_id(TEXT) TO authenticated;
++
++CREATE OR REPLACE FUNCTION get_outcome_for_public_id(p_public_id TEXT)
++RETURNS TABLE (
++  id BIGINT, metric_name TEXT, metric_before NUMERIC, metric_after NUMERIC,
++  metric_unit TEXT, outcome_rating TEXT, outcome_notes TEXT
++)
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++BEGIN
++  RETURN QUERY
++  SELECT o.id, o.metric_name, o.metric_before, o.metric_after,
++         o.metric_unit, o.outcome_rating, o.outcome_notes
++  FROM nixara_outcomes o
++  JOIN nixara_decisions d ON d.id = o.decision_id
++  WHERE d.public_id = p_public_id
++  ORDER BY o.created_at DESC
++  LIMIT 1;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) TO anon;
++GRANT EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) TO authenticated;
++
++-- Old sequential-id-keyed lookups: revoked, no longer callable by anon/authenticated.
++-- Left in place (not dropped) only so historical direct-SQL debugging by an
++-- admin/service-role connection still works.
++REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT) FROM anon;
++REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT) FROM authenticated;
++REVOKE EXECUTE ON FUNCTION get_outcome_for_decision(BIGINT) FROM anon;
++REVOKE EXECUTE ON FUNCTION get_outcome_for_decision(BIGINT) FROM authenticated;
++
++DROP FUNCTION IF EXISTS update_decision_choice(BIGINT, TEXT, TEXT);
++
++CREATE OR REPLACE FUNCTION update_decision_choice(
++  p_id BIGINT,
++  p_decision TEXT,
++  p_postpone_reason TEXT DEFAULT NULL,
++  p_session_id TEXT DEFAULT NULL
++)
++RETURNS BOOLEAN
++LANGUAGE plpgsql
++SECURITY DEFINER
++SET search_path = public
++AS $$
++DECLARE
++  v_updated BIGINT;
++BEGIN
++  UPDATE nixara_decisions
++  SET decision        = p_decision,
++      postpone_reason = p_postpone_reason
++  WHERE id = p_id
++    AND session_id = p_session_id
++  RETURNING id INTO v_updated;
++
++  RETURN v_updated IS NOT NULL;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) TO anon;
++GRANT EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) TO authenticated;
++
++-- rls_auto_enable() is a DDL event-trigger helper with no legitimate reason
++-- to be reachable over the public REST RPC surface — locking it down per
++-- Supabase's own security advisor recommendation.
++REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM anon;
++REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM authenticated;
++REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM public;
++
++-- ── 12. Verify setup ────────────────────────────────────────
+ SELECT COUNT(*) AS total_events    FROM nixara_events;
+ SELECT COUNT(*) AS total_decisions FROM nixara_decisions;
+ SELECT COUNT(*) AS total_outcomes  FROM nixara_outcomes;

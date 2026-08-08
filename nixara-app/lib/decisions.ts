@@ -10,15 +10,16 @@ const REPORT_PREFIX: Record<string, string> = {
   "Risk Report":        "RR",
 };
 
-/** Returns a display ID like "ES-19" given a report type and numeric DB id. */
-export function formatDecisionId(reportType: string | null | undefined, id: number | null | undefined): string {
-  if (!id) return "—";
+/** Returns a display ID like "ES-a3f9c1d2e4" given a report type and public_id token. */
+export function formatDecisionId(reportType: string | null | undefined, publicId: string | null | undefined): string {
+  if (!publicId) return "—";
   const prefix = (reportType && REPORT_PREFIX[reportType]) ?? "D";
-  return `${prefix}-${id}`;
+  return `${prefix}-${publicId}`;
 }
 
 export interface DecisionRow {
   id: number;
+  public_id: string;
   created_at: string;
   session_id: string | null;
   report_type: string | null;
@@ -46,8 +47,16 @@ export interface LogDecisionParams {
   postponeReason?: string;
 }
 
+export interface LoggedDecision {
+  id: number;
+  publicId: string;
+}
+
 /**
- * Mirrors log_decision_record (lines 92-139) — returns the new row's id, or null if Supabase isn't configured.
+ * Mirrors log_decision_record — returns the new row's internal id (used for
+ * local write operations like outcome inserts) and its public_id token (used
+ * for display and any cross-session lookup), or null if Supabase isn't
+ * configured.
  *
  * Uses the log_decision_record() SECURITY DEFINER RPC instead of a direct
  * .insert().select("id") call, because anon has no SELECT grant on
@@ -56,7 +65,7 @@ export interface LogDecisionParams {
  * table owner, does the INSERT internally, and returns the new id — anon only
  * needs EXECUTE on the function.
  */
-export async function logDecisionRecord(params: LogDecisionParams): Promise<number | null> {
+export async function logDecisionRecord(params: LogDecisionParams): Promise<LoggedDecision | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.rpc("log_decision_record", {
     p_session_id:      params.sessionId,
@@ -71,8 +80,11 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<numb
     p_recommendation:  params.recommendation ?? null,
     p_postpone_reason: params.postponeReason ?? null,
   });
-  if (error || data === null || data === undefined) return null;
-  return data as number;
+  if (error || !data) return null;
+  // RPC returns an array — unwrap the first row.
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { id: row.id as number, publicId: row.public_id as string };
 }
 
 export interface LogOutcomeParams {
@@ -102,39 +114,43 @@ export async function logOutcome(params: LogOutcomeParams): Promise<void> {
 }
 
 /**
- * Mirrors fetch_decision_by_id (lines 190-210), but via the get_decision_by_id
- * RPC rather than a direct table SELECT — anon has no SELECT grant on
- * nixara_decisions (see migration note), only EXECUTE on this function.
- *
- * Note: supabase.rpc() always returns an array, even for single-row results.
- * We unwrap the first element and return null if the array is empty (not found).
+ * Looks up a decision by its public_id token via the get_decision_by_public_id
+ * RPC. This is an intentionally cross-session lookup (the "find a decision
+ * from a previous session" feature) — the token is a short random value
+ * rather than the sequential internal id specifically so it can't be
+ * enumerated. Returns null if not found or Supabase isn't configured.
  */
-export async function fetchDecisionById(id: number): Promise<DecisionRow | null> {
+export async function fetchDecisionByPublicId(publicId: string): Promise<DecisionRow | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase.rpc("get_decision_by_id", { p_id: id });
+  const { data, error } = await supabase.rpc("get_decision_by_public_id", { p_public_id: publicId });
   if (error || !data) return null;
-  // RPC returns an array — unwrap the first row (null if not found)
   const row = Array.isArray(data) ? (data[0] ?? null) : data;
   return row as DecisionRow | null;
 }
 
 /**
  * Updates the choice (approved/rejected/postponed) on an existing decision row
- * via the update_decision_choice SECURITY DEFINER RPC.
- * Returns true on success, false if the update failed or Supabase isn't configured.
+ * via the update_decision_choice SECURITY DEFINER RPC. The RPC now requires
+ * the caller's sessionId to match the row's session_id — this is a WRITE, so
+ * (unlike the public_id lookups above) there's no legitimate reason for one
+ * session to be able to flip another session's decision. Returns true only
+ * if a row was actually updated; false on error, missing config, or an
+ * ownership mismatch.
  */
 export async function updateDecisionChoice(
   id: number,
+  sessionId: string,
   newChoice: DecisionChoice,
   postponeReason?: string
 ): Promise<boolean> {
   if (!supabase) return false;
-  const { error } = await supabase.rpc("update_decision_choice", {
-    p_id:             id,
-    p_decision:       newChoice,
+  const { data, error } = await supabase.rpc("update_decision_choice", {
+    p_id:              id,
+    p_decision:        newChoice,
     p_postpone_reason: postponeReason ?? null,
+    p_session_id:      sessionId,
   });
-  return !error;
+  return !error && data === true;
 }
 
 export interface OutcomeRow {
@@ -149,12 +165,15 @@ export interface OutcomeRow {
 
 /**
  * Fetches the most recent outcome linked to a decision, via the
- * get_outcome_for_decision SECURITY DEFINER RPC (anon has no SELECT on
- * nixara_outcomes directly).  Returns null if none exists yet.
+ * get_outcome_for_public_id SECURITY DEFINER RPC (anon has no SELECT on
+ * nixara_outcomes directly). Keyed by the same public_id token as
+ * fetchDecisionByPublicId, for the same enumeration-resistance reason —
+ * the old sequential-id version of this RPC has been revoked server-side.
+ * Returns null if none exists yet.
  */
-export async function fetchOutcomeForDecision(decisionId: number): Promise<OutcomeRow | null> {
+export async function fetchOutcomeForPublicId(publicId: string): Promise<OutcomeRow | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase.rpc("get_outcome_for_decision", { p_decision_id: decisionId });
+  const { data, error } = await supabase.rpc("get_outcome_for_public_id", { p_public_id: publicId });
   if (error || !data) return null;
   const row = Array.isArray(data) ? (data[0] ?? null) : data;
   return row as OutcomeRow | null;

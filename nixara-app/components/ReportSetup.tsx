@@ -23,7 +23,7 @@ interface Props {
 }
 
 export default function ReportSetup({ value, onChange, onApiKeyResolved, onGenerate, generating }: Props) {
-  const { apiKey, setApiKey, remember, setRemember } = useApiKey();
+  const { apiKey, setApiKey } = useApiKey();
   const [freeUsed, setFreeUsed] = useState(0);
 
   useEffect(() => {
@@ -100,15 +100,7 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
           className="w-full rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
         <div className="flex items-center justify-between mt-1.5">
-          <label className="flex items-center gap-1.5 text-xs text-text-mute">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              disabled={!apiKey}
-            />
-            Remember key in this browser
-          </label>
+          <span className="text-xs text-text-mute">Not stored — cleared when you close or refresh this tab.</span>
           {keyStatus && <span className={`text-xs font-medium ${keyStatus.className}`}>{keyStatus.text}</span>}
         </div>
       </div>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useNixaraStore } from "@/lib/store";
+import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSession } from "@/lib/session-context";
 import BIConnector from "@/components/BIConnector";
 import MetricsRow from "@/components/MetricsRow";
@@ -26,6 +27,10 @@ export default function DashboardPage() {
   // ── Transient UI state (don't need to survive navigation) ────────────────
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Bug fix (React error #185): only feed Charts a new decision text after
+  // the user pauses typing — see use-debounced-value.ts for the full story.
+  const debouncedDecision = useDebouncedValue(setup.decision, 400);
 
   // BIConnector already calls cleanDataset before calling onLoaded.
   // Clear prior decisions so they don't ghost-persist from a previous dataset.
@@ -99,7 +104,7 @@ export default function DashboardPage() {
           </p>
           <MetricsRow metrics={metrics} />
           <DataPreview dataset={dataset} />
-          <Charts dataset={dataset} decisionText={setup.decision} />
+          <Charts dataset={dataset} decisionText={debouncedDecision} />
           <AnomalyWarnings dataset={dataset} />
 
           <ReportSetup

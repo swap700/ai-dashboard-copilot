@@ -160,7 +160,177 @@ ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS recommendation  TEXT;
 ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS owner           TEXT;
 ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS postpone_reason TEXT;
 
--- ── 9. Verify setup ────────────────────────────────────────
+-- ============================================================
+-- 10. Previously-undocumented RPCs — reconstructed from the live database
+-- (2026-08). These existed only in the Supabase SQL editor and were never
+-- committed here, which is itself a gap worth avoiding going forward: this
+-- file should be the source of truth for schema/RPCs, not a partial record
+-- of it. Definitions below match what's deployed as of this commit,
+-- including the 2026-08 security fixes (see section 11).
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION log_decision_record(
+  p_session_id TEXT,
+  p_report_type TEXT,
+  p_role TEXT,
+  p_dataset_name TEXT,
+  p_decision TEXT,
+  p_notes TEXT DEFAULT '',
+  p_timeframe TEXT DEFAULT '',
+  p_question TEXT DEFAULT '',
+  p_owner TEXT DEFAULT NULL,
+  p_recommendation TEXT DEFAULT NULL,
+  p_postpone_reason TEXT DEFAULT NULL
+)
+RETURNS TABLE (id BIGINT, public_id TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id BIGINT;
+  v_public_id TEXT;
+BEGIN
+  INSERT INTO nixara_decisions (
+    session_id, report_type, role, dataset_name, decision,
+    notes, timeframe, question, owner, recommendation, postpone_reason
+  ) VALUES (
+    p_session_id, p_report_type, p_role, p_dataset_name, p_decision,
+    p_notes, p_timeframe, p_question, p_owner, p_recommendation, p_postpone_reason
+  ) RETURNING nixara_decisions.id, nixara_decisions.public_id INTO v_id, v_public_id;
+
+  RETURN QUERY SELECT v_id, v_public_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) TO authenticated;
+
+-- ============================================================
+-- 11. Security fixes (2026-08) — sequential-ID enumeration + write IDOR.
+--
+-- Prior state: get_decision_by_id(bigint) and get_outcome_for_decision(bigint)
+-- were SECURITY DEFINER + anon-executable, keyed on the sequential BIGSERIAL
+-- id — anyone could script id=1,2,3... and harvest every decision/outcome
+-- ever logged, across all sessions. update_decision_choice(bigint,...) had
+-- the same shape of problem but as a WRITE — no ownership check meant any
+-- caller could overwrite any other session's decision.
+--
+-- The "find a decision from a previous session" feature is an intentional
+-- cross-session READ, so the fix for the two lookups is not session-scoping
+-- (that would break the feature) — it's replacing the guessable sequential
+-- key with an unguessable random token (public_id). The WRITE path
+-- (update_decision_choice) has no such legitimate cross-session use case, so
+-- it's fixed with session_id ownership scoping instead.
+-- ============================================================
+
+ALTER TABLE nixara_decisions
+  ADD COLUMN IF NOT EXISTS public_id TEXT;
+
+UPDATE nixara_decisions
+SET public_id = substr(replace(gen_random_uuid()::text, '-', ''), 1, 10)
+WHERE public_id IS NULL;
+
+ALTER TABLE nixara_decisions
+  ALTER COLUMN public_id SET DEFAULT substr(replace(gen_random_uuid()::text, '-', ''), 1, 10),
+  ALTER COLUMN public_id SET NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nixara_decisions_public_id ON nixara_decisions (public_id);
+
+CREATE OR REPLACE FUNCTION get_decision_by_public_id(p_public_id TEXT)
+RETURNS TABLE (
+  id BIGINT, created_at TIMESTAMPTZ, session_id TEXT, report_type TEXT,
+  role TEXT, dataset_name TEXT, decision TEXT, notes TEXT, timeframe TEXT,
+  question TEXT, recommendation TEXT, owner TEXT, postpone_reason TEXT, public_id TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT d.id, d.created_at, d.session_id, d.report_type, d.role,
+         d.dataset_name, d.decision, d.notes, d.timeframe, d.question,
+         d.recommendation, d.owner, d.postpone_reason, d.public_id
+  FROM nixara_decisions d
+  WHERE d.public_id = p_public_id
+  LIMIT 1;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_decision_by_public_id(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION get_decision_by_public_id(TEXT) TO authenticated;
+
+CREATE OR REPLACE FUNCTION get_outcome_for_public_id(p_public_id TEXT)
+RETURNS TABLE (
+  id BIGINT, metric_name TEXT, metric_before NUMERIC, metric_after NUMERIC,
+  metric_unit TEXT, outcome_rating TEXT, outcome_notes TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT o.id, o.metric_name, o.metric_before, o.metric_after,
+         o.metric_unit, o.outcome_rating, o.outcome_notes
+  FROM nixara_outcomes o
+  JOIN nixara_decisions d ON d.id = o.decision_id
+  WHERE d.public_id = p_public_id
+  ORDER BY o.created_at DESC
+  LIMIT 1;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) TO authenticated;
+
+-- Old sequential-id-keyed lookups: revoked, no longer callable by anon/authenticated.
+-- Left in place (not dropped) only so historical direct-SQL debugging by an
+-- admin/service-role connection still works.
+REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT) FROM anon;
+REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT) FROM authenticated;
+REVOKE EXECUTE ON FUNCTION get_outcome_for_decision(BIGINT) FROM anon;
+REVOKE EXECUTE ON FUNCTION get_outcome_for_decision(BIGINT) FROM authenticated;
+
+DROP FUNCTION IF EXISTS update_decision_choice(BIGINT, TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION update_decision_choice(
+  p_id BIGINT,
+  p_decision TEXT,
+  p_postpone_reason TEXT DEFAULT NULL,
+  p_session_id TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_updated BIGINT;
+BEGIN
+  UPDATE nixara_decisions
+  SET decision        = p_decision,
+      postpone_reason = p_postpone_reason
+  WHERE id = p_id
+    AND session_id = p_session_id
+  RETURNING id INTO v_updated;
+
+  RETURN v_updated IS NOT NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) TO authenticated;
+
+-- rls_auto_enable() is a DDL event-trigger helper with no legitimate reason
+-- to be reachable over the public REST RPC surface — locking it down per
+-- Supabase's own security advisor recommendation.
+REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM anon;
+REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM authenticated;
+REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM public;
+
+-- ── 12. Verify setup ────────────────────────────────────────
 SELECT COUNT(*) AS total_events    FROM nixara_events;
 SELECT COUNT(*) AS total_decisions FROM nixara_decisions;
 SELECT COUNT(*) AS total_outcomes  FROM nixara_outcomes;

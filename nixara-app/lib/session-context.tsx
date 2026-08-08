@@ -9,6 +9,7 @@ const SESSION_ID_KEY = "nixara_analytics_session_id";
 export interface RecordedDecision {
   choice: DecisionChoice;
   decisionId: number | null;
+  publicId: string | null;
   role: string;
   datasetName: string;
   question: string;
@@ -88,7 +89,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const recordDecision: SessionState["recordDecision"] = async (reportType, choice, ctx) => {
-    const decisionId = await logDecisionRecord({
+    const logged = await logDecisionRecord({
       sessionId,
       reportType,
       role: ctx.role,
@@ -105,7 +106,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       ...decisions,
       [reportType]: {
         choice,
-        decisionId,
+        decisionId: logged?.id ?? null,
+        publicId: logged?.publicId ?? null,
         role: ctx.role,
         datasetName: ctx.datasetName,
         question: ctx.question,
@@ -141,7 +143,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (!decision) return;
     // Update DB if a decision ID exists
     if (decision.decisionId) {
-      await updateDecisionChoice(decision.decisionId, newChoice, postponeReason);
+      await updateDecisionChoice(decision.decisionId, sessionId, newChoice, postponeReason);
     }
     const next: typeof decisions = {
       ...decisions,
