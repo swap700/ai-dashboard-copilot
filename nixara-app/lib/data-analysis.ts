@@ -4,6 +4,8 @@
  * Operates on a simple row-array representation instead of pandas DataFrames.
  */
 
+import { formatDateSafe, isDateColumn, monthBucketKey, monthBucketSortKey } from "./format";
+
 export type Row = Record<string, unknown>;
 
 export interface Dataset {
@@ -222,12 +224,37 @@ export function dashboardScore(dataset: Dataset): number {
   return Math.max(score, 0);
 }
 
-const MEAN_KEYWORDS = ["average", "avg", "mean", "rate", "ratio", "margin", "score", "pct", "percent"];
+const SUM_KEYWORDS = [
+  "sales", "revenue", "profit", "income", "earnings", "cost", "costs", "price",
+  "amount", "total", "spend", "spending", "expense", "expenses", "budget",
+  "quantity", "qty", "units", "volume", "billing", "charge", "charges", "fee",
+  "fees", "payment", "payments", "count", "visits", "orders", "transactions",
+];
+const MEAN_KEYWORDS = [
+  "average", "avg", "mean", "rate", "ratio", "margin", "score", "pct", "percent",
+  "age", "duration", "tenure", "bmi", "height", "weight", "index", "level",
+  "days", "years", "months", "rating", "satisfaction", "length", "distance",
+  "temperature", "speed", "density", "concentration",
+];
 
-/** Mirrors smart_agg: mean for rate/average-like columns, sum otherwise. */
+/**
+ * BUG FIX (2026-08): this used to default to "sum" for any column that didn't
+ * match a short "mean-like" keyword list — which meant a column like "Age"
+ * (not on the list) got summed across every row in a group, producing
+ * meaningless totals like 1,430,368 instead of an average. A hardcoded
+ * keyword list will never cover every possible per-entity attribute name
+ * across every industry Nixara sees data from (age, BMI, tenure, GPA,
+ * rating, days-since...), so instead of trying to enumerate all of them,
+ * the fallback for an *unrecognized* column name is now "mean" — the safer
+ * assumption for an arbitrary numeric column — and only the smaller, more
+ * stable vocabulary of clearly-additive business terms (sales, cost,
+ * quantity, count...) triggers "sum".
+ */
 export function smartAgg(colName: string): "mean" | "sum" {
   const lower = colName.toLowerCase();
-  return MEAN_KEYWORDS.some((k) => lower.includes(k)) ? "mean" : "sum";
+  if (MEAN_KEYWORDS.some((k) => lower.includes(k))) return "mean";
+  if (SUM_KEYWORDS.some((k) => lower.includes(k))) return "sum";
+  return "mean";
 }
 
 export function aggregateBy(
@@ -239,7 +266,8 @@ export function aggregateBy(
   const groups = new Map<string, number[]>();
 
   for (const row of dataset.rows) {
-    const key = String(row[groupCol] ?? "—");
+    const raw = row[groupCol];
+    const key = raw instanceof Date ? formatDateSafe(raw) : String(raw ?? "—");
     const v = row[valueCol];
     if (typeof v !== "number") continue;
     if (!groups.has(key)) groups.set(key, []);
@@ -252,6 +280,102 @@ export function aggregateBy(
       value: agg === "mean" ? mean(values) : values.reduce((a, b) => a + b, 0),
     }))
     .sort((a, b) => b.value - a.value);
+}
+
+export interface ChartSpec {
+  type: "bar" | "pie" | "area" | "treemap";
+  title: string;
+  data: { key: string; value: number }[];
+}
+
+/**
+ * Aggregates a metric by month for any Date-typed column, regardless of how
+ * granular the source timestamps are (a per-second admission timestamp
+ * column can have tens of thousands of distinct raw values — far too many
+ * to chart directly, but perfectly readable once bucketed to month).
+ */
+export function bucketByMonth(dataset: Dataset, dateCol: string, valueCol: string): { key: string; value: number }[] {
+  const agg = smartAgg(valueCol);
+  const groups = new Map<string, number[]>();
+  const sortKeys = new Map<string, number>();
+
+  for (const row of dataset.rows) {
+    const d = row[dateCol];
+    const v = row[valueCol];
+    if (!(d instanceof Date) || typeof v !== "number") continue;
+    const key = monthBucketKey(d);
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      sortKeys.set(key, monthBucketSortKey(d));
+    }
+    groups.get(key)!.push(v);
+  }
+
+  return Array.from(groups.entries())
+    .map(([key, values]) => ({
+      key,
+      value: agg === "mean" ? mean(values) : values.reduce((a, b) => a + b, 0),
+    }))
+    .sort((a, b) => sortKeys.get(a.key)! - sortKeys.get(b.key)!);
+}
+
+/** Finds a Date-typed column with enough distinct months to make a real trend line. */
+function findDateColumn(dataset: Dataset): string | null {
+  for (const col of dataset.columns) {
+    if (!isDateColumn(dataset.rows, col)) continue;
+    const months = new Set(
+      dataset.rows
+        .filter((r): r is Row & { [k: string]: Date } => r[col] instanceof Date)
+        .map((r) => monthBucketKey(r[col] as Date))
+    );
+    if (months.size >= 2) return col;
+  }
+  return null;
+}
+
+/**
+ * Picks which chart type(s) to render, based on the actual shape of the
+ * selected data rather than always defaulting to a bar chart:
+ *
+ *  - A Date-typed column with a real month range → area chart (trend over time)
+ *  - A category with 2–6 values, all non-negative → pie chart (composition of a whole)
+ *  - A category with >12 values (up to selectChartColumns' 25-value cap) and
+ *    no negatives → treemap (readable at higher cardinality than a bar list)
+ *  - Everything else → bar chart (the most broadly correct default —
+ *    handles negatives, mid-range cardinality, and any category type)
+ *
+ * Returns up to `maxCharts` specs, preferring a time-series view first (when
+ * one exists) and a category breakdown second, using a different metric for
+ * each when two relevant metrics are available so the two charts are
+ * complementary rather than redundant.
+ */
+export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts = 2): ChartSpec[] {
+  const { category, metrics } = selectChartColumns(dataset, decisionText);
+  const specs: ChartSpec[] = [];
+  const primaryMetric = metrics[0];
+
+  const dateCol = findDateColumn(dataset);
+  if (dateCol && primaryMetric) {
+    const data = bucketByMonth(dataset, dateCol, primaryMetric);
+    if (data.length >= 2) {
+      specs.push({ type: "area", title: `${primaryMetric} over time (by ${dateCol})`, data });
+    }
+  }
+
+  if (category && primaryMetric && specs.length < maxCharts) {
+    const metric = specs.length > 0 && metrics[1] ? metrics[1] : primaryMetric;
+    const data = aggregateBy(dataset, category, metric);
+    const cardinality = data.length;
+    const hasNegative = data.some((d) => d.value < 0);
+
+    let type: ChartSpec["type"] = "bar";
+    if (cardinality >= 2 && cardinality <= 6 && !hasNegative) type = "pie";
+    else if (cardinality > 12 && !hasNegative) type = "treemap";
+
+    specs.push({ type, title: `${metric} by ${category}`, data });
+  }
+
+  return specs.slice(0, maxCharts);
 }
 
 export interface DataSummaryOptions {

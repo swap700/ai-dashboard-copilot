@@ -1,6 +1,7 @@
 "use client";
 
 import type { Dataset } from "@/lib/data-analysis";
+import { formatCell } from "@/lib/format";
 
 export default function DataPreview({ dataset }: { dataset: Dataset }) {
   const preview = dataset.rows.slice(0, 10);
@@ -23,7 +24,7 @@ export default function DataPreview({ dataset }: { dataset: Dataset }) {
               <tr key={i} className="border-t border-border">
                 {dataset.columns.map((col) => (
                   <td key={col} className="px-3 py-1.5 text-text whitespace-nowrap">
-                    {String(row[col] ?? "")}
+                    {formatCell(row[col])}
                   </td>
                 ))}
               </tr>
