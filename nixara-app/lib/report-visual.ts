@@ -87,6 +87,28 @@ function stripNumberPrefix(text: string): string {
   return text.replace(/^\d+\.\s*/, "");
 }
 
+/**
+ * Returns the raw text of a line regardless of its kind (numbered/bullet/text).
+ *
+ * BUG FIX (2026-08): Quick Wins, Early Warning Signs, and Mitigation Actions
+ * were originally parsed by filtering for kind === "numbered" only. That
+ * assumption doesn't hold: unlike Recommended Actions ("EXACTLY 3 numbered
+ * actions") and Process Recommendations (which shows an explicit "1. [This
+ * week]..." template), the prompt text for these three sections never
+ * actually mandates a numbered list -- it only describes the expected count
+ * and content in prose. A model that complies with the prompt can still
+ * emit these as plain sentences, and the numbered-only filter was silently
+ * dropping that content entirely (confirmed against a real generated report
+ * where Mitigation Actions rendered as an empty card). Accepting any
+ * non-blank line kind here fixes that without assuming a format the prompt
+ * never actually promised.
+ */
+function anyLineText(l: ReportLine): string | null {
+  if (l.kind === "numbered") return stripNumberPrefix(l.text);
+  if (l.kind === "bullet" || l.kind === "text") return l.text;
+  return null;
+}
+
 /** Best-effort "Role Name: rest of sentence" extraction — degrades to null if not found. */
 function extractLeadingRole(text: string): { role: string | null; rest: string } {
   const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+)$/.exec(text.trim());
@@ -188,11 +210,9 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
         kind: "quickWins",
         heading,
         items: lines
-          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
-          .map((l) => {
-            const body = stripNumberPrefix(l.text);
-            return { stat: extractFirstStat(body), body };
-          }),
+          .map(anyLineText)
+          .filter((t): t is string => t !== null)
+          .map((body) => ({ stat: extractFirstStat(body), body })),
       };
 
     case "Top Risks Identified": {
@@ -247,9 +267,7 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
       return {
         kind: "earlyWarning",
         heading,
-        items: lines
-          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
-          .map((l) => stripNumberPrefix(l.text)),
+        items: lines.map(anyLineText).filter((t): t is string => t !== null),
       };
 
     case "Mitigation Actions":
@@ -257,9 +275,9 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
         kind: "mitigation",
         heading,
         items: lines
-          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
-          .map((l) => {
-            const body = stripNumberPrefix(l.text);
+          .map(anyLineText)
+          .filter((t): t is string => t !== null)
+          .map((body) => {
             const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+?)\s*[-–—]\s*Start within\s*(.+?)\.?\s*$/i.exec(body);
             if (m) return { role: m[1].trim(), action: m[2].trim(), timeframe: m[3].trim() };
             return { role: null, action: body, timeframe: null };
@@ -267,7 +285,7 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
       };
 
     case "Data Quality Risks": {
-      const text = lines.map((l) => (l.kind === "text" ? l.text : "")).filter(Boolean).join(" ");
+      const text = lines.map(anyLineText).filter((t): t is string => t !== null).join(" ");
       const scoreM = /score:\s*(\d+)\s*\/\s*100/i.exec(text);
       return { kind: "dataQuality", heading, text, score: scoreM ? parseInt(scoreM[1], 10) : null };
     }

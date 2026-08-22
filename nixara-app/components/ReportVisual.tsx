@@ -2,20 +2,29 @@
 
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
 
-/* ── Shared: inline number/currency emphasis in running prose ── */
-function Prose({ text }: { text: string }) {
+/**
+ * Shared inline number/currency emphasis, used everywhere body text renders.
+ *
+ * BUG FIX (2026-08): this used to only be applied via the generic "prose"
+ * fallback path (unhandled headings like "Performance Breakdown"), which
+ * made it look inconsistent — Performance Breakdown got bold numbers "by
+ * accident" while Efficiency Gaps, Quick Wins, Mitigation Actions etc. never
+ * did, since each of those sections' components rendered raw {text} instead
+ * of routing through this. Now used uniformly everywhere a value renders.
+ */
+function emphasizeParts(text: string): React.ReactNode[] {
   const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%)/g);
-  return (
-    <p className="text-text text-[0.95rem] leading-7">
-      {parts.map((p, i) =>
-        /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$/.test(p) ? (
-          <b key={i} className="text-accent-dk font-semibold">{p}</b>
-        ) : (
-          <span key={i}>{p}</span>
-        )
-      )}
-    </p>
+  return parts.map((p, i) =>
+    /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$/.test(p) ? (
+      <b key={i} className="text-accent-dk font-semibold">{p}</b>
+    ) : (
+      <span key={i}>{p}</span>
+    )
   );
+}
+
+function Prose({ text }: { text: string }) {
+  return <p className="text-text text-[0.95rem] leading-7">{emphasizeParts(text)}</p>;
 }
 
 function Card({ heading, children }: { heading: string; children: React.ReactNode }) {
@@ -45,7 +54,7 @@ function ActionsSection({ heading, items }: Extract<VisualSection, { kind: "acti
             <div key={i} className={`rounded-lg border p-3.5 ${style.bg} ${style.border}`}>
               <div className="text-base mb-1">{style.icon}</div>
               {item.verb && <div className={`text-[0.68rem] font-bold uppercase tracking-wide mb-1 ${style.text}`}>{item.verb}</div>}
-              <div className="text-[0.85rem] leading-snug text-text">{item.body}</div>
+              <div className="text-[0.85rem] leading-snug text-text">{emphasizeParts(item.body)}</div>
             </div>
           );
         })}
@@ -60,7 +69,7 @@ function RiskWaitSection({ heading, items }: Extract<VisualSection, { kind: "ris
       <div className="grid sm:grid-cols-2 gap-3">
         {items.map((item, i) => (
           <div key={i} className="bg-danger-bg border border-danger-border rounded-lg p-3.5 text-[0.85rem] leading-snug flex gap-2">
-            <span>\u26A0</span><span>{item.text}</span>
+            <span>{"\u26A0"}</span><span>{emphasizeParts(item.text)}</span>
           </div>
         ))}
       </div>
@@ -78,7 +87,7 @@ function EfficiencyGapsSection({ heading, lines }: Extract<VisualSection, { kind
               Inferred
             </span>
           )}
-          {l.text}
+          {emphasizeParts(l.text)}
         </p>
       ))}
     </Card>
@@ -108,7 +117,7 @@ function ProcessRecSection({ heading, items }: Extract<VisualSection, { kind: "p
                     {"\u{1F464}"} {item.role}
                   </div>
                 )}
-                <div>{item.body}</div>
+                <div>{emphasizeParts(item.body)}</div>
               </div>
             ))}
           </div>
@@ -125,7 +134,7 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
         {items.map((item, i) => (
           <div key={i} className="bg-success-bg border border-success-border rounded-lg p-3.5">
             {item.stat && <div className="text-2xl font-extrabold text-success mb-1">{item.stat}</div>}
-            <div className="text-[0.83rem] leading-snug text-text">{item.body}</div>
+            <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body)}</div>
           </div>
         ))}
       </div>
@@ -194,8 +203,8 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
                 Impact <b className={SEVERITY_TEXT_CLASS[risk.impact]}>{SEVERITY_LABEL[risk.impact]}</b>
               </div>
             </div>
-            {risk.signal && <div className="text-[0.85rem] leading-snug mb-1"><span className="text-text-mute">Signal:</span> <b className="text-text">{risk.signal}</b></div>}
-            {risk.consequence && <div className="text-[0.85rem] leading-snug"><span className="text-text-mute">Consequence:</span> <b className="text-text">{risk.consequence}</b></div>}
+            {risk.signal && <div className="text-[0.85rem] leading-snug mb-1"><span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal)}</div>}
+            {risk.consequence && <div className="text-[0.85rem] leading-snug"><span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence)}</div>}
           </div>
         </div>
       ))}
@@ -210,7 +219,7 @@ function EarlyWarningSection({ heading, items }: Extract<VisualSection, { kind: 
         {items.map((text, i) => (
           <div key={i} className="flex-1 min-w-[200px] bg-warn-bg border border-warn-border rounded-lg px-3.5 py-2.5 text-[0.8rem] flex items-center gap-2">
             <span className="text-warn">{"\u{1F4C8}"}</span>
-            <span>{text}</span>
+            <span>{emphasizeParts(text)}</span>
           </div>
         ))}
       </div>
@@ -228,7 +237,7 @@ function MitigationSection({ heading, items }: Extract<VisualSection, { kind: "m
               {"\u{1F464}"} {item.role}
             </span>
           )}
-          <span className="flex-1">{item.action}</span>
+          <span className="flex-1">{emphasizeParts(item.action)}</span>
           {item.timeframe && <b className="text-accent-dk shrink-0">{"Start within " + item.timeframe}</b>}
         </div>
       ))}
@@ -250,7 +259,7 @@ function DataQualitySection({ heading, text, score }: Extract<VisualSection, { k
             </div>
           </div>
         )}
-        <div className="text-[0.85rem] leading-snug text-text">{text}</div>
+        <div className="text-[0.85rem] leading-snug text-text">{emphasizeParts(text)}</div>
       </div>
     </Card>
   );
