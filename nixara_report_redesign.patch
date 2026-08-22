@@ -1,0 +1,657 @@
+diff --git a/nixara-app/components/ReportTabs.tsx b/nixara-app/components/ReportTabs.tsx
+index f278c02..a344c42 100644
+--- a/nixara-app/components/ReportTabs.tsx
++++ b/nixara-app/components/ReportTabs.tsx
+@@ -2,60 +2,17 @@
+ 
+ import { useState } from "react";
+ import { motion } from "framer-motion";
+-import { REPORT_TYPES, parseReportLines, type ReportType } from "@/lib/report";
++import { REPORT_TYPES, type ReportType } from "@/lib/report";
++import { buildVisualSections } from "@/lib/report-visual";
+ import type { ReportSetupValue } from "./ReportSetup";
+ import DecisionPanel from "./DecisionPanel";
++import ReportVisualBody from "./ReportVisual";
+ 
+ interface Props {
+   reports: Record<ReportType, string>;
+   context: ReportSetupValue & { datasetName: string };
+ }
+ 
+-function ReportBody({ text }: { text: string }) {
+-  const lines = parseReportLines(text);
+-  return (
+-    <div className="bg-surface border border-border rounded-xl px-9 py-7 leading-[1.72] text-text">
+-      {lines.map((line, i) => {
+-        switch (line.kind) {
+-          case "blank":
+-            return <br key={i} />;
+-          case "heading":
+-            return (
+-              <h3
+-                key={i}
+-                className="text-text font-semibold text-[1.05rem] mt-5 mb-1.5 border-l-[3px] border-accent pl-3 -tracking-[0.01em]"
+-              >
+-                {line.text}
+-              </h3>
+-            );
+-          case "tag": {
+-            const isOperational = /operational/i.test(line.text);
+-            return (
+-              <span
+-                key={i}
+-                className={
+-                  "inline-block mb-2 px-2.5 py-0.5 rounded-full text-[0.72rem] font-semibold tracking-wide uppercase " +
+-                  (isOperational
+-                    ? "bg-amber-100 text-amber-800"
+-                    : "bg-accent-bg-soft text-accent")
+-                }
+-              >
+-                {line.text}
+-              </span>
+-            );
+-          }
+-          default:
+-            return (
+-              <p key={i} className="mb-1.5 text-[1rem]">
+-                {line.text}
+-              </p>
+-            );
+-        }
+-      })}
+-    </div>
+-  );
+-}
+-
+ async function downloadExport(
+   kind: "docx" | "pdf",
+   reportText: string,
+@@ -113,7 +70,7 @@ export default function ReportTabs({ reports, context }: Props) {
+         animate={{ opacity: 1, y: 0 }}
+         transition={{ duration: 0.3 }}
+       >
+-        <ReportBody text={reports[active]} />
++        <ReportVisualBody sections={buildVisualSections(reports[active], active)} />
+ 
+         <div className="grid grid-cols-2 gap-3 mt-4">
+           <button
+diff --git a/nixara-app/components/ReportVisual.tsx b/nixara-app/components/ReportVisual.tsx
+new file mode 100644
+index 0000000..1de4e5a
+--- /dev/null
++++ b/nixara-app/components/ReportVisual.tsx
+@@ -0,0 +1,286 @@
++"use client";
++
++import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
++
++/* ── Shared: inline number/currency emphasis in running prose ── */
++function Prose({ text }: { text: string }) {
++  const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%)/g);
++  return (
++    <p className="text-text text-[0.95rem] leading-7">
++      {parts.map((p, i) =>
++        /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$/.test(p) ? (
++          <b key={i} className="text-accent-dk font-semibold">{p}</b>
++        ) : (
++          <span key={i}>{p}</span>
++        )
++      )}
++    </p>
++  );
++}
++
++function Card({ heading, children }: { heading: string; children: React.ReactNode }) {
++  return (
++    <div className="bg-surface border border-border rounded-xl p-5 md:p-6 mb-3">
++      <p className="text-accent text-[0.68rem] font-bold uppercase tracking-wider mb-3">{heading}</p>
++      {children}
++    </div>
++  );
++}
++
++/* ── Recommended Actions: verb-colored cards ── */
++const VERB_STYLE: Record<NonNullable<ActionItem["verb"]>, { bg: string; border: string; text: string; icon: string }> = {
++  Restrict: { bg: "bg-danger-bg", border: "border-danger-border", text: "text-danger", icon: "\u{1F6AB}" },
++  Approve: { bg: "bg-success-bg", border: "border-success-border", text: "text-success", icon: "\u2705" },
++  Mandate: { bg: "bg-warn-bg", border: "border-warn-border", text: "text-warn", icon: "\u{1F4CB}" },
++  Decide: { bg: "bg-accent-bg-soft", border: "border-accent-border", text: "text-accent-text-dk", icon: "\u26A1" },
++};
++
++function ActionsSection({ heading, items }: Extract<VisualSection, { kind: "actions" }>) {
++  return (
++    <Card heading={heading}>
++      <div className="grid sm:grid-cols-3 gap-3">
++        {items.map((item, i) => {
++          const style = item.verb ? VERB_STYLE[item.verb] : { bg: "bg-bg", border: "border-border", text: "text-text-mute", icon: "\u2022" };
++          return (
++            <div key={i} className={`rounded-lg border p-3.5 ${style.bg} ${style.border}`}>
++              <div className="text-base mb-1">{style.icon}</div>
++              {item.verb && <div className={`text-[0.68rem] font-bold uppercase tracking-wide mb-1 ${style.text}`}>{item.verb}</div>}
++              <div className="text-[0.85rem] leading-snug text-text">{item.body}</div>
++            </div>
++          );
++        })}
++      </div>
++    </Card>
++  );
++}
++
++function RiskWaitSection({ heading, items }: Extract<VisualSection, { kind: "riskWait" }>) {
++  return (
++    <Card heading={`\u26A0 ${heading}`}>
++      <div className="grid sm:grid-cols-2 gap-3">
++        {items.map((item, i) => (
++          <div key={i} className="bg-danger-bg border border-danger-border rounded-lg p-3.5 text-[0.85rem] leading-snug flex gap-2">
++            <span>\u26A0</span><span>{item.text}</span>
++          </div>
++        ))}
++      </div>
++    </Card>
++  );
++}
++
++function EfficiencyGapsSection({ heading, lines }: Extract<VisualSection, { kind: "efficiencyGaps" }>) {
++  return (
++    <Card heading={heading}>
++      {lines.map((l, i) => (
++        <p key={i} className="text-text text-[0.95rem] leading-7 mb-2 last:mb-0">
++          {l.inferred && (
++            <span className="inline-block text-[0.62rem] font-bold uppercase tracking-wide text-text-mute border border-dashed border-text-dim rounded px-1.5 py-0.5 mr-2 align-middle">
++              Inferred
++            </span>
++          )}
++          {l.text}
++        </p>
++      ))}
++    </Card>
++  );
++}
++
++function ProcessRecSection({ heading, items }: Extract<VisualSection, { kind: "processRec" }>) {
++  const lanes = new Map<string, typeof items>();
++  for (const item of items) {
++    const key = item.timeframe ?? "Other";
++    if (!lanes.has(key)) lanes.set(key, []);
++    lanes.get(key)!.push(item);
++  }
++  return (
++    <Card heading={heading}>
++      <div className="flex flex-col sm:flex-row gap-5">
++        {Array.from(lanes.entries()).map(([timeframe, laneItems]) => (
++          <div key={timeframe} className="flex-1">
++            <div className="text-[0.7rem] font-bold uppercase tracking-wide text-text-mute mb-2 flex items-center gap-1.5">
++              <span className={`w-1.5 h-1.5 rounded-full ${timeframe === "This week" ? "bg-accent" : "bg-text-dim"}`} />
++              {timeframe}
++            </div>
++            {laneItems.map((item, i) => (
++              <div key={i} className="bg-bg border border-border rounded-lg p-3 mb-2 text-[0.85rem] leading-snug">
++                {item.role && (
++                  <div className="inline-flex items-center gap-1 bg-accent-bg-soft text-accent-text-dk border border-accent-border rounded-full px-2.5 py-0.5 text-[0.72rem] font-semibold mb-1.5">
++                    {"\u{1F464}"} {item.role}
++                  </div>
++                )}
++                <div>{item.body}</div>
++              </div>
++            ))}
++          </div>
++        ))}
++      </div>
++    </Card>
++  );
++}
++
++function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "quickWins" }>) {
++  return (
++    <Card heading={heading}>
++      <div className="grid sm:grid-cols-2 gap-3">
++        {items.map((item, i) => (
++          <div key={i} className="bg-success-bg border border-success-border rounded-lg p-3.5">
++            {item.stat && <div className="text-2xl font-extrabold text-success mb-1">{item.stat}</div>}
++            <div className="text-[0.83rem] leading-snug text-text">{item.body}</div>
++          </div>
++        ))}
++      </div>
++    </Card>
++  );
++}
++
++/* ── Risk matrix: 3x3 severity-gradient grid with the specific risk's cell marked ── */
++const RANK: Record<Severity, number> = { low: 1, medium: 2, high: 3 };
++const ROWS: Severity[] = ["high", "medium", "low"];
++const COLS: Severity[] = ["low", "medium", "high"];
++const TIER_CLASS = { g: "bg-success", a: "bg-warn", r: "bg-danger" };
++
++function RiskMatrix({ likelihood, impact }: { likelihood: Severity; impact: Severity }) {
++  const cells: { tier: keyof typeof TIER_CLASS; here: boolean }[] = [];
++  for (const r of ROWS) {
++    for (const c of COLS) {
++      const sum = RANK[r] + RANK[c];
++      const tier = sum <= 3 ? "g" : sum === 4 ? "a" : "r";
++      cells.push({ tier, here: r === likelihood && c === impact });
++    }
++  }
++  return (
++    <div className="grid grid-cols-3 grid-rows-3 gap-0.5 w-[46px] h-[46px] shrink-0">
++      {cells.map((cell, i) => (
++        <div
++          key={i}
++          className={`rounded-sm ${TIER_CLASS[cell.tier]} ${cell.here ? "opacity-100 outline outline-2 outline-text outline-offset-1" : "opacity-30"}`}
++        />
++      ))}
++    </div>
++  );
++}
++
++const SEVERITY_LABEL: Record<Severity, string> = { low: "Low", medium: "Medium", high: "High" };
++const SEVERITY_TEXT_CLASS: Record<Severity, string> = { low: "text-success", medium: "text-warn", high: "text-danger" };
++
++function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "topRisks" }>) {
++  return (
++    <Card heading={heading}>
++      {risks.map((risk, i) => (
++        <div key={i} className={`flex gap-4 py-4 ${i < risks.length - 1 ? "border-b border-border" : ""}`}>
++          <div className="w-6 h-6 rounded-full bg-text text-surface flex items-center justify-center text-[0.72rem] font-bold shrink-0 mt-0.5">
++            {i + 1}
++          </div>
++          <div className="flex-1 min-w-0">
++            <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
++              <div className="font-bold text-text">{risk.name}</div>
++              {risk.type && (
++                <span
++                  className={`text-[0.62rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${
++                    risk.type === "Strategic Risk"
++                      ? "bg-accent-bg-soft text-accent-text-dk border-accent-border"
++                      : "bg-warn-bg text-warn border-warn-border"
++                  }`}
++                >
++                  {risk.type === "Strategic Risk" ? "Strategic" : "Operational"}
++                </span>
++              )}
++            </div>
++            <div className="flex items-center gap-4 mb-2">
++              <RiskMatrix likelihood={risk.likelihood} impact={risk.impact} />
++              <div className="text-[0.8rem] text-text-mute">
++                Likelihood <b className={SEVERITY_TEXT_CLASS[risk.likelihood]}>{SEVERITY_LABEL[risk.likelihood]}</b>
++                {"  \u00B7  "}
++                Impact <b className={SEVERITY_TEXT_CLASS[risk.impact]}>{SEVERITY_LABEL[risk.impact]}</b>
++              </div>
++            </div>
++            {risk.signal && <div className="text-[0.85rem] leading-snug mb-1"><span className="text-text-mute">Signal:</span> <b className="text-text">{risk.signal}</b></div>}
++            {risk.consequence && <div className="text-[0.85rem] leading-snug"><span className="text-text-mute">Consequence:</span> <b className="text-text">{risk.consequence}</b></div>}
++          </div>
++        </div>
++      ))}
++    </Card>
++  );
++}
++
++function EarlyWarningSection({ heading, items }: Extract<VisualSection, { kind: "earlyWarning" }>) {
++  return (
++    <Card heading={heading}>
++      <div className="flex flex-wrap gap-2.5">
++        {items.map((text, i) => (
++          <div key={i} className="flex-1 min-w-[200px] bg-warn-bg border border-warn-border rounded-lg px-3.5 py-2.5 text-[0.8rem] flex items-center gap-2">
++            <span className="text-warn">{"\u{1F4C8}"}</span>
++            <span>{text}</span>
++          </div>
++        ))}
++      </div>
++    </Card>
++  );
++}
++
++function MitigationSection({ heading, items }: Extract<VisualSection, { kind: "mitigation" }>) {
++  return (
++    <Card heading={heading}>
++      {items.map((item, i) => (
++        <div key={i} className={`flex items-center gap-3 py-2.5 text-[0.85rem] ${i < items.length - 1 ? "border-b border-border" : ""}`}>
++          {item.role && (
++            <span className="inline-flex items-center gap-1 bg-accent-bg-soft text-accent-text-dk border border-accent-border rounded-full px-2.5 py-0.5 text-[0.72rem] font-semibold shrink-0">
++              {"\u{1F464}"} {item.role}
++            </span>
++          )}
++          <span className="flex-1">{item.action}</span>
++          {item.timeframe && <b className="text-accent-dk shrink-0">{"Start within " + item.timeframe}</b>}
++        </div>
++      ))}
++    </Card>
++  );
++}
++
++function DataQualitySection({ heading, text, score }: Extract<VisualSection, { kind: "dataQuality" }>) {
++  return (
++    <Card heading={heading}>
++      <div className="flex items-center gap-4 bg-success-bg border border-success-border rounded-lg px-4 py-3.5">
++        {score !== null && (
++          <div
++            className="w-12 h-12 rounded-full shrink-0 flex items-center justify-center"
++            style={{ background: `conic-gradient(var(--success) ${score}%, var(--border) ${score}% 100%)` }}
++          >
++            <div className="w-9 h-9 rounded-full bg-success-bg flex items-center justify-center text-[0.65rem] font-extrabold text-success">
++              {score}
++            </div>
++          </div>
++        )}
++        <div className="text-[0.85rem] leading-snug text-text">{text}</div>
++      </div>
++    </Card>
++  );
++}
++
++function ProseSection({ heading, lines }: Extract<VisualSection, { kind: "prose" }>) {
++  return (
++    <Card heading={heading}>
++      {lines.map((line, i) => <Prose key={i} text={line} />)}
++    </Card>
++  );
++}
++
++export default function ReportVisualBody({ sections }: { sections: VisualSection[] }) {
++  return (
++    <div>
++      {sections.map((s, i) => {
++        switch (s.kind) {
++          case "actions": return <ActionsSection key={i} {...s} />;
++          case "riskWait": return <RiskWaitSection key={i} {...s} />;
++          case "efficiencyGaps": return <EfficiencyGapsSection key={i} {...s} />;
++          case "processRec": return <ProcessRecSection key={i} {...s} />;
++          case "quickWins": return <QuickWinsSection key={i} {...s} />;
++          case "topRisks": return <TopRisksSection key={i} {...s} />;
++          case "earlyWarning": return <EarlyWarningSection key={i} {...s} />;
++          case "mitigation": return <MitigationSection key={i} {...s} />;
++          case "dataQuality": return <DataQualitySection key={i} {...s} />;
++          default: return <ProseSection key={i} {...s} />;
++        }
++      })}
++    </div>
++  );
++}
+diff --git a/nixara-app/lib/report-visual.ts b/nixara-app/lib/report-visual.ts
+new file mode 100644
+index 0000000..2cfca52
+--- /dev/null
++++ b/nixara-app/lib/report-visual.ts
+@@ -0,0 +1,282 @@
++/**
++ * Presentation-only layer on top of parseReportLines(). Deliberately does NOT
++ * modify parseReportLines or the ReportLine type — those are also consumed by
++ * the docx/pdf export routes and parseRecommendations(), and changing their
++ * output shape would risk breaking exports that have nothing to do with the
++ * on-screen redesign. This file only re-groups/re-classifies the *existing*
++ * lines for ReportTabs' benefit.
++ *
++ * Every parser here is built against the EXACT format rules enforced in the
++ * REPORT_CONFIGS prompts (report.ts) — e.g. "Likelihood: High/Medium/Low" is
++ * a guaranteed literal prefix, not a guess. Where the prompt doesn't force an
++ * exact format (e.g. Process Recommendations' "state the role responsible"
++ * has no mandated syntax), the parser degrades gracefully: if the pattern
++ * isn't found, the content still renders as plain text rather than being
++ * dropped or crashing. Nothing here should ever cause a report to fail to
++ * render — worst case, a section falls back to the old plain-paragraph look.
++ */
++
++import { parseReportLines, type ReportLine, type ReportType } from "./report";
++
++export type Severity = "low" | "medium" | "high";
++
++export interface ActionItem {
++  verb: "Decide" | "Restrict" | "Approve" | "Mandate" | null;
++  body: string;
++}
++
++export interface RiskWaitItem {
++  text: string;
++}
++
++export interface ProcessItem {
++  timeframe: string | null; // e.g. "This week" / "This quarter", raw bracket text otherwise
++  role: string | null;
++  body: string;
++}
++
++export interface QuickWinItem {
++  stat: string | null; // e.g. "34%" or "$1,234.56"
++  body: string;
++}
++
++export interface RiskCard {
++  name: string;
++  likelihood: Severity;
++  impact: Severity;
++  signal: string | null;
++  consequence: string | null;
++  type: "Strategic Risk" | "Operational Risk" | null;
++}
++
++export interface MitigationItem {
++  role: string | null;
++  action: string;
++  timeframe: string | null;
++}
++
++export type VisualSection =
++  | { kind: "prose"; heading: string; lines: string[] }
++  | { kind: "actions"; heading: string; items: ActionItem[] }
++  | { kind: "riskWait"; heading: string; items: RiskWaitItem[] }
++  | { kind: "efficiencyGaps"; heading: string; lines: { text: string; inferred: boolean }[] }
++  | { kind: "processRec"; heading: string; items: ProcessItem[] }
++  | { kind: "quickWins"; heading: string; items: QuickWinItem[] }
++  | { kind: "topRisks"; heading: string; risks: RiskCard[] }
++  | { kind: "earlyWarning"; heading: string; items: string[] }
++  | { kind: "mitigation"; heading: string; items: MitigationItem[] }
++  | { kind: "dataQuality"; heading: string; text: string; score: number | null };
++
++const SEVERITY_MAP: Record<string, Severity> = { high: "high", medium: "medium", low: "low" };
++
++function parseSeverity(raw: string | undefined): Severity {
++  if (!raw) return "medium";
++  const key = raw.trim().toLowerCase();
++  if (SEVERITY_MAP[key]) return SEVERITY_MAP[key];
++  // Prompt only allows exact High/Medium/Low, but if the model deviates
++  // (e.g. "Very High"), match by substring rather than silently downgrading
++  // to Medium — understating a stated severity is the worse failure mode
++  // for a risk display. Check "high" first so "Medium-High" reads as High.
++  if (key.includes("high")) return "high";
++  if (key.includes("low")) return "low";
++  if (key.includes("medium")) return "medium";
++  return "medium";
++}
++
++function stripNumberPrefix(text: string): string {
++  return text.replace(/^\d+\.\s*/, "");
++}
++
++/** Best-effort "Role Name: rest of sentence" extraction — degrades to null if not found. */
++function extractLeadingRole(text: string): { role: string | null; rest: string } {
++  const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+)$/.exec(text.trim());
++  if (m) return { role: m[1].trim(), rest: m[2].trim() };
++  return { role: null, rest: text.trim() };
++}
++
++function extractFirstStat(text: string): string | null {
++  const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%/.exec(text);
++  return m ? m[0] : null;
++}
++
++const ACTION_VERBS = ["Decide", "Restrict", "Approve", "Mandate"] as const;
++
++function parseActionVerb(text: string): ActionItem["verb"] {
++  for (const verb of ACTION_VERBS) {
++    if (new RegExp(`^${verb}\\b`, "i").test(text.trim())) return verb;
++  }
++  return null;
++}
++
++/**
++ * Groups the flat ReportLine[] stream into per-heading buckets, then applies
++ * a section-specific parser to each bucket based on which report type and
++ * heading it is. Unrecognized headings fall back to plain prose so nothing
++ * is ever silently dropped.
++ */
++export function buildVisualSections(reportText: string, reportType: ReportType): VisualSection[] {
++  const lines = parseReportLines(reportText);
++  const buckets: { heading: string; lines: ReportLine[] }[] = [];
++  let current: { heading: string; lines: ReportLine[] } | null = null;
++
++  for (const line of lines) {
++    if (line.kind === "heading") {
++      current = { heading: line.text, lines: [] };
++      buckets.push(current);
++      continue;
++    }
++    if (line.kind === "blank" || !current) continue;
++    current.lines.push(line);
++  }
++
++  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType));
++}
++
++function parseSection(heading: string, lines: ReportLine[], reportType: ReportType): VisualSection {
++  switch (heading) {
++    case "Recommended Actions":
++      return {
++        kind: "actions",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
++          .map((l) => {
++            const body = stripNumberPrefix(l.text);
++            return { verb: parseActionVerb(body), body };
++          }),
++      };
++
++    case "Risks If You Wait":
++      return {
++        kind: "riskWait",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "bullet" }> => l.kind === "bullet")
++          .map((l) => ({ text: l.text })),
++      };
++
++    case "Efficiency Gaps":
++      return {
++        kind: "efficiencyGaps",
++        heading,
++        lines: lines
++          .filter((l): l is Extract<ReportLine, { kind: "text" }> => l.kind === "text")
++          .map((l) => {
++            const inferred = /^Inferred:\s*/i.test(l.text);
++            return { text: l.text.replace(/^Inferred:\s*/i, ""), inferred };
++          }),
++      };
++
++    case "Process Recommendations":
++      return {
++        kind: "processRec",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
++          .map((l) => {
++            const body = stripNumberPrefix(l.text);
++            const bracketMatch = /^\[([^\]]+)\]\s*(.*)$/.exec(body);
++            const timeframe = bracketMatch ? bracketMatch[1].trim() : null;
++            const rest = bracketMatch ? bracketMatch[2] : body;
++            const { role, rest: cleanBody } = extractLeadingRole(rest);
++            return { timeframe, role, body: cleanBody };
++          }),
++      };
++
++    case "Quick Wins":
++      return {
++        kind: "quickWins",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
++          .map((l) => {
++            const body = stripNumberPrefix(l.text);
++            return { stat: extractFirstStat(body), body };
++          }),
++      };
++
++    case "Top Risks Identified": {
++      const risks: RiskCard[] = [];
++      let cur: Partial<RiskCard> | null = null;
++
++      for (const l of lines) {
++        if (l.kind === "tag") {
++          if (cur) {
++            const t = l.text.trim();
++            cur.type = t === "Strategic Risk" || t === "Operational Risk" ? (t as RiskCard["type"]) : null;
++            risks.push({
++              name: cur.name ?? "Risk",
++              likelihood: cur.likelihood ?? "medium",
++              impact: cur.impact ?? "medium",
++              signal: cur.signal ?? null,
++              consequence: cur.consequence ?? null,
++              type: cur.type ?? null,
++            });
++            cur = null;
++          }
++          continue;
++        }
++        if (l.kind !== "text") continue;
++        const likelihoodM = /^Likelihood:\s*(.*)$/i.exec(l.text);
++        const impactM = /^Impact:\s*(.*)$/i.exec(l.text);
++        const signalM = /^Signal:\s*(.*)$/i.exec(l.text);
++        const consequenceM = /^Consequence:\s*(.*)$/i.exec(l.text);
++
++        if (likelihoodM && cur) { cur.likelihood = parseSeverity(likelihoodM[1]); continue; }
++        if (impactM && cur) { cur.impact = parseSeverity(impactM[1]); continue; }
++        if (signalM && cur) { cur.signal = signalM[1].trim(); continue; }
++        if (consequenceM && cur) { cur.consequence = consequenceM[1].trim(); continue; }
++
++        // Not a labeled field -> this is a new risk's name line.
++        // Flush an unterminated previous risk defensively (missing tag line).
++        if (cur) risks.push({
++          name: cur.name ?? "Risk", likelihood: cur.likelihood ?? "medium", impact: cur.impact ?? "medium",
++          signal: cur.signal ?? null, consequence: cur.consequence ?? null, type: cur.type ?? null,
++        });
++        cur = { name: l.text.trim() };
++      }
++      if (cur) risks.push({
++        name: cur.name ?? "Risk", likelihood: cur.likelihood ?? "medium", impact: cur.impact ?? "medium",
++        signal: cur.signal ?? null, consequence: cur.consequence ?? null, type: cur.type ?? null,
++      });
++
++      return { kind: "topRisks", heading, risks };
++    }
++
++    case "Early Warning Signs":
++      return {
++        kind: "earlyWarning",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
++          .map((l) => stripNumberPrefix(l.text)),
++      };
++
++    case "Mitigation Actions":
++      return {
++        kind: "mitigation",
++        heading,
++        items: lines
++          .filter((l): l is Extract<ReportLine, { kind: "numbered" }> => l.kind === "numbered")
++          .map((l) => {
++            const body = stripNumberPrefix(l.text);
++            const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+?)\s*[-–—]\s*Start within\s*(.+?)\.?\s*$/i.exec(body);
++            if (m) return { role: m[1].trim(), action: m[2].trim(), timeframe: m[3].trim() };
++            return { role: null, action: body, timeframe: null };
++          }),
++      };
++
++    case "Data Quality Risks": {
++      const text = lines.map((l) => (l.kind === "text" ? l.text : "")).filter(Boolean).join(" ");
++      const scoreM = /score:\s*(\d+)\s*\/\s*100/i.exec(text);
++      return { kind: "dataQuality", heading, text, score: scoreM ? parseInt(scoreM[1], 10) : null };
++    }
++
++    default:
++      return {
++        kind: "prose",
++        heading,
++        lines: lines.map((l) => (l.kind === "text" ? l.text : l.kind === "bullet" ? `• ${l.text}` : l.kind === "numbered" ? l.text : "")).filter(Boolean),
++      };
++  }
++}

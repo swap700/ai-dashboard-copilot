@@ -2,58 +2,15 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { REPORT_TYPES, parseReportLines, type ReportType } from "@/lib/report";
+import { REPORT_TYPES, type ReportType } from "@/lib/report";
+import { buildVisualSections } from "@/lib/report-visual";
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
+import ReportVisualBody from "./ReportVisual";
 
 interface Props {
   reports: Record<ReportType, string>;
   context: ReportSetupValue & { datasetName: string };
-}
-
-function ReportBody({ text }: { text: string }) {
-  const lines = parseReportLines(text);
-  return (
-    <div className="bg-surface border border-border rounded-xl px-9 py-7 leading-[1.72] text-text">
-      {lines.map((line, i) => {
-        switch (line.kind) {
-          case "blank":
-            return <br key={i} />;
-          case "heading":
-            return (
-              <h3
-                key={i}
-                className="text-text font-semibold text-[1.05rem] mt-5 mb-1.5 border-l-[3px] border-accent pl-3 -tracking-[0.01em]"
-              >
-                {line.text}
-              </h3>
-            );
-          case "tag": {
-            const isOperational = /operational/i.test(line.text);
-            return (
-              <span
-                key={i}
-                className={
-                  "inline-block mb-2 px-2.5 py-0.5 rounded-full text-[0.72rem] font-semibold tracking-wide uppercase " +
-                  (isOperational
-                    ? "bg-amber-100 text-amber-800"
-                    : "bg-accent-bg-soft text-accent")
-                }
-              >
-                {line.text}
-              </span>
-            );
-          }
-          default:
-            return (
-              <p key={i} className="mb-1.5 text-[1rem]">
-                {line.text}
-              </p>
-            );
-        }
-      })}
-    </div>
-  );
 }
 
 async function downloadExport(
@@ -113,7 +70,7 @@ export default function ReportTabs({ reports, context }: Props) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <ReportBody text={reports[active]} />
+        <ReportVisualBody sections={buildVisualSections(reports[active], active)} />
 
         <div className="grid grid-cols-2 gap-3 mt-4">
           <button

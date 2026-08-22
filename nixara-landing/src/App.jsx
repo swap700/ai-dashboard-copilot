@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useRef, useState } from 'react'
-import { motion, useScroll, useTransform, useMotionValueEvent, useInView } from 'framer-motion'
+import { motion, AnimatePresence, useScroll, useTransform, useMotionValueEvent, useInView } from 'framer-motion'
 
 const APP_URL = 'https://nixara-app.vercel.app'
 
@@ -211,7 +211,7 @@ function Hero() {
     <div id="hero" className="z1" ref={heroRef}>
       <motion.div className="hero-text" initial="hidden" animate="show" variants={heroVars} style={{ opacity: heroOpacity }}>
         <motion.div className="hero-eye" variants={fadeUp}>
-          <span className="eye-dot"></span>AI Dashboard Copilot
+          <span className="eye-dot"></span>Your personal decision intelligence layer
         </motion.div>
 
         <h1>
@@ -223,7 +223,7 @@ function Hero() {
         </h1>
 
         <motion.p className="hero-sub" variants={fadeUp}>
-          Upload a dataset, ask a question — get an executive-grade report tailored to your role, with every decision tracked.
+          Nixara is the personal decision intelligence layer for business leaders — starting with the report no one has time to write, and growing into the platform that tracks whether the decisions made from it actually worked.
         </motion.p>
 
         <motion.div className="hero-btns" variants={fadeUp}>
@@ -414,11 +414,29 @@ function FeatureRoles() {
       insight: '"Current headcount supports 40% capacity increase. Expansion viable only if 6 senior hires are completed by Oct 15 — bottleneck identified."',
       metrics: [['40%', 'Capacity Left'], ['6 hires', 'Needed', '#FBBD24'], ['Oct 15', 'Deadline', '#FBBD24']],
     },
+    {
+      id: 'sales', role: 'Sales Lead View', ts: 'Q3 · Pipeline execution',
+      insight: '"SDR headcount request denied — deal velocity already supports current team size. Reallocate budget toward accelerating existing pipeline instead of hiring."',
+      metrics: [['12', 'SDRs Requested'], ['0', 'Approved', '#F87171'], ['+18%', 'Velocity', '#34D399']],
+    },
+    {
+      id: 'ops', role: 'Operations Lead View', ts: 'Q3 · Fulfillment consolidation',
+      insight: '"East Coast hub consolidation approved. Projected 14% reduction in fulfillment cost with no service-level impact through Q4."',
+      metrics: [['-14%', 'Fulfillment Cost', '#34D399'], ['2', 'Hubs Merged'], ['0', 'SLA Impact']],
+    },
+    {
+      id: 'board', role: 'Board View', ts: 'Q3 · Pricing risk',
+      insight: '"Enterprise pricing increase postponed. Insufficient customer segmentation data to approve a 15% increase without a churn-risk read first."',
+      metrics: [['15%', 'Proposed Increase'], ['Postponed', 'Status', '#FBBD24'], ['Q1', 'Revisit']],
+    },
   ]
   const sectionRef = useRef(null)
   const [active, setActive] = useState(0)
   const { scrollYProgress } = useScroll({ target: sectionRef, offset: ['start start', 'end end'] })
-  const activeMV = useTransform(scrollYProgress, [0, 0.34, 0.67, 1], [0, 1, 2, 2])
+  const n = cards.length
+  const activeInput = [...cards.map((_, i) => i / n), 1]
+  const activeOutput = [...cards.map((_, i) => i), n - 1]
+  const activeMV = useTransform(scrollYProgress, activeInput, activeOutput)
   useMotionValueEvent(activeMV, 'change', (v) => setActive(Math.round(v)))
 
   return (
@@ -443,32 +461,44 @@ function FeatureRoles() {
           </div>
         </Reveal>
         <Parallax range={[40, -40]}>
-          <div className="role-split">
-            {cards.map((c, i) => (
-              <motion.div
-                key={c.id}
-                className={`role-card${i === active ? ' active' : ''}`}
-                initial={{ opacity: 0, x: 40, scale: 0.95 }}
-                whileInView={{ opacity: 0.55, x: 0 }}
-                viewport={{ once: true, amount: 0.3 }}
-                transition={{ duration: 0.6, delay: i * 0.12, ease: [0.16, 1, 0.3, 1] }}
-                animate={{ scale: i === active ? 1 : 0.95, opacity: i === active ? 1 : 0.55 }}
-              >
-                <div className="rc-top">
-                  <div className={`rc-role ${c.id}`}>{c.role}</div>
-                  <div className="rc-ts">{c.ts}</div>
-                </div>
-                <div className="rc-insight">{c.insight}</div>
-                <div className="rc-metric">
-                  {c.metrics.map(([v, l, color], i2) => (
-                    <div className="rcm" key={i2}>
-                      <div className="rcm-v" style={color ? { color } : undefined}><CountUp text={v} /></div>
-                      <div className="rcm-l">{l}</div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            ))}
+          <div className="role-display">
+            <AnimatePresence mode="wait">
+              {cards.map((c, i) => i === active && (
+                <motion.div
+                  key={c.id}
+                  className="role-card active"
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -14 }}
+                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <div className="rc-top">
+                    <div className={`rc-role ${c.id}`}>{c.role}</div>
+                    <div className="rc-ts">{c.ts}</div>
+                  </div>
+                  <div className="rc-insight">{c.insight}</div>
+                  <div className="rc-metric">
+                    {c.metrics.map(([v, l, color], i2) => (
+                      <div className="rcm" key={i2}>
+                        <div className="rcm-v" style={color ? { color } : undefined}><CountUp text={v} /></div>
+                        <div className="rcm-l">{l}</div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <div className="role-dots">
+              {cards.map((c, i) => (
+                <button
+                  key={c.id}
+                  className={`role-dot${i === active ? ' active' : ''}`}
+                  type="button"
+                  aria-label={c.role}
+                  onClick={() => setActive(i)}
+                />
+              ))}
+            </div>
           </div>
         </Parallax>
       </div>
@@ -557,12 +587,12 @@ function FeatureOutcomes() {
           <div className="feat-tag">Intelligence Loop</div>
           <h2 className="feat-h">Was Nixara right?<br />Now you'll know.</h2>
           <p className="feat-p">Log what actually happened. Nixara builds an accuracy record across every role and report type.</p>
-          <div className="feat-note">Live in Phase 2 →</div>
+          <div className="feat-note">Illustrative preview · accuracy scoring in development →</div>
         </Reveal>
         <Parallax range={[40, -40]}>
           <Reveal variants={fadeRight} className="outcome-vis">
             <div className="ov-head">
-              <div className="ov-title">Outcome Report · Decision #2847</div>
+              <div className="ov-title">Outcome Report · Decision #2847 <span className="ov-sample">Sample</span></div>
               <div className="ov-acc">91% accuracy</div>
             </div>
             <OutcomeBar name="West Coast Pipeline Revenue" delta="+$3.9M actual vs +$4.1M projected" pct={95} />
