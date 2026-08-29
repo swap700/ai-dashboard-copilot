@@ -163,8 +163,6 @@ export default function Faq() {
         <a href="https://www.linkedin.com/in/sakorkar-s/" target="_blank" rel="noreferrer" className="text-accent no-underline">
           LinkedIn
         </a>
-        &nbsp;·&nbsp;
-        <em>This tool uses your own OpenAI API key. Your data is processed in-session only and is never stored.</em>
       </div>
     </div>
   );
