@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Newsletter — founder-letter direction</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--bg:#fff;--ink:#1a1a1a;--m:#6b6b6b;--line:#e9e9e9;--acc:#FF5A36}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:Georgia,'Charter',serif}
+a{color:var(--acc)}
+
+.top{border-bottom:1px solid var(--line);padding:1rem 0}
+.top-inner{max-width:640px;margin:0 auto;padding:0 6vw;display:flex;justify-content:space-between;align-items:center;font-family:-apple-system,sans-serif}
+.top b{font-weight:800}
+.sub-btn{background:var(--ink);color:#fff;padding:.5rem 1.1rem;border-radius:20px;font-size:.78rem;font-weight:700}
+
+.wrap{max-width:640px;margin:0 auto;padding:3rem 6vw 5rem}
+.meta{font-family:-apple-system,sans-serif;font-size:.78rem;color:var(--m);margin-bottom:1rem}
+h1{font-size:2.1rem;line-height:1.2;margin-bottom:1rem;font-weight:700}
+.dek{font-size:1.15rem;color:var(--m);line-height:1.6;margin-bottom:2rem;font-style:italic}
+
+.byline{display:flex;align-items:center;gap:10px;padding-bottom:1.6rem;margin-bottom:1.8rem;border-bottom:1px solid var(--line);font-family:-apple-system,sans-serif}
+.byline .av{width:38px;height:38px;border-radius:50%;background:var(--acc)}
+.byline b{font-size:.88rem;display:block}
+.byline span{font-size:.76rem;color:var(--m)}
+
+p{font-size:1.08rem;line-height:1.85;margin-bottom:1.3rem}
+p.cap{font-size:1.3rem}
+p.cap::first-letter{font-size:2.6rem;font-weight:700;float:left;line-height:.8;margin:.05em .1em 0 0}
+
+blockquote{border-left:3px solid var(--acc);padding-left:1.2rem;margin:2rem 0;font-style:italic;font-size:1.2rem;color:#333;line-height:1.6}
+
+.shot{background:#f7f7f7;border:1px solid var(--line);border-radius:10px;padding:1.3rem;margin:2rem 0;font-family:-apple-system,sans-serif}
+.shot-top{display:flex;justify-content:space-between;font-size:.72rem;color:var(--m);margin-bottom:.9rem}
+.shot-q{font-size:.9rem;font-style:italic;margin-bottom:.9rem;color:#222}
+.shot-nums{display:flex;gap:1.5rem}
+.shot-nums div b{display:block;font-size:1rem;color:var(--acc)}
+.shot-nums div span{font-size:.68rem;color:var(--m)}
+
+h2{font-size:1.35rem;font-weight:700;margin:2.4rem 0 1rem;font-family:-apple-system,sans-serif}
+
+.list{font-family:-apple-system,sans-serif;font-size:.95rem}
+.list li{margin-bottom:.9rem;line-height:1.6;list-style:none;padding-left:1.4rem;position:relative}
+.list li::before{content:'—';position:absolute;left:0;color:var(--acc)}
+
+.divider{text-align:center;color:var(--m);margin:2.5rem 0;font-family:-apple-system,sans-serif;font-size:.8rem}
+
+.sign{font-family:-apple-system,sans-serif;margin-top:2.5rem}
+.sign b{display:block}
+.sign span{color:var(--m);font-size:.85rem}
+
+.cta-box{background:#fafafa;border:1px solid var(--line);border-radius:14px;padding:1.8rem;text-align:center;margin-top:2.5rem;font-family:-apple-system,sans-serif}
+.cta-box h3{font-size:1.15rem;margin-bottom:.5rem}
+.cta-box p{font-size:.9rem;color:var(--m);margin-bottom:1.2rem}
+.btn{background:var(--acc);color:#fff;padding:.75rem 1.6rem;border-radius:24px;font-size:.85rem;font-weight:700;display:inline-block}
+
+.comments{font-family:-apple-system,sans-serif;margin-top:2.5rem;padding-top:2rem;border-top:1px solid var(--line);display:flex;gap:2rem;color:var(--m);font-size:.85rem}
+
+footer{border-top:1px solid var(--line);padding:2rem 6vw;text-align:center;font-family:-apple-system,sans-serif;font-size:.78rem;color:var(--m)}
+</style>
+</head>
+<body>
+
+<div class="top"><div class="top-inner"><b>Nixara Notes</b><span class="sub-btn">Try it free</span></div></div>
+
+<div class="wrap">
+  <div class="meta">Issue 014 · Product</div>
+  <h1>I stopped writing the same report five different ways, so I built something that does it for me.</h1>
+  <p class="dek">Why every business tool gives everyone the same dashboard — and why that's the actual problem.</p>
+
+  <div class="byline"><div class="av"></div><div><b>Swapnil S.</b><span>Aug 22, 2026 · 6 min read</span></div></div>
+
+  <p class="cap">Every Monday for about a year, I rebuilt the same Q3 slide four times. Once for the CFO, who wanted the risk. Once for the CEO, who wanted the opportunity. Once for the board, who wanted neither and just wanted to know if it was safe. Same spreadsheet, every time. Just a different sentence at the top.</p>
+
+  <p>That's not a dashboard problem. Dashboards are fine at showing numbers. The problem is that a chart doesn't know who's looking at it, and a room full of executives never wants the same read on the same data.</p>
+
+  <blockquote>"We're not shipping a dashboard. We're shipping the fifteen minutes back to a founder who used to spend a weekend building this deck by hand."</blockquote>
+
+  <p>So Nixara starts before the chart. You upload a spreadsheet, or connect a live Tableau view, and ask a plain question — no query language, no pivot tables. It reads your role along with your question, and writes the report for the seat you're sitting in.</p>
+
+  <div class="shot">
+    <div class="shot-top"><span>Q3 Revenue Analysis</span><span>CFO view</span></div>
+    <div class="shot-q">"Should we accelerate West Coast expansion into Q4 given current pipeline velocity?"</div>
+    <div class="shot-nums"><div><b>+23%</b><span>Pipeline</span></div><div><b>3.2×</b><span>Coverage</span></div><div><b>$4.1M</b><span>Projected</span></div></div>
+  </div>
+
+  <p>Ask the same question as the CEO instead, and the report doesn't just reformat — it leads with growth timing over risk, because that's the actual job of that seat.</p>
+
+  <h2>How it actually works</h2>
+  <ul class="list">
+    <li><b>Upload</b> — CSV, Excel, or a live Tableau connection. Handles messy data automatically.</li>
+    <li><b>Ask</b> — plain language, your role, your time horizon.</li>
+    <li><b>Decide</b> — three reports in under 60 seconds. Approve, reject, or postpone — then track what happened.</li>
+  </ul>
+
+  <h2>The part everyone skips</h2>
+  <p>A forecast nobody checks is just a guess with better formatting. So every recommendation becomes a logged decision with an id and a timestamp, and months later Nixara compares what it predicted against what actually happened.</p>
+
+  <div class="shot">
+    <div class="shot-top"><span>Outcome Report · #2847</span><span>91% accuracy</span></div>
+    <div class="shot-q">Outcome: exceeded. The recommendation delivered 95% of projected upside — the CFO's risk flag was overcautious.</div>
+  </div>
+
+  <h2>Who it's for right now</h2>
+  <p>Six roles, today: CFO, CEO, COO, Sales Lead, Operations Lead, and Board. Same dataset, six completely different reports — because a Sales Lead needing headcount and a Board member weighing pricing risk should never read the same paragraph.</p>
+
+  <div class="divider">◆ ◆ ◆</div>
+
+  <p>Three reports are free every session, no account needed. If you want more, paste your own key — it never leaves your browser.</p>
+
+  <div class="sign"><b>— Swapnil</b><span>Building Nixara, one report at a time.</span></div>
+
+  <div class="cta-box">
+    <h3>Try the report, not the pitch.</h3>
+    <p>Three free reports. No account, no card.</p>
+    <a class="btn" href="#">Open Nixara →</a>
+  </div>
+
+  <div class="comments"><span>💬 12 replies</span><span>♥ 84 likes</span><span>↗ share</span></div>
+</div>
+
+<footer>© 2026 Nixara · Swapnil S. · Live app · LinkedIn</footer>
+</body>
+</html>

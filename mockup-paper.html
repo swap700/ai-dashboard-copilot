@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Paper — warm friendly product page direction</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--paper:#FBF4E9;--card:#FFFFFF;--ink:#2B2419;--m:#7A6F5C;--acc:#D97F4E;--acc2:#5C8B6F;--line:#EAE0CC}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:-apple-system,'Avenir Next',sans-serif}
+a{color:inherit;text-decoration:none}
+section{max-width:1080px;margin:0 auto;padding:5rem 6vw}
+
+nav{display:flex;justify-content:space-between;align-items:center;padding:1.4rem 6vw;max-width:1080px;margin:0 auto}
+.logo{font-weight:800;font-size:1.15rem;display:flex;align-items:center;gap:8px}
+.logo i{width:20px;height:20px;border-radius:7px;background:var(--acc);display:inline-block}
+.nl{display:flex;gap:2rem;font-size:.85rem;color:var(--m)}
+.nc{background:var(--ink);color:var(--paper);padding:.6rem 1.3rem;border-radius:24px;font-size:.8rem;font-weight:700}
+
+.hero{display:grid;grid-template-columns:1fr 1fr;gap:3.5rem;align-items:center;padding-top:3rem}
+.pill{display:inline-flex;align-items:center;gap:7px;background:#FCE9DA;color:var(--acc);border-radius:20px;padding:.4rem 1rem;font-size:.75rem;font-weight:700;margin-bottom:1.4rem}
+h1{font-size:clamp(2.2rem,4.2vw,3.4rem);font-weight:800;line-height:1.1;letter-spacing:-.02em;margin-bottom:1.2rem}
+h1 em{font-style:normal;color:var(--acc)}
+.hero p.lead{font-size:1.05rem;color:var(--m);line-height:1.7;margin-bottom:2rem;max-width:440px}
+.btns{display:flex;gap:.9rem}
+.btn-p{background:var(--acc);color:#fff;padding:.9rem 1.7rem;border-radius:28px;font-weight:700;font-size:.9rem}
+.btn-g{border:1.5px solid var(--line);padding:.9rem 1.7rem;border-radius:28px;font-weight:600;font-size:.9rem;color:var(--ink)}
+
+.blob-card{background:var(--card);border-radius:28px;padding:1.8rem;box-shadow:0 20px 50px rgba(43,36,25,.08);position:relative}
+.blob-card::before{content:'';position:absolute;top:-30px;right:-30px;width:140px;height:140px;background:#FCE9DA;border-radius:50%;z-index:-1}
+.bc-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2rem}
+.bc-badge{background:#EAF3EC;color:var(--acc2);font-size:.72rem;font-weight:700;padding:.3rem .8rem;border-radius:14px}
+.bc-q{font-size:.92rem;font-style:italic;color:var(--ink);margin-bottom:1.1rem;line-height:1.5}
+.bc-nums{display:flex;gap:.8rem}
+.bcn{flex:1;background:var(--paper);border-radius:14px;padding:.8rem;text-align:center}
+.bcn b{display:block;font-size:1.2rem;color:var(--acc2)}
+.bcn span{font-size:.65rem;color:var(--m)}
+
+.sec-eye{font-size:.75rem;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.7rem}
+.sec-h{font-size:2rem;font-weight:800;letter-spacing:-.02em;margin-bottom:.8rem}
+.sec-p{color:var(--m);max-width:480px;line-height:1.7}
+.center{text-align:center;margin:0 auto}
+.center .sec-p{margin:0 auto}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;margin-top:3rem}
+.step{background:var(--card);border-radius:20px;padding:1.8rem;box-shadow:0 10px 30px rgba(43,36,25,.05)}
+.step-ico{width:44px;height:44px;border-radius:14px;background:#FCE9DA;display:flex;align-items:center;justify-content:center;font-size:1.2rem;margin-bottom:1rem}
+.step h3{font-size:1.05rem;font-weight:700;margin-bottom:.5rem}
+.step p{color:var(--m);font-size:.87rem;line-height:1.65}
+
+.roles-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem;margin-top:3rem}
+.rc{background:var(--card);border-radius:18px;padding:1.4rem;box-shadow:0 10px 30px rgba(43,36,25,.05)}
+.rc-t{font-size:.72rem;font-weight:700;color:var(--acc2);text-transform:uppercase;margin-bottom:.6rem}
+.rc-q{font-size:.85rem;font-style:italic;line-height:1.55;color:var(--ink)}
+
+.compare{margin-top:3rem;display:grid;grid-template-columns:1fr 1fr;border-radius:20px;overflow:hidden;box-shadow:0 15px 40px rgba(43,36,25,.06)}
+.comp-col{padding:1.8rem;background:var(--card)}
+.comp-col.bad{background:#FBEDE8}
+.comp-h{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1.1rem}
+.comp-col.bad .comp-h{color:#C1573B}
+.comp-col.good .comp-h{color:var(--acc2)}
+.comp-row{font-size:.85rem;line-height:1.6;color:var(--m);margin-bottom:1rem}
+.comp-row b{color:var(--ink);display:block;font-weight:700}
+
+.outcome-card{background:var(--card);border-radius:24px;padding:2rem;margin-top:2.5rem;box-shadow:0 15px 40px rgba(43,36,25,.06)}
+.oc-top{display:flex;justify-content:space-between;margin-bottom:1.3rem}
+.oc-acc{background:#EAF3EC;color:var(--acc2);font-weight:700;font-size:.8rem;padding:.4rem .9rem;border-radius:16px}
+.omet{margin-bottom:1rem}
+.omt{display:flex;justify-content:space-between;font-size:.85rem;margin-bottom:.4rem}
+.otrack{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.obar{height:100%;background:var(--acc2);border-radius:4px}
+
+.testi{background:var(--card);border-radius:24px;padding:3rem;text-align:center;margin-top:1rem;box-shadow:0 15px 40px rgba(43,36,25,.06)}
+.testi p{font-size:1.3rem;line-height:1.6;color:var(--ink);max-width:640px;margin:0 auto 1.3rem;font-style:italic}
+.testi span{font-size:.82rem;color:var(--m);font-weight:600}
+
+.cta{text-align:center;background:linear-gradient(135deg,#FCE9DA,#FBF4E9);border-radius:32px;padding:4rem 2rem;margin-top:2rem}
+.cta h2{font-size:2rem;font-weight:800;margin-bottom:.7rem}
+.cta p{color:var(--m);margin-bottom:1.8rem}
+
+footer{display:flex;justify-content:space-between;padding:2rem 6vw;color:var(--m);font-size:.82rem;border-top:1px solid var(--line);max-width:1080px;margin:0 auto}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo"><i></i>Nixara</div>
+  <div class="nl"><a href="#how">How it works</a><a href="#roles">Roles</a><a href="#compare">Why not an LLM</a><a href="#about">About</a></div>
+  <a class="nc" href="#cta">Try free</a>
+</nav>
+
+<section class="hero" style="padding-top:2rem">
+  <div>
+    <div class="pill">◆ Your personal decision layer</div>
+    <h1>The report you never had time to write, <em>written for you.</em></h1>
+    <p class="lead">Nixara turns a spreadsheet and a plain-language question into a boardroom-ready report — recalibrated for whoever actually has to act on it.</p>
+    <div class="btns"><a class="btn-p" href="#">Try it free</a><a class="btn-g" href="#">See how it works</a></div>
+  </div>
+  <div class="blob-card">
+    <div class="bc-top"><span style="font-weight:700;font-size:.9rem">Q3 Revenue Analysis</span><span class="bc-badge">CFO view</span></div>
+    <div class="bc-q">"Should we accelerate West Coast expansion into Q4 given current pipeline velocity?"</div>
+    <div class="bc-nums">
+      <div class="bcn"><b>+23%</b><span>Pipeline</span></div>
+      <div class="bcn"><b>3.2×</b><span>Coverage</span></div>
+      <div class="bcn"><b>$4.1M</b><span>Projected</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="center" id="how">
+  <div class="sec-eye" style="text-align:center">How it works</div>
+  <div class="sec-h">Three friendly steps.</div>
+  <div class="sec-p">No pivot tables, no query language — just your data and a question.</div>
+  <div class="steps">
+    <div class="step"><div class="step-ico">📂</div><h3>Upload your data</h3><p>CSV, Excel, or a live Tableau connection. Nixara handles messy data automatically.</p></div>
+    <div class="step"><div class="step-ico">💬</div><h3>Ask your question</h3><p>Plain language, your role, your time horizon — Nixara does the rest.</p></div>
+    <div class="step"><div class="step-ico">⚡</div><h3>Decide &amp; track</h3><p>Three reports in under 60 seconds. Approve, reject, postpone, then watch it play out.</p></div>
+  </div>
+</section>
+
+<section id="roles">
+  <div class="sec-eye">Six roles, one report</div>
+  <div class="sec-h">Same data. Completely different read.</div>
+  <div class="sec-p">A CFO and a CEO need different sentences from the same numbers — Nixara knows the difference.</div>
+  <div class="roles-grid">
+    <div class="rc"><div class="rc-t">CFO</div><div class="rc-q">"Burn rate exceeds forecast by 18%. Cost review required."</div></div>
+    <div class="rc"><div class="rc-t">CEO</div><div class="rc-q">"Pipeline closes 18% faster — this is the window to move."</div></div>
+    <div class="rc"><div class="rc-t">COO</div><div class="rc-q">"Viable only if six senior hires land by October 15."</div></div>
+    <div class="rc"><div class="rc-t">Sales lead</div><div class="rc-q">"Headcount request denied — velocity already supports the team."</div></div>
+    <div class="rc"><div class="rc-t">Operations</div><div class="rc-q">"Hub consolidation approved, 14% cost reduction."</div></div>
+    <div class="rc"><div class="rc-t">Board</div><div class="rc-q">"Pricing increase postponed pending a churn-risk read."</div></div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="sec-eye">Why not just an LLM</div>
+  <div class="sec-h">This isn't pasting a spreadsheet into a chat window.</div>
+  <div class="sec-p">Anyone can paste a CSV into ChatGPT and ask for a summary. Here's what actually breaks — and what Nixara does instead.</div>
+  <div class="compare">
+    <div class="comp-col bad">
+      <div class="comp-h">Pasting into a generic LLM</div>
+      <div class="comp-row"><b>One answer, whoever asks.</b>No role calibration — everyone gets the same summary.</div>
+      <div class="comp-row"><b>Data lives in the chat.</b>Copy-pasted, truncated, gone when the thread ends.</div>
+      <div class="comp-row"><b>No memory of its own advice.</b>Ask again next quarter and it has no idea what it told you.</div>
+    </div>
+    <div class="comp-col good">
+      <div class="comp-h">Nixara</div>
+      <div class="comp-row"><b>Recalibrated by seat.</b>Same dataset, six different reports for six different roles.</div>
+      <div class="comp-row"><b>Connects to live data.</b>CSV, Excel, or a live Tableau view — no copy-paste.</div>
+      <div class="comp-row"><b>Every decision logged.</b>Then checked later against what actually happened.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="sec-eye">Was Nixara right?</div>
+  <div class="sec-h">Now you'll know.</div>
+  <div class="sec-p">Log what actually happened, and Nixara checks its own work.</div>
+  <div class="outcome-card">
+    <div class="oc-top"><span style="font-weight:700">Outcome Report · #2847</span><span class="oc-acc">91% accuracy</span></div>
+    <div class="omet"><div class="omt"><span>West Coast pipeline revenue</span><span>+$3.9M vs +$4.1M</span></div><div class="otrack"><div class="obar" style="width:95%"></div></div></div>
+    <div class="omet"><div class="omt"><span>Deal close velocity</span><span>+21% vs +18%</span></div><div class="otrack"><div class="obar" style="width:100%;background:var(--acc)"></div></div></div>
+    <div class="omet"><div class="omt"><span>Headcount readiness</span><span>5 of 6 completed</span></div><div class="otrack"><div class="obar" style="width:83%;background:#E0B655"></div></div></div>
+  </div>
+</section>
+
+<section id="about">
+  <div class="testi">
+    <p>"We're not shipping a dashboard. We're shipping the fifteen minutes back to a founder who used to spend a weekend building this deck by hand."</p>
+    <span>Swapnil S. — Founder, Nixara</span>
+  </div>
+</section>
+
+<section id="cta">
+  <div class="cta">
+    <h2>Try the report, not the pitch.</h2>
+    <p>Three free reports. No account, no card.</p>
+    <a class="btn-p" href="#">Open Nixara</a>
+  </div>
+</section>
+
+<footer>
+  <span>© 2026 Nixara · Swapnil S.</span>
+  <span>Live app · LinkedIn</span>
+</footer>
+</body>
+</html>

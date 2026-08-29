@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Chapters — cinematic scrollytelling, full site</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--bg:#050505;--ink:#EDEAE3;--m:#7A756B;--sig:#C9C2B4;--acc:#D98A5E}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,'Helvetica Neue',Arial,sans-serif}
+a{color:inherit;text-decoration:none}
+section{max-width:1100px;margin:0 auto;padding:6rem 6vw}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;justify-content:space-between;align-items:center;
+  padding:1.4rem 3vw;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--m);
+  background:linear-gradient(180deg,rgba(5,5,5,.9),transparent)}
+nav .links{display:flex;gap:2rem}
+nav a.cta{color:var(--ink);border:1px solid rgba(237,234,227,.25);padding:.5rem 1.1rem;border-radius:6px;letter-spacing:.08em}
+
+.chapter{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;position:relative;padding:6rem 6vw}
+.signal{width:260px;height:260px;position:relative;margin:0 auto 2.5rem}
+.ring{position:absolute;border:1px solid rgba(237,234,227,.16);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%)}
+.ring.pulse{animation:pulse 3.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.55}50%{transform:translate(-50%,-50%) scale(1.07);opacity:1}}
+.no{font-size:.68rem;letter-spacing:.3em;color:var(--acc);margin-bottom:1.4rem;text-transform:uppercase}
+.title{font-size:clamp(2.4rem,6vw,4.4rem);font-weight:300;letter-spacing:-.02em;line-height:1.05}
+.sub{margin-top:1.4rem;color:var(--m);max-width:460px;margin-left:auto;margin-right:auto;font-size:.95rem;line-height:1.75}
+
+.progress{position:fixed;right:2rem;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:10px;z-index:30}
+.progress span{width:6px;height:6px;border-radius:50%;background:rgba(237,234,227,.25)}
+
+.rule{height:1px;background:rgba(237,234,227,.1);max-width:1100px;margin:0 auto}
+
+.eyebrow{font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--acc);margin-bottom:1rem}
+.h2{font-size:clamp(1.8rem,3vw,2.5rem);font-weight:300;letter-spacing:-.02em;margin-bottom:.8rem}
+.p{color:var(--m);max-width:480px;line-height:1.75;font-size:.92rem}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:3rem}
+.step{border-top:1px solid rgba(237,234,227,.15);padding-top:1.3rem}
+.step-n{font-size:.68rem;color:var(--acc);letter-spacing:.2em;margin-bottom:1rem}
+.step h3{font-size:1.1rem;font-weight:400;margin-bottom:.5rem}
+.step p{color:var(--m);font-size:.85rem;line-height:1.65}
+
+.roles{margin-top:3rem;display:grid;grid-template-columns:1fr 1fr;gap:0}
+.role{padding:1.6rem 0;border-bottom:1px solid rgba(237,234,227,.1)}
+.role:nth-child(odd){padding-right:2rem;border-right:1px solid rgba(237,234,227,.1)}
+.role:nth-child(even){padding-left:2rem}
+.role-t{font-size:.65rem;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin-bottom:.5rem}
+.role-q{font-size:.88rem;color:var(--ink);opacity:.9;font-style:italic;line-height:1.6}
+
+.outcome{margin-top:3rem;border:1px solid rgba(237,234,227,.12);border-radius:14px;padding:1.6rem}
+.ov-row{display:flex;justify-content:space-between;padding:.6rem 0;border-bottom:1px dashed rgba(237,234,227,.1);font-size:.85rem}
+.ov-row span:last-child{color:var(--acc)}
+
+.finale{min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.finale h2{font-size:clamp(2rem,4.5vw,3.4rem);font-weight:300;letter-spacing:-.02em;max-width:700px;line-height:1.15}
+.finale p{margin-top:1.3rem;color:var(--m);max-width:440px}
+.btn{margin-top:2.2rem;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;border:1px solid rgba(237,234,227,.3);padding:1rem 2.2rem;display:inline-block}
+
+footer{display:flex;justify-content:space-between;padding:2rem 6vw;font-size:.72rem;color:var(--m);border-top:1px solid rgba(237,234,227,.08)}
+</style>
+</head>
+<body>
+
+<nav>
+  <span>Nixara</span>
+  <div class="links">
+    <a href="#how">How it works</a><a href="#roles">Roles</a><a href="#outcomes">Outcomes</a>
+    <a class="cta" href="#">Try it free</a>
+  </div>
+</nav>
+
+<div class="progress"><span></span><span></span><span></span><span></span></div>
+
+<div class="chapter">
+  <div>
+    <div class="signal"><div class="ring" style="width:100%;height:100%"></div><div class="ring pulse" style="width:58%;height:58%"></div><div class="ring" style="width:22%;height:22%;background:rgba(237,234,227,.07)"></div></div>
+    <div class="no">Chapter 01</div>
+    <div class="title">Observe</div>
+    <p class="sub">A spreadsheet, a Tableau view, a mess of numbers no one has time to read properly. Nixara starts by simply looking.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div>
+    <div class="signal"><div class="ring" style="width:80%;height:80%;border-style:dashed"></div><div class="ring pulse" style="width:45%;height:45%"></div></div>
+    <div class="no">Chapter 02</div>
+    <div class="title">Recalibrate</div>
+    <p class="sub">The same numbers, read six different ways — once for every seat at the table. A CFO and a CEO never needed the same sentence back.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div>
+    <div class="signal"><div class="ring" style="width:100%;height:100%;border-color:rgba(237,234,227,.3)"></div><div class="ring" style="width:70%;height:70%"></div><div class="ring pulse" style="width:20%;height:20%;background:var(--sig);border:none"></div></div>
+    <div class="no">Chapter 03</div>
+    <div class="title">Decide</div>
+    <p class="sub">Approve. Reject. Postpone. Every call gets an id, a timestamp, and an owner — the moment thinking becomes a record.</p>
+  </div>
+</div>
+
+<div class="chapter">
+  <div>
+    <div class="signal"><div class="ring" style="width:100%;height:100%"></div><div class="ring" style="width:100%;height:100%;transform:translate(-50%,-50%) rotate(45deg);border-color:rgba(201,194,180,.25)"></div><div class="ring pulse" style="width:55%;height:55%"></div></div>
+    <div class="no">Chapter 04</div>
+    <div class="title">Track</div>
+    <p class="sub">Months later, Nixara checks its own work — comparing what it predicted against what actually happened. That's the part no one else does.</p>
+  </div>
+</div>
+
+<div class="rule"></div>
+
+<section id="how">
+  <div class="eyebrow">How it works</div>
+  <div class="h2">Three steps from raw data to boardroom-ready decision.</div>
+  <div class="steps">
+    <div class="step"><div class="step-n">01 · Upload</div><h3>Upload your data</h3><p>CSV, Excel, or a live Tableau connection. Nixara handles messy data automatically.</p></div>
+    <div class="step"><div class="step-n">02 · Ask</div><h3>Ask your question</h3><p>Plain language, your role, your time horizon. No query language, no pivot tables.</p></div>
+    <div class="step"><div class="step-n">03 · Decide</div><h3>Decide &amp; track</h3><p>Three AI reports in under 60 seconds. Approve, reject, or postpone — then track the outcome.</p></div>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<section id="roles">
+  <div class="eyebrow">Intelligence layer</div>
+  <div class="h2">Same data. Six completely different reports.</div>
+  <div class="roles">
+    <div class="role"><div class="role-t">CFO</div><div class="role-q">"Cash runway concern: burn rate exceeds projections by 18%. Cost review required."</div></div>
+    <div class="role"><div class="role-t">CEO</div><div class="role-q">"West Coast pipeline closes 18% faster than national average — this is the window to move."</div></div>
+    <div class="role"><div class="role-t">COO</div><div class="role-q">"Expansion viable only if six senior hires are completed by October 15."</div></div>
+    <div class="role"><div class="role-t">Sales lead</div><div class="role-q">"SDR headcount request denied — deal velocity already supports current team size."</div></div>
+    <div class="role"><div class="role-t">Operations</div><div class="role-q">"East Coast hub consolidation approved, 14% cost reduction, no service impact."</div></div>
+    <div class="role"><div class="role-t">Board</div><div class="role-q">"Enterprise pricing increase postponed pending a churn-risk read."</div></div>
+  </div>
+</section>
+
+<div class="rule"></div>
+
+<section id="outcomes">
+  <div class="eyebrow">Intelligence loop</div>
+  <div class="h2">Was Nixara right? Now you'll know.</div>
+  <p class="p">Log what actually happened. Nixara builds an accuracy record across every role and report type.</p>
+  <div class="outcome">
+    <div class="ov-row"><span>West Coast pipeline revenue</span><span>+$3.9M vs +$4.1M projected</span></div>
+    <div class="ov-row"><span>Deal close velocity</span><span>+21% vs +18% predicted</span></div>
+    <div class="ov-row"><span>Headcount readiness</span><span>5 of 6 hires completed</span></div>
+    <div class="ov-row"><span>Verdict</span><span>Exceeded · 91% accuracy</span></div>
+  </div>
+</section>
+
+<div class="finale">
+  <h2>Four chapters. One decision, seen all the way through.</h2>
+  <p>Nixara is the personal decision intelligence layer for business leaders. Three reports free, no account.</p>
+  <a class="btn" href="#">Begin the report →</a>
+</div>
+
+<footer>
+  <span>© 2026 Nixara · Swapnil S.</span>
+  <span>Live app · LinkedIn</span>
+</footer>
+
+<script>
+var progress = document.querySelectorAll('.progress span');
+var chapters = document.querySelectorAll('.chapter');
+function update(){
+  var mid = window.scrollY + window.innerHeight/2;
+  var best = 0;
+  chapters.forEach(function(c,i){
+    if(c.offsetTop <= mid) best = i;
+  });
+  progress.forEach(function(p,i){ p.style.background = i===best ? '#D98A5E' : 'rgba(237,234,227,.25)'; });
+}
+window.addEventListener('scroll', update, {passive:true});
+update();
+</script>
+</body>
+</html>

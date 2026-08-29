@@ -160,7 +160,7 @@ export default function Faq() {
       <div className="border-t border-border pt-5 mt-8 text-text-dim text-xs text-center leading-relaxed">
         Built by <strong className="text-text">Swapnil Sakorkar</strong> &nbsp;·&nbsp; AI Application Developer &nbsp;·&nbsp;
         {" "}
-        <a href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank" rel="noreferrer" className="text-accent no-underline">
+        <a href="https://www.linkedin.com/in/sakorkar-s/" target="_blank" rel="noreferrer" className="text-accent no-underline">
           LinkedIn
         </a>
         &nbsp;·&nbsp;

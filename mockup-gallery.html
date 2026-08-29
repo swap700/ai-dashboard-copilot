@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Gallery — kinetic wall direction</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--bg:#111013;--ink:#F0EDE7;--m:#8B8579;--acc:#D98A5E}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;overflow-x:hidden}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;justify-content:space-between;padding:1.6rem 3vw;font-size:.75rem;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--m);mix-blend-mode:difference}
+nav a{color:var(--ink)}
+
+.stage{height:100vh;position:relative;overflow:hidden;display:flex}
+.lane{flex:1;display:flex;flex-direction:column;gap:14px;padding:0 7px;animation-timing-function:linear;animation-iteration-count:infinite}
+.lane.up{animation-name:scrollUp}
+.lane.down{animation-name:scrollDown}
+@keyframes scrollUp{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+@keyframes scrollDown{from{transform:translateY(-50%)}to{transform:translateY(0)}}
+
+.plaque{background:#1A1917;border:1px solid rgba(255,255,255,.06);border-radius:4px;padding:1.2rem 1.1rem;flex-shrink:0}
+.pl-role{font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:var(--acc);margin-bottom:.6rem}
+.pl-q{font-size:.82rem;line-height:1.5;font-style:italic;color:var(--ink);opacity:.92}
+.pl-tag{margin-top:.8rem;font-size:.62rem;color:var(--m)}
+
+.overlay{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  pointer-events:none;background:radial-gradient(ellipse 55% 45% at 50% 50%, rgba(17,16,19,.92) 0%, rgba(17,16,19,.55) 55%, transparent 78%)}
+.eyebrow{font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--acc);margin-bottom:1.2rem}
+.pin-h{font-size:clamp(2.2rem,5.5vw,4.4rem);font-weight:600;letter-spacing:-.03em;line-height:1.05;max-width:760px}
+.pin-p{margin-top:1.3rem;color:var(--m);max-width:460px;font-size:.92rem;line-height:1.7}
+.btns{margin-top:2rem;display:flex;gap:.8rem;pointer-events:auto}
+.btn{padding:.75rem 1.6rem;border-radius:8px;font-size:.78rem;font-weight:600}
+.btn.p{background:var(--acc);color:#1A0E06}
+.btn.g{border:1px solid rgba(255,255,255,.18);color:var(--ink)}
+
+.below{max-width:920px;margin:0 auto;padding:6rem 6vw}
+.below h3{font-size:1.7rem;font-weight:500;text-align:center;margin-bottom:.8rem}
+.below p{text-align:center;color:var(--m);max-width:520px;margin:0 auto 3rem;font-size:.9rem;line-height:1.7}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.tcard{background:#1A1917;border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:1.3rem}
+.tcard b{display:block;color:var(--acc);font-size:1.4rem;margin-bottom:.4rem}
+.tcard span{font-size:.72rem;color:var(--m);text-transform:uppercase;letter-spacing:.06em}
+
+.steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem;margin-top:1rem}
+.step{border-top:1px solid rgba(255,255,255,.1);padding-top:1.1rem}
+.step-n{font-size:.65rem;color:var(--acc);letter-spacing:.1em;margin-bottom:.7rem;text-transform:uppercase}
+.step h3{font-size:1rem;font-weight:600;margin-bottom:.4rem}
+.step p{color:var(--m);font-size:.82rem;line-height:1.6}
+
+.roles6{margin-top:1rem;display:grid;grid-template-columns:1fr 1fr;gap:0;border-top:1px solid rgba(255,255,255,.1)}
+.r6{padding:1.3rem 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.r6:nth-child(odd){padding-right:1.5rem;border-right:1px solid rgba(255,255,255,.1)}
+.r6:nth-child(even){padding-left:1.5rem}
+.r6-t{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--acc);margin-bottom:.4rem}
+.r6-q{font-size:.82rem;color:var(--ink);opacity:.9;font-style:italic;line-height:1.55}
+
+.quote-block{margin-top:1rem;padding:1.6rem;border:1px solid rgba(255,255,255,.08);border-radius:12px}
+.quote-block p{font-style:italic;color:var(--ink);font-size:1rem;line-height:1.7}
+.quote-block span{display:block;margin-top:.9rem;font-size:.7rem;color:var(--m);text-transform:uppercase;letter-spacing:.08em;font-style:normal}
+
+.cta-row{margin-top:2rem;text-align:center}
+.btn2{display:inline-block;padding:.85rem 2rem;background:var(--acc);color:#1A0E06;border-radius:8px;font-weight:600;font-size:.85rem}
+
+footer{display:flex;justify-content:space-between;padding:2rem 6vw;border-top:1px solid rgba(255,255,255,.06);font-size:.72rem;color:var(--m)}
+</style>
+</head>
+<body>
+<nav><span>Nixara</span><a href="#cta">Try it free →</a></nav>
+
+<div class="stage">
+  <div class="lane up" style="animation-duration:38s">
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Burn rate exceeds forecast by 18%. Cost review required."</div><div class="pl-tag">#2847 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"Hub consolidation approved, 14% cost reduction."</div><div class="pl-tag">#2850 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Pricing increase postponed pending churn-risk read."</div><div class="pl-tag">#2849 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Sales</div><div class="pl-q">"SDR headcount request denied — velocity already there."</div><div class="pl-tag">#2848 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Burn rate exceeds forecast by 18%. Cost review required."</div><div class="pl-tag">#2847 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"Hub consolidation approved, 14% cost reduction."</div><div class="pl-tag">#2850 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Pricing increase postponed pending churn-risk read."</div><div class="pl-tag">#2849 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Sales</div><div class="pl-q">"SDR headcount request denied — velocity already there."</div><div class="pl-tag">#2848 · this week</div></div>
+  </div>
+  <div class="lane down" style="animation-duration:44s">
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"West Coast pipeline closes 18% faster. Move now."</div><div class="pl-tag">#2851 · this week</div></div>
+    <div class="plaque"><div class="pl-role">COO</div><div class="pl-q">"Expansion viable if six hires land by Oct 15."</div><div class="pl-tag">#2852 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Runway holds at 8.2 months under current burn."</div><div class="pl-tag">#2853 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Outcome exceeded — 95% of projected upside delivered."</div><div class="pl-tag">#2854 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"West Coast pipeline closes 18% faster. Move now."</div><div class="pl-tag">#2851 · this week</div></div>
+    <div class="plaque"><div class="pl-role">COO</div><div class="pl-q">"Expansion viable if six hires land by Oct 15."</div><div class="pl-tag">#2852 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Runway holds at 8.2 months under current burn."</div><div class="pl-tag">#2853 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Outcome exceeded — 95% of projected upside delivered."</div><div class="pl-tag">#2854 · this week</div></div>
+  </div>
+  <div class="lane up" style="animation-duration:32s">
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"No service-level impact through Q4 after merge."</div><div class="pl-tag">#2855 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Sales</div><div class="pl-q">"Pipeline coverage at 3.2×, supports the timeline."</div><div class="pl-tag">#2856 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"This is the window to move aggressively."</div><div class="pl-tag">#2857 · this week</div></div>
+    <div class="plaque"><div class="pl-role">COO</div><div class="pl-q">"Bottleneck identified: six senior hires, hard deadline."</div><div class="pl-tag">#2858 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"No service-level impact through Q4 after merge."</div><div class="pl-tag">#2855 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Sales</div><div class="pl-q">"Pipeline coverage at 3.2×, supports the timeline."</div><div class="pl-tag">#2856 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"This is the window to move aggressively."</div><div class="pl-tag">#2857 · this week</div></div>
+    <div class="plaque"><div class="pl-role">COO</div><div class="pl-q">"Bottleneck identified: six senior hires, hard deadline."</div><div class="pl-tag">#2858 · this week</div></div>
+  </div>
+  <div class="lane down" style="animation-duration:40s">
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Reallocate budget toward the renewal team instead."</div><div class="pl-tag">#2859 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Revisit pricing decision in Q1 with better data."</div><div class="pl-tag">#2860 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"Three vendor contracts merged, $180k saved yearly."</div><div class="pl-tag">#2861 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"Two hubs merged, zero disruption to delivery times."</div><div class="pl-tag">#2862 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CFO</div><div class="pl-q">"Reallocate budget toward the renewal team instead."</div><div class="pl-tag">#2859 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Board</div><div class="pl-q">"Revisit pricing decision in Q1 with better data."</div><div class="pl-tag">#2860 · this week</div></div>
+    <div class="plaque"><div class="pl-role">CEO</div><div class="pl-q">"Three vendor contracts merged, $180k saved yearly."</div><div class="pl-tag">#2861 · this week</div></div>
+    <div class="plaque"><div class="pl-role">Ops</div><div class="pl-q">"Two hubs merged, zero disruption to delivery times."</div><div class="pl-tag">#2862 · this week</div></div>
+  </div>
+
+  <div class="overlay">
+    <div class="eyebrow">Every decision, in one wall</div>
+    <div class="pin-h">This is what a company thinking out loud looks like.</div>
+    <div class="pin-p">Every card behind this text is a real report, recalibrated for the person who had to act on it.</div>
+    <div class="btns"><a class="btn p" href="#cta">Try it free</a><a class="btn g" href="#how">See how it works</a></div>
+  </div>
+</div>
+
+<div class="below">
+  <h3>Not a dashboard. A record.</h3>
+  <p>Nixara doesn't summarize your data once. It keeps every decision made from it, and checks its own memory against what actually happened.</p>
+  <div class="trio">
+    <div class="tcard"><b>60s</b><span>raw data to report</span></div>
+    <div class="tcard"><b>6</b><span>roles recalibrated</span></div>
+    <div class="tcard"><b>91%</b><span>tracked accuracy</span></div>
+  </div>
+
+  <h3 style="margin-top:5rem" id="how">How it works</h3>
+  <p>Three steps from raw data to boardroom-ready decision.</p>
+  <div class="steps3">
+    <div class="step"><div class="step-n">01 · Upload</div><h3>Upload your data</h3><p>CSV, Excel, or a live Tableau connection. Nixara handles messy data automatically.</p></div>
+    <div class="step"><div class="step-n">02 · Ask</div><h3>Ask your question</h3><p>Plain language, your role, your time horizon. No query language, no pivot tables.</p></div>
+    <div class="step"><div class="step-n">03 · Decide</div><h3>Decide &amp; track</h3><p>Three AI reports in under 60 seconds. Approve, reject, or postpone — then track it.</p></div>
+  </div>
+
+  <h3 style="margin-top:5rem">Six roles, one report</h3>
+  <p>Every plaque on the wall above is recalibrated by seat.</p>
+  <div class="roles6">
+    <div class="r6"><div class="r6-t">CFO</div><div class="r6-q">"Cash runway concern: burn rate exceeds projections by 18%."</div></div>
+    <div class="r6"><div class="r6-t">CEO</div><div class="r6-q">"West Coast pipeline closes 18% faster — this is the window to move."</div></div>
+    <div class="r6"><div class="r6-t">COO</div><div class="r6-q">"Expansion viable only if six senior hires land by October 15."</div></div>
+    <div class="r6"><div class="r6-t">Sales lead</div><div class="r6-q">"SDR headcount request denied — velocity already supports the team."</div></div>
+    <div class="r6"><div class="r6-t">Operations</div><div class="r6-q">"Hub consolidation approved, 14% cost reduction, no SLA impact."</div></div>
+    <div class="r6"><div class="r6-t">Board</div><div class="r6-q">"Pricing increase postponed pending a churn-risk read."</div></div>
+  </div>
+
+  <div class="quote-block" style="margin-top:5rem">
+    <p>"We're not shipping a dashboard. We're shipping the fifteen minutes back to a founder who used to spend a weekend building this deck by hand."</p>
+    <span>— founder note, shared with the team</span>
+  </div>
+
+  <div class="cta-row" id="cta"><a class="btn2" href="#">Open Nixara — try it free</a></div>
+</div>
+
+<footer>
+  <span>© 2026 Nixara · Swapnil S.</span>
+  <span>Live app · LinkedIn</span>
+</footer>
+</body>
+</html>

@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Ledger — spreadsheet-native direction</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--bg:#fff;--ink:#1B1B1B;--m:#767676;--line:#D6D6D6;--head:#F3F3F1;--acc:#1E7A4C;--red:#B8402B;--sel:#E8F0FE;--selb:#1A73E8}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,Arial,sans-serif;font-size:13px}
+a{color:inherit;text-decoration:none}
+
+.appbar{display:flex;align-items:center;justify-content:space-between;padding:.6rem 1.5rem;border-bottom:1px solid var(--line)}
+.appbar .name{font-weight:700;font-size:1rem;display:flex;align-items:center;gap:8px}
+.appbar .name i{width:18px;height:18px;background:var(--acc);border-radius:3px;display:inline-block}
+.appbar .cta{background:var(--acc);color:#fff;padding:.45rem 1rem;border-radius:4px;font-size:.8rem;font-weight:600}
+
+.colheads{display:grid;grid-template-columns:40px repeat(12,1fr);border-bottom:1px solid var(--line);background:var(--head);position:sticky;top:0;z-index:5}
+.colheads div{padding:.35rem;text-align:center;font-size:.72rem;color:var(--m);border-right:1px solid var(--line)}
+
+.sheet{max-width:1200px;margin:0 auto}
+.grow{display:grid;grid-template-columns:40px 1fr;border-bottom:1px solid var(--line)}
+.rn{background:var(--head);color:var(--m);font-size:.72rem;text-align:center;padding-top:.5rem;border-right:1px solid var(--line)}
+.rc{padding:2.2rem 2.5rem}
+
+.hero-cell{background:var(--sel);border:2px solid var(--selb)}
+.tag{font-family:'SF Mono',monospace;font-size:.72rem;color:var(--m);margin-bottom:1rem}
+h1{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;line-height:1.15;margin-bottom:.9rem}
+h1 .fx{color:var(--acc)}
+.lead{color:var(--m);max-width:520px;line-height:1.7;margin-bottom:1.6rem}
+.btns{display:flex;gap:.7rem}
+.btn-p{background:var(--acc);color:#fff;padding:.7rem 1.4rem;border-radius:5px;font-weight:600;font-size:.85rem}
+.btn-g{border:1px solid var(--line);padding:.7rem 1.4rem;border-radius:5px;font-weight:600;font-size:.85rem}
+
+.formula-bar{font-family:'SF Mono',monospace;font-size:.78rem;color:var(--m);background:var(--head);border:1px solid var(--line);
+  border-radius:4px;padding:.5rem .8rem;margin-bottom:1.3rem;display:inline-block}
+.formula-bar b{color:var(--acc)}
+
+table.sim{width:100%;border-collapse:collapse;margin-top:.5rem}
+table.sim th,table.sim td{border:1px solid var(--line);padding:.5rem .7rem;text-align:left;font-size:.82rem}
+table.sim th{background:var(--head);font-weight:700;color:var(--m);font-size:.72rem;text-transform:uppercase}
+table.sim td.n{font-family:'SF Mono',monospace}
+table.sim td.pos{color:var(--acc)}
+table.sim td.neg{color:var(--red)}
+table.sim tr:hover td{background:#FAFAFA}
+
+.sec-label{font-family:'SF Mono',monospace;font-size:.75rem;color:var(--m);margin-bottom:.6rem}
+.sec-h{font-size:1.35rem;font-weight:700;margin-bottom:.5rem}
+.sec-p{color:var(--m);max-width:480px;line-height:1.65;margin-bottom:1rem}
+
+.chip{display:inline-block;font-family:'SF Mono',monospace;font-size:.7rem;background:var(--head);border:1px solid var(--line);
+  border-radius:4px;padding:.25rem .5rem;margin-right:.4rem;margin-bottom:.4rem}
+.chip.on{background:var(--sel);border-color:var(--selb);color:var(--selb);font-weight:700}
+
+.quote-cell{font-style:italic;font-size:1.1rem;color:#333;max-width:600px;line-height:1.6}
+.quote-cell span{display:block;margin-top:.8rem;font-size:.75rem;color:var(--m);font-style:normal;font-family:-apple-system,sans-serif}
+
+.foot{display:flex;justify-content:space-between;padding:1.2rem 2.5rem;color:var(--m);font-size:.78rem}
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <div class="name"><i></i>Nixara.xlsx</div>
+  <div class="cta">Try it free</div>
+</div>
+
+<div class="colheads">
+  <div></div>
+  <div>A</div><div>B</div><div>C</div><div>D</div><div>E</div><div>F</div><div>G</div><div>H</div><div>I</div><div>J</div><div>K</div><div>L</div>
+</div>
+
+<div class="sheet">
+
+  <div class="grow" style="border-bottom:none">
+    <div class="rn">1</div>
+    <div class="rc hero-cell">
+      <div class="tag">=DECISION_LAYER("business leaders")</div>
+      <h1>Stop reading dashboards.<br><span class="fx">Start deciding.</span></h1>
+      <p class="lead">Nixara is the personal decision intelligence layer for business leaders — starting with the report no one has time to write, and growing into the platform that tracks whether the decisions made from it actually worked.</p>
+      <div class="btns"><a class="btn-p" href="#">Try it free</a><a class="btn-g" href="#">See how it works</a></div>
+    </div>
+  </div>
+
+  <div class="grow">
+    <div class="rn">2</div>
+    <div class="rc">
+      <div class="sec-label">=HOW_IT_WORKS()</div>
+      <div class="sec-h">Three formulas, one outcome.</div>
+      <div class="formula-bar">B2: <b>=UPLOAD</b>(data) → C2: <b>=ASK</b>(role, question) → D2: <b>=DECIDE</b>(report, 60s)</div>
+      <table class="sim">
+        <tr><th>step</th><th>input</th><th>output</th></tr>
+        <tr><td class="n">01</td><td>CSV, Excel, or live Tableau connection</td><td>clean dataset</td></tr>
+        <tr><td class="n">02</td><td>plain-language question + role</td><td>recalibrated report</td></tr>
+        <tr><td class="n">03</td><td>approve / reject / postpone</td><td>tracked decision</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grow">
+    <div class="rn">3</div>
+    <div class="rc">
+      <div class="sec-label">=RECALIBRATE(role, dataset)</div>
+      <div class="sec-h">Same data. Six completely different reports.</div>
+      <div class="sec-p">Click a role below — same underlying dataset, different sentence back.</div>
+      <div style="margin-bottom:1rem">
+        <span class="chip on">CFO</span><span class="chip">CEO</span><span class="chip">COO</span><span class="chip">Sales</span><span class="chip">Ops</span><span class="chip">Board</span>
+      </div>
+      <table class="sim">
+        <tr><th>role</th><th>metric</th><th>value</th><th>read</th></tr>
+        <tr><td>CFO</td><td class="n">burn vs forecast</td><td class="n neg">-18%</td><td>cost review required</td></tr>
+        <tr><td>CEO</td><td class="n">pipeline growth</td><td class="n pos">+23%</td><td>expand now</td></tr>
+        <tr><td>COO</td><td class="n">capacity left</td><td class="n">40%</td><td>6 hires needed by Oct 15</td></tr>
+        <tr><td>Sales lead</td><td class="n">SDRs approved</td><td class="n neg">0 of 12</td><td>velocity already sufficient</td></tr>
+        <tr><td>Operations</td><td class="n">fulfillment cost</td><td class="n pos">-14%</td><td>consolidation approved</td></tr>
+        <tr><td>Board</td><td class="n">price increase</td><td class="n">15%</td><td>postponed, revisit Q1</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grow">
+    <div class="rn">4</div>
+    <div class="rc">
+      <div class="sec-label">=TRACK_OUTCOME(decision_id)</div>
+      <div class="sec-h">Was Nixara right? Now you'll know.</div>
+      <div class="sec-p">Every recommendation gets logged. Months later, Nixara checks its own work.</div>
+      <table class="sim">
+        <tr><th>metric</th><th>projected</th><th>actual</th><th>result</th></tr>
+        <tr><td>West Coast pipeline revenue</td><td class="n">$4.1M</td><td class="n">$3.9M</td><td class="pos">95%</td></tr>
+        <tr><td>Deal close velocity</td><td class="n">+18%</td><td class="n">+21%</td><td class="pos">exceeded</td></tr>
+        <tr><td>Headcount readiness</td><td class="n">6 hires</td><td class="n">5 hires</td><td>83%</td></tr>
+        <tr><td colspan="3"><b>Overall tracked accuracy</b></td><td class="pos"><b>91%</b></td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="grow">
+    <div class="rn">5</div>
+    <div class="rc">
+      <div class="sec-label">=NOTE("founder", A1)</div>
+      <div class="quote-cell">"We're not shipping a dashboard. We're shipping the fifteen minutes back to a founder who used to spend a weekend building this deck by hand."<span>— Swapnil S., Nixara</span></div>
+    </div>
+  </div>
+
+  <div class="grow" style="border-bottom:1px solid var(--line)">
+    <div class="rn">6</div>
+    <div class="rc hero-cell" style="text-align:center">
+      <div class="tag" style="text-align:center">=OPEN("nixara")</div>
+      <h1 style="font-size:1.7rem">Try the report, not the pitch.</h1>
+      <p class="lead" style="margin:0 auto 1.4rem;text-align:center">Three free reports. No account, no card.</p>
+      <div class="btns" style="justify-content:center"><a class="btn-p" href="#">Open Nixara →</a></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  <span>© 2026 Nixara · Swapnil S.</span>
+  <span>Sheet1 · 6 rows · saved</span>
+</div>
+</body>
+</html>

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mosk-style — high-contrast chromatic analytics SaaS</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--bg:#F6F5FA;--panel:#FFFFFF;--line:rgba(27,36,56,.10);--ink:#1B2438;--m:#6B7280;--c1:#1B2438;--c2:#C1552C;--acc:#C1552C;--bad:#B23B3B}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,'Inter',sans-serif}
+a{color:inherit;text-decoration:none}
+section{max-width:1160px;margin:0 auto;padding:6.5rem 6vw}
+
+nav{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;justify-content:space-between;align-items:center;
+  padding:1.2rem 4vw;background:rgba(246,245,250,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.logo{font-weight:900;font-size:1.05rem;letter-spacing:-.01em}
+.nl{display:flex;gap:2rem;font-size:.8rem;color:var(--m)}
+.nc{background:var(--ink);color:#fff;padding:.55rem 1.2rem;border-radius:6px;font-weight:800;font-size:.78rem}
+
+.hero{text-align:center;padding-top:9rem;position:relative;overflow:hidden}
+.chroma{position:absolute;top:-100px;left:50%;transform:translateX(-50%);width:900px;height:500px;z-index:-1;
+  background:radial-gradient(circle at 35% 30%,#F3C9A0,transparent 55%),radial-gradient(circle at 65% 60%,#D9DBEF,transparent 55%);
+  filter:blur(90px);opacity:.55}
+.pill{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);border-radius:999px;padding:.4rem 1.1rem;font-size:.75rem;color:var(--m);margin-bottom:1.6rem}
+.hero h1{font-size:clamp(2.6rem,6vw,4.8rem);font-weight:900;letter-spacing:-.04em;line-height:1;max-width:900px;margin:0 auto 1.3rem}
+.grad{background:linear-gradient(90deg,var(--c1),var(--c2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{color:var(--m);max-width:520px;margin:0 auto 2.2rem;font-size:1.02rem;line-height:1.7}
+.btns{display:flex;gap:.9rem;justify-content:center;margin-bottom:3.5rem}
+.btn-p{background:var(--acc);color:#fff;padding:.9rem 1.8rem;border-radius:8px;font-weight:800;font-size:.87rem}
+.btn-g{border:1px solid var(--line);color:var(--ink);padding:.9rem 1.8rem;border-radius:8px;font-weight:700;font-size:.87rem}
+
+.chart-panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2rem;max-width:920px;margin:0 auto;text-align:left;position:relative;overflow:hidden}
+.chart-panel::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(27,36,56,.03),rgba(193,85,44,.04));pointer-events:none}
+.cp-top{display:flex;justify-content:space-between;margin-bottom:1.6rem;font-size:.78rem;color:var(--m)}
+.cp-top b{color:var(--ink)}
+.cp-bars{display:flex;align-items:flex-end;gap:8px;height:110px;margin-bottom:1.4rem}
+.cp-bar{flex:1;border-radius:4px 4px 0 0;background:linear-gradient(180deg,var(--c1),var(--c2))}
+.cp-q{font-size:.85rem;font-style:italic;color:var(--ink);opacity:.88;line-height:1.5;margin-bottom:1.2rem}
+.cp-metrics{display:flex;gap:1rem}
+.cpm{flex:1;background:rgba(27,36,56,.03);border:1px solid var(--line);border-radius:10px;padding:.9rem;transition:background .2s}
+.cpm b{display:block;font-size:1.3rem}
+.cpm span{font-size:.68rem;color:var(--m);text-transform:uppercase;letter-spacing:.06em}
+
+.role-slider{margin-top:1.8rem;padding-top:1.5rem;border-top:1px solid var(--line)}
+.rs-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--m);margin-bottom:1.1rem;display:flex;align-items:center;gap:6px}
+.rs-label i{width:5px;height:5px;border-radius:50%;background:var(--c1);display:inline-block}
+.rs-input{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;background:rgba(27,36,56,.10);outline:none;cursor:pointer;margin:0}
+.rs-input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,var(--c1),var(--c2));border:3px solid #fff;
+  box-shadow:0 0 0 2px rgba(27,36,56,.14),0 6px 18px rgba(193,85,44,.45);cursor:grab;transition:transform .18s}
+.rs-input::-webkit-slider-thumb:hover{transform:scale(1.08)}
+.rs-input::-webkit-slider-thumb:active{cursor:grabbing;transform:scale(1.2)}
+.rs-input::-moz-range-thumb{width:28px;height:28px;border-radius:50%;border:3px solid #fff;
+  background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 0 0 2px rgba(27,36,56,.14),0 6px 18px rgba(193,85,44,.45);cursor:grab}
+.rs-input::-moz-range-track{height:6px;border-radius:999px;background:rgba(27,36,56,.10)}
+.rs-input:focus-visible{outline:2px solid var(--c2);outline-offset:4px}
+.rs-ticks{display:flex;justify-content:space-between;margin-top:1rem;font-size:.72rem;color:var(--m);font-weight:700}
+.rs-ticks span{cursor:pointer;transition:color .2s;padding:2px 4px}
+.rs-ticks span.on{color:var(--ink)}
+.rs-ticks span:hover{color:var(--ink)}
+
+.hero-diff{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2.2rem 2.4rem;max-width:820px;margin:0 auto;
+  text-align:left;position:relative;overflow:hidden}
+.hero-diff::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(27,36,56,.03),rgba(193,85,44,.04));pointer-events:none}
+.hd-label{display:flex;align-items:center;gap:8px;font-size:.7rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--c2);margin-bottom:1.1rem}
+.hd-label i{width:6px;height:6px;border-radius:50%;background:var(--c1)}
+.hd-line{font-size:1.15rem;line-height:1.6;color:var(--ink);font-weight:600;margin-bottom:1.5rem}
+.hd-line .bad{color:var(--bad);font-weight:700}
+.hd-line .good{color:var(--acc);font-weight:700}
+.hd-points{display:flex;flex-direction:column;gap:.75rem;margin-bottom:1.4rem}
+.hd-point{display:flex;align-items:flex-start;gap:10px;font-size:.86rem;color:var(--m);line-height:1.5}
+.hd-point b{color:var(--acc);flex-shrink:0}
+.hd-more{font-size:.78rem;font-weight:700;color:var(--c2);border-bottom:1px solid rgba(193,85,44,.35);padding-bottom:2px;display:inline-block}
+
+.int-row{display:flex;justify-content:center;flex-wrap:wrap;gap:.9rem;margin-top:3rem}
+.fcard{width:150px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1rem;text-align:center}
+.fcard-vis{height:64px;display:flex;align-items:center;justify-content:center;margin-bottom:.7rem;position:relative;overflow:hidden}
+.fcard-label{font-size:.72rem;color:var(--m);font-weight:600}
+
+.csv-vis2{align-items:flex-start;justify-content:center;padding:0 10px;width:100%}
+.csv-box{width:100%;background:#0a0a0c;border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:7px 8px;font-family:'SF Mono','Courier New',monospace;font-size:.54rem;line-height:1.6;text-align:left;color:#c9c9ce;white-space:nowrap;overflow:hidden}
+.csv-box div{overflow:hidden;text-overflow:ellipsis}
+.csv-box .cm{color:var(--acc);font-weight:800}
+.csv-cursor{display:inline-block;width:5px;height:8px;background:var(--acc);vertical-align:middle;margin-left:1px;animation:blink3 1s step-end infinite}
+@keyframes blink3{50%{opacity:0}}
+
+.xl-vis2{padding:0}
+.xl-sheet{width:98px;background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 4px 14px rgba(0,0,0,.4)}
+.xl-head{background:#217346;height:7px}
+.xl-colrow{display:grid;grid-template-columns:14px repeat(3,1fr)}
+.xl-colrow span{font-size:.42rem;color:#5f6368;text-align:center;padding:2px 0;background:#F3F3F3;border-right:1px solid #e0e0e0;font-family:Arial,sans-serif}
+.xl-r{display:grid;grid-template-columns:14px repeat(3,1fr)}
+.xl-r>span{font-size:.42rem;color:#5f6368;text-align:center;background:#F3F3F3;border-right:1px solid #e0e0e0;border-top:1px solid #e0e0e0;font-family:Arial,sans-serif}
+.xl-cell{border-right:1px solid #e6e6e6;border-top:1px solid #e6e6e6;height:13px;background:#fff}
+.xl-cell.sel{border:1.5px solid #217346;background:rgba(33,115,70,.1)}
+
+.tb-vis2{padding:2px}
+.tb-grid{display:grid;grid-template-columns:repeat(3,13px);grid-template-rows:repeat(3,13px);gap:2.5px}
+.tb-grid span{border-radius:2px;display:block;animation:tbfade 3s ease-in-out infinite}
+.tb-grid span:nth-child(1){animation-delay:0s}.tb-grid span:nth-child(2){animation-delay:.15s}.tb-grid span:nth-child(3){animation-delay:.3s}
+.tb-grid span:nth-child(4){animation-delay:.45s}.tb-grid span:nth-child(5){animation-delay:.6s}.tb-grid span:nth-child(6){animation-delay:.75s}
+.tb-grid span:nth-child(7){animation-delay:.9s}.tb-grid span:nth-child(8){animation-delay:1.05s}.tb-grid span:nth-child(9){animation-delay:1.2s}
+@keyframes tbfade{0%,100%{opacity:.5}50%{opacity:1}}
+
+.pbi-vis{align-items:flex-end;gap:5px;padding-bottom:2px}
+.pbib{width:12px;border-radius:2px 2px 0 0;background:linear-gradient(180deg,#F2C811,#C99B00);transform-origin:bottom;animation:tbpulse 2.6s ease-in-out infinite}
+.pbib:nth-child(1){animation-delay:0s}.pbib:nth-child(2){animation-delay:.2s}.pbib:nth-child(3){animation-delay:.4s}
+@keyframes tbpulse{0%,100%{transform:scaleY(.75)}50%{transform:scaleY(1)}}
+
+.bi-live{display:flex;align-items:center;gap:4px;font-size:.6rem;color:var(--acc);font-weight:800;margin-top:.55rem;justify-content:center}
+.bi-live i{width:5px;height:5px;border-radius:50%;background:var(--acc);animation:blink2 1.2s ease-in-out infinite}
+@keyframes blink2{0%,100%{opacity:1}50%{opacity:.25}}
+
+.doc-page{width:42px;height:54px;background:#fff;border-radius:3px;position:relative;padding:8px 6px;display:flex;flex-direction:column;gap:5px;box-shadow:0 4px 14px rgba(0,0,0,.4);overflow:hidden}
+.doc-page::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);
+  transform:translateX(-120%);animation:sweep 3.5s ease-in-out infinite}
+@keyframes sweep{0%{transform:translateX(-120%)}55%{transform:translateX(120%)}100%{transform:translateX(120%)}}
+.doc-ln{height:3px;border-radius:2px;background:#3457D5;width:0}
+.doc-page.pdf .doc-ln{background:#8a8a8a}
+.doc-ln:nth-child(1){animation:typeln1 3s ease-in-out infinite}
+.doc-ln:nth-child(2){animation:typeln2 3s ease-in-out infinite .3s}
+.doc-ln:nth-child(3){animation:typeln3 3s ease-in-out infinite .6s}
+@keyframes typeln1{0%{width:0}30%,80%{width:80%}100%{width:0}}
+@keyframes typeln2{0%{width:0}30%,80%{width:60%}100%{width:0}}
+@keyframes typeln3{0%{width:0}30%,80%{width:70%}100%{width:0}}
+.doc-badge{position:absolute;bottom:-6px;right:-6px;width:19px;height:19px;border-radius:4px;color:#fff;font-size:.55rem;font-weight:800;display:flex;align-items:center;justify-content:center;background:#2B579A}
+.doc-page.pdf .doc-badge{background:#C0362C;width:24px}
+
+.exports-panel{margin-top:2.5rem;display:grid;grid-template-columns:1fr 1.15fr;gap:1.6rem;align-items:stretch}
+.exp-info{display:flex;flex-direction:column;gap:1.5rem;justify-content:center}
+.exp-row{padding-left:1rem;border-left:2px solid var(--line)}
+.exp-row b{display:block;font-size:.96rem;margin-bottom:.35rem}
+.exp-row span{font-size:.84rem;color:var(--m);line-height:1.6}
+.exp-tray{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.7rem;position:relative;overflow:hidden}
+.exp-tray::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(27,36,56,.03),rgba(193,85,44,.04));pointer-events:none}
+.exp-tray-top{display:flex;justify-content:space-between;font-size:.78rem;color:var(--m);border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:1.2rem;position:relative}
+.exp-tray-top b{color:var(--ink)}
+.exp-files{display:flex;flex-direction:column;gap:.9rem;position:relative}
+.exp-file{display:flex;align-items:center;gap:1rem;background:rgba(27,36,56,.02);border:1px solid var(--line);border-radius:12px;padding:.9rem 1.1rem}
+.exp-file .doc-page{width:34px;height:44px;flex-shrink:0}
+.exp-file-meta{flex:1;min-width:0}
+.exp-file-meta b{display:block;font-size:.86rem;margin-bottom:.15rem}
+.exp-file-meta span{font-size:.72rem;color:var(--m)}
+.exp-dl{width:32px;height:32px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0}
+
+.eyebrow{font-size:.72rem;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--c2);margin-bottom:.8rem}
+.h2{font-size:clamp(1.7rem,3vw,2.4rem);font-weight:900;letter-spacing:-.03em;margin-bottom:.8rem}
+.p{color:var(--m);max-width:520px;line-height:1.75}
+.center{text-align:center;margin:0 auto}
+.center .p{margin:0 auto}
+
+.steps3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem;margin-top:2.5rem}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:1.6rem}
+.step-n{font-size:.7rem;font-weight:800;color:var(--c1);margin-bottom:.9rem}
+.step h3{font-size:1.02rem;margin-bottom:.5rem}
+.step p{color:var(--m);font-size:.85rem;line-height:1.6}
+
+.compare{margin-top:2.5rem;display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.comp-col{padding:2rem}
+.comp-col.bad{background:rgba(178,59,59,.05)}
+.comp-col.good{background:rgba(193,85,44,.05);border-left:1px solid var(--line)}
+.comp-h{font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;margin-bottom:1.2rem}
+.comp-col.bad .comp-h{color:var(--bad)}
+.comp-col.good .comp-h{color:var(--c2)}
+.comp-row{font-size:.85rem;line-height:1.6;color:var(--m);margin-bottom:1rem}
+.comp-row b{color:var(--ink);display:block;font-weight:700}
+
+.obj-card{margin-top:1.4rem;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:14px;padding:1.8rem 2rem}
+.obj-q{font-size:1.05rem;font-weight:800;font-style:italic;margin-bottom:.8rem}
+.obj-a{font-size:.88rem;line-height:1.75;color:var(--m)}
+
+.roles6{margin-top:2.5rem;display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.r6{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.2rem}
+.r6-t{font-size:.68rem;font-weight:800;text-transform:uppercase;color:var(--acc);margin-bottom:.5rem}
+.r6-q{font-size:.82rem;font-style:italic;line-height:1.55}
+
+.outcomes-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:1.4rem;margin-top:2.5rem}
+.outcome{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:1.8rem}
+.o-top{display:flex;justify-content:space-between;margin-bottom:1.2rem}
+.o-acc{background:rgba(193,85,44,.12);color:var(--acc);font-weight:800;font-size:.78rem;padding:.35rem .8rem;border-radius:8px}
+.o-row{display:flex;justify-content:space-between;font-size:.85rem;padding:.55rem 0;border-bottom:1px dashed var(--line)}
+.o-row span:last-child{color:var(--c2)}
+.o-verdict{display:flex;align-items:center;gap:8px;margin-top:1.1rem;padding-top:.2rem;font-size:.82rem;color:var(--acc);font-weight:700}
+.o-verdict i{width:7px;height:7px;border-radius:50%;background:var(--acc)}
+.outcome-side{display:flex;flex-direction:column;gap:1rem}
+.os-stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;display:flex;align-items:baseline;justify-content:space-between}
+.os-stat b{font-size:1.7rem;font-weight:800}
+.os-stat span{font-size:.68rem;color:var(--m);text-transform:uppercase;letter-spacing:.06em;max-width:90px;text-align:right;line-height:1.4}
+.os-trend{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:1.2rem 1.3rem;flex:1}
+.os-trend-label{font-size:.65rem;color:var(--m);margin-bottom:.9rem;text-transform:uppercase;letter-spacing:.06em}
+.os-bars{display:flex;align-items:flex-end;gap:6px;height:48px;margin-bottom:.6rem}
+.os-bar{flex:1;border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--c1),var(--c2))}
+.os-trend-foot{display:flex;justify-content:space-between;font-size:.62rem;color:var(--m)}
+
+.founder-card{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:2.4rem;display:flex;gap:1.8rem;align-items:flex-start;max-width:820px;margin:0 auto}
+.fc-avatar{width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.1rem;flex-shrink:0}
+.fc-eyebrow{font-size:.68rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--c2);margin-bottom:.6rem}
+.fc-name{font-size:1.25rem;font-weight:800}
+.fc-role{font-size:.8rem;color:var(--m);margin-bottom:1rem}
+.fc-bio{font-size:.88rem;line-height:1.7;color:var(--ink);opacity:.85;margin-bottom:1.1rem;max-width:540px}
+.fc-link{font-size:.8rem;font-weight:700;color:var(--c2);border-bottom:1px solid rgba(193,85,44,.35);padding-bottom:2px;display:inline-block}
+
+.cta-final{text-align:center;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:4rem 2rem;position:relative;overflow:hidden}
+.cta-final::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 80% at 50% 0%,rgba(193,85,44,.10),transparent 60%)}
+
+footer{border-top:1px solid var(--line);padding:2.5rem 6vw;display:flex;justify-content:space-between;color:var(--m);font-size:.8rem}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">NIXARA</div>
+  <div class="nl"><a href="#how">How it works</a><a href="#compare">Nixara vs. LLM</a><a href="#roles">Roles</a><a href="#outcomes">Outcomes</a><a href="https://nixara-app.vercel.app/faq" target="_blank" rel="noopener">FAQ</a></div>
+  <a class="nc" href="#cta">Try free</a>
+</nav>
+
+<section class="hero">
+  <div class="chroma"></div>
+  <div class="pill">◆ Real-time decision intelligence</div>
+  <h1>Operational insight,<br><span class="grad">recalibrated by role.</span></h1>
+  <p>Nixara reads your data and your role, then writes the report you actually need — not a generic summary everyone gets.</p>
+  <div class="btns"><a class="btn-p" href="#cta">Try it free</a><a class="btn-g" href="#how">See how it works</a></div>
+
+  <div class="hero-diff">
+    <div class="hd-label"><i></i>This is not a chatbot answer</div>
+    <div class="hd-line">Paste a spreadsheet into an LLM and you get <span class="bad">one generic guess, gone when the chat closes</span>. Ask Nixara and you get <span class="good">six role-calibrated reports — with a memory.</span></div>
+    <div class="hd-points">
+      <div class="hd-point"><b>✓</b>Recalibrated by role, not one answer for whoever asks</div>
+      <div class="hd-point"><b>✓</b>Reads live data — CSV, Excel, Tableau, Power BI — not a copy-pasted snippet</div>
+      <div class="hd-point"><b>✓</b>Every call is logged and checked later against what really happened</div>
+    </div>
+    <a class="hd-more" href="#compare">See the full comparison →</a>
+  </div>
+
+  <div class="int-row">
+    <div class="fcard">
+      <div class="fcard-vis csv-vis2">
+        <div class="csv-box">
+          <div>region<span class="cm">,</span>rev<span class="cm">,</span>qtr</div>
+          <div>west<span class="cm">,</span>482K<span class="cm">,</span>Q3</div>
+          <div>east<span class="cm">,</span>390K<span class="cm">,</span>Q3<span class="csv-cursor"></span></div>
+        </div>
+      </div>
+      <div class="fcard-label">CSV</div>
+    </div>
+    <div class="fcard">
+      <div class="fcard-vis xl-vis2">
+        <div class="xl-sheet">
+          <div class="xl-head"></div>
+          <div class="xl-colrow"><span></span><span>A</span><span>B</span><span>C</span></div>
+          <div class="xl-r"><span>1</span><div class="xl-cell"></div><div class="xl-cell"></div><div class="xl-cell"></div></div>
+          <div class="xl-r"><span>2</span><div class="xl-cell sel"></div><div class="xl-cell"></div><div class="xl-cell"></div></div>
+          <div class="xl-r"><span>3</span><div class="xl-cell"></div><div class="xl-cell"></div><div class="xl-cell"></div></div>
+        </div>
+      </div>
+      <div class="fcard-label">Excel</div>
+    </div>
+    <div class="fcard">
+      <div class="fcard-vis tb-vis2">
+        <div class="tb-grid">
+          <span style="background:#4E79A7"></span><span style="background:#F28E2B"></span><span style="background:#E15759"></span>
+          <span style="background:#76B7B2"></span><span style="background:#59A14F"></span><span style="background:#EDC948"></span>
+          <span style="background:#B07AA1"></span><span style="background:#FF9DA7"></span><span style="background:#9C755F"></span>
+        </div>
+      </div>
+      <div class="bi-live"><i></i>LIVE</div>
+      <div class="fcard-label">Tableau</div>
+    </div>
+    <div class="fcard">
+      <div class="fcard-vis pbi-vis">
+        <div class="pbib" style="height:38%"></div>
+        <div class="pbib" style="height:70%"></div>
+        <div class="pbib" style="height:52%"></div>
+      </div>
+      <div class="bi-live"><i></i>LIVE</div>
+      <div class="fcard-label">Power BI</div>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="eyebrow">How it works</div>
+  <div class="h2">Upload. Ask. Decide.</div>
+  <p class="p">No pivot tables, no query language — Nixara handles the recalibration.</p>
+  <div class="steps3">
+    <div class="step"><div class="step-n">01 · UPLOAD</div><h3>Your data, direct</h3><p>CSV, Excel, or a live Tableau or Power BI connection — read directly, not copy-pasted.</p></div>
+    <div class="step"><div class="step-n">02 · ASK</div><h3>Plain language</h3><p>Your role, your time horizon. Nixara reads both at once.</p></div>
+    <div class="step"><div class="step-n">03 · DECIDE</div><h3>Track the outcome</h3><p>Approve, reject, postpone — then watch what actually happened.</p></div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="eyebrow">How Nixara is different</div>
+  <div class="h2">Pasting a CSV into a chat window isn't the same thing.</div>
+  <p class="p">Here's what breaks when you paste a spreadsheet into a generic LLM — and what Nixara does instead.</p>
+  <div class="compare">
+    <div class="comp-col bad">
+      <div class="comp-h">Generic LLM chat</div>
+      <div class="comp-row"><b>One answer, every reader.</b>No role calibration — the CFO and the intern get the same paragraph.</div>
+      <div class="comp-row"><b>Data lives in the thread.</b>Copy-pasted, truncated by context limits, gone when you close the tab.</div>
+      <div class="comp-row"><b>No memory of its own advice.</b>Ask again next quarter — it has no record of what it told you.</div>
+      <div class="comp-row"><b>No way to check accuracy.</b>A forecast nobody verifies is just a guess with better formatting.</div>
+      <div class="comp-row"><b>Your data, someone else's key.</b>Routed through a shared backend with pooled usage and unclear retention.</div>
+    </div>
+    <div class="comp-col good">
+      <div class="comp-h">Nixara</div>
+      <div class="comp-row"><b>Recalibrated by role.</b>Same dataset, six different reports — CFO, CEO, COO, Sales, Ops, Board.</div>
+      <div class="comp-row"><b>Connects to live data.</b>CSV, Excel, or a live Tableau or Power BI view — no manual copy-paste.</div>
+      <div class="comp-row"><b>Every decision logged.</b>Approve, reject, postpone — with an id, a timestamp, a permanent record.</div>
+      <div class="comp-row"><b>Checks its own work.</b>91% tracked accuracy, built from real logged outcomes.</div>
+      <div class="comp-row"><b>Runs on your own AI key.</b>Reports run through your own OpenAI account — you control access, usage, and spend.</div>
+    </div>
+  </div>
+
+  <div class="obj-card">
+    <div class="obj-q">"Isn't this just pasting my spreadsheet into an LLM?"</div>
+    <div class="obj-a">Structurally, no. A chat window holds one thread, one voice, and forgets everything the moment you close the tab. Nixara reads your file directly — no manual copy-paste, no truncation — routes it through six distinct role lenses instead of one generic answer, and logs every recommendation so it can be checked later against what actually happened. That last part is the piece a generic assistant has no way to do: it doesn't know if it was right, because nobody ever tells it.</div>
+  </div>
+</section>
+
+<section id="roles">
+  <div class="eyebrow">Six roles, one report</div>
+  <div class="h2">Same numbers. Completely different read.</div>
+  <p class="p" style="margin-bottom:0">Slide through the same Q3 dataset, recalibrated for each role at the table.</p>
+
+  <div class="chart-panel role-widget" style="margin-top:2.5rem;max-width:100%">
+    <div class="cp-top"><span class="cp-title">Q3 Cash Flow Risk</span><b class="cp-badge">CFO view · live</b></div>
+    <div class="cp-q">"Burn rate exceeds forecast by 18%. Cost review required before approving expansion budget."</div>
+    <div class="cp-bars">
+      <div class="cp-bar"></div><div class="cp-bar"></div><div class="cp-bar"></div>
+      <div class="cp-bar"></div><div class="cp-bar"></div><div class="cp-bar"></div>
+      <div class="cp-bar"></div><div class="cp-bar"></div><div class="cp-bar"></div>
+    </div>
+    <div class="cp-metrics">
+      <div class="cpm"><b class="cpm-v">-18%</b><span class="cpm-l">vs forecast</span></div>
+      <div class="cpm"><b class="cpm-v">8.2mo</b><span class="cpm-l">runway</span></div>
+      <div class="cpm"><b class="cpm-v">Review</b><span class="cpm-l">action</span></div>
+    </div>
+    <div class="role-slider">
+      <div class="rs-label"><i></i>Recalibrate by role — drag the slider or click a role</div>
+      <input type="range" min="0" max="5" step="1" value="0" class="rs-input" aria-label="Select role to recalibrate the report">
+      <div class="rs-ticks">
+        <span data-i="0" class="on">CFO</span><span data-i="1">CEO</span><span data-i="2">COO</span><span data-i="3">Sales</span><span data-i="4">Ops</span><span data-i="5">Board</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="outcomes">
+  <div class="eyebrow">Was Nixara right?</div>
+  <div class="h2">Now you'll know.</div>
+  <p class="p">Every recommendation is logged the moment it's made. Weeks later, Nixara checks its own homework — comparing the call against what actually happened, then feeding the result back into the next report.</p>
+
+  <div class="outcomes-grid">
+    <div class="outcome">
+      <div class="o-top"><span style="font-weight:700">Outcome Report · #2847</span><span class="o-acc">91% accuracy</span></div>
+      <div class="o-row"><span>West Coast pipeline revenue</span><span>+$3.9M vs +$4.1M projected</span></div>
+      <div class="o-row"><span>Deal close velocity</span><span>+21% vs +18% predicted</span></div>
+      <div class="o-row"><span>Cost review action taken</span><span>Yes — Sep 3</span></div>
+      <div class="o-row"><span>Runway impact</span><span>+1.4mo vs projection</span></div>
+      <div class="o-row" style="border-bottom:none"><span>Verdict</span><span>Exceeded</span></div>
+      <div class="o-verdict"><i></i>Logged Jul 12 · checked against reality Aug 24</div>
+    </div>
+    <div class="outcome-side">
+      <div class="os-stat"><b>2,849</b><span>decisions tracked</span></div>
+      <div class="os-stat"><b>91%</b><span>average accuracy</span></div>
+      <div class="os-trend">
+        <div class="os-trend-label">Accuracy · last 6 reports</div>
+        <div class="os-bars">
+          <div class="os-bar" style="height:55%"></div>
+          <div class="os-bar" style="height:62%"></div>
+          <div class="os-bar" style="height:58%"></div>
+          <div class="os-bar" style="height:74%"></div>
+          <div class="os-bar" style="height:80%"></div>
+          <div class="os-bar" style="height:91%"></div>
+        </div>
+        <div class="os-trend-foot"><span>Feb</span><span>Aug</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="exports">
+  <div class="eyebrow">Then take it with you</div>
+  <div class="h2">Every report exports clean.</div>
+  <p class="p">Once you've got your answer, it doesn't stay trapped in a browser tab — hand it off in the format your team already uses.</p>
+
+  <div class="exports-panel">
+    <div class="exp-info">
+      <div class="exp-row"><b>Full formatting preserved</b><span>Charts, tables, and the role-calibrated commentary come with it — not a raw data dump.</span></div>
+      <div class="exp-row"><b>Branded and ready to share</b><span>Drop it straight into a board deck or an email thread. No cleanup pass needed.</span></div>
+      <div class="exp-row"><b>Generated in under 3 seconds</b><span>Export the moment a report is approved — there's no separate build step.</span></div>
+    </div>
+    <div class="exp-tray">
+      <div class="exp-tray-top"><span>Export report · Q3 Cash Flow Risk</span><b>2 formats</b></div>
+      <div class="exp-files">
+        <div class="exp-file">
+          <div class="doc-page word">
+            <div class="doc-ln"></div><div class="doc-ln"></div><div class="doc-ln"></div>
+            <div class="doc-badge">W</div>
+          </div>
+          <div class="exp-file-meta"><b>Word Export</b><span>.docx · 340 KB · updated just now</span></div>
+          <div class="exp-dl">↓</div>
+        </div>
+        <div class="exp-file">
+          <div class="doc-page pdf">
+            <div class="doc-ln"></div><div class="doc-ln"></div><div class="doc-ln"></div>
+            <div class="doc-badge">PDF</div>
+          </div>
+          <div class="exp-file-meta"><b>PDF Export</b><span>.pdf · 210 KB · updated just now</span></div>
+          <div class="exp-dl">↓</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="founder">
+  <div class="founder-card">
+    <div class="fc-avatar">SS</div>
+    <div class="fc-body">
+      <div class="fc-eyebrow">From the founder</div>
+      <div class="fc-name">Swapnil Sakorkar</div>
+      <div class="fc-role">AI Application Developer</div>
+      <p class="fc-bio">Nixara exists because the same numbers shouldn't take five meetings to explain five different ways. I'm building it deliberately — role by role, report by report — instead of shipping a generic dashboard and calling it done.</p>
+      <a class="fc-link" href="https://www.linkedin.com/in/swapnil-sakorkar" target="_blank" rel="noopener">Connect on LinkedIn →</a>
+    </div>
+  </div>
+</section>
+
+<section id="cta">
+  <div class="cta-final">
+    <div class="h2">Try the report, not the pitch.</div>
+    <p class="p" style="margin:0 auto 1.6rem">Three free reports. No account, no card.</p>
+    <a class="btn-p" href="#">Open Nixara →</a>
+  </div>
+</section>
+
+<footer>
+  <span>© 2026 Nixara · Swapnil S.</span>
+  <span>Live app · LinkedIn</span>
+</footer>
+
+<script>
+var ROLES = [
+  { title:"Q3 Cash Flow Risk", badge:"CFO view · live",
+    quote:'"Burn rate exceeds forecast by 18%. Cost review required before approving expansion budget."',
+    bars:[55,40,30,35,45,50,60,65,58],
+    metrics:[["-18%","vs forecast"],["8.2mo","runway"],["Review","action"]] },
+  { title:"Q3 Market Opportunity", badge:"CEO view · live",
+    quote:'"West Coast pipeline closes 18% faster than national average — this is the window to move."',
+    bars:[30,40,45,55,60,70,80,90,100],
+    metrics:[["+23%","pipeline"],["3.2×","coverage"],["Expand","action"]] },
+  { title:"Q3 Operational Readiness", badge:"COO view · live",
+    quote:'"Expansion viable only if six senior hires are completed by October 15."',
+    bars:[45,50,55,58,60,60,62,60,63],
+    metrics:[["40%","capacity left"],["6","hires needed"],["Oct 15","deadline"]] },
+  { title:"Q3 Pipeline Execution", badge:"Sales lead view · live",
+    quote:'"SDR headcount request denied — deal velocity already supports current team size."',
+    bars:[40,70,35,65,45,75,50,80,55],
+    metrics:[["0 / 12","SDRs approved"],["+18%","velocity"],["Reallocate","action"]] },
+  { title:"Q3 Fulfillment Consolidation", badge:"Operations view · live",
+    quote:'"East Coast hub consolidation approved. 14% cost reduction with no service impact."',
+    bars:[80,75,68,60,55,50,45,42,38],
+    metrics:[["-14%","cost"],["2","hubs merged"],["0%","SLA impact"]] },
+  { title:"Q3 Pricing Risk", badge:"Board view · live",
+    quote:'"Enterprise pricing increase postponed pending a churn-risk read."',
+    bars:[50,48,52,49,51,50,53,50,52],
+    metrics:[["15%","proposed"],["Postponed","status"],["Q1","revisit"]] }
+];
+
+function initRoleWidget(el){
+  var input = el.querySelector('.rs-input');
+  var ticks = el.querySelectorAll('.rs-ticks span');
+  var bars = el.querySelectorAll('.cp-bar');
+  var titleEl = el.querySelector('.cp-title');
+  var badgeEl = el.querySelector('.cp-badge');
+  var quoteEl = el.querySelector('.cp-q');
+  var metricEls = el.querySelectorAll('.cpm');
+
+  function apply(i){
+    var r = ROLES[i];
+    titleEl.textContent = r.title;
+    badgeEl.textContent = r.badge;
+    if(quoteEl) quoteEl.textContent = r.quote;
+    bars.forEach(function(b, idx){ b.style.height = r.bars[idx] + '%'; });
+    metricEls.forEach(function(m, idx){
+      m.querySelector('.cpm-v').textContent = r.metrics[idx][0];
+      m.querySelector('.cpm-l').textContent = r.metrics[idx][1];
+    });
+    ticks.forEach(function(t){ t.classList.toggle('on', Number(t.dataset.i) === i); });
+    var pct = (i / 5) * 100;
+    input.style.background = 'linear-gradient(to right, var(--c1) 0%, var(--c2) ' + pct + '%, rgba(27,36,56,.10) ' + pct + '%)';
+  }
+
+  input.addEventListener('input', function(){ apply(Number(input.value)); });
+  ticks.forEach(function(t){
+    t.addEventListener('click', function(){
+      input.value = t.dataset.i;
+      apply(Number(t.dataset.i));
+    });
+  });
+  apply(0);
+}
+
+document.querySelectorAll('.role-widget').forEach(initRoleWidget);
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Swiss — international typographic poster direction</title>
+<style>
+html{scroll-behavior:smooth}
+:root{--paper:#F4F3EF;--ink:#111111;--red:#E3341C;--m:#5c5c5c}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-family:'Helvetica Neue',Helvetica,Arial,sans-serif}
+a{color:inherit;text-decoration:none}
+
+.grid-outer{max-width:1200px;margin:0 auto;border-left:1px solid var(--ink);border-right:1px solid var(--ink)}
+.row{display:grid;grid-template-columns:repeat(12,1fr);border-bottom:1px solid var(--ink)}
+.cell{padding:1.2rem 1.4rem;border-right:1px solid var(--ink)}
+.cell:last-child{border-right:none}
+
+nav.row{align-items:center}
+.nav-logo{grid-column:span 4;font-weight:800;font-size:1.1rem;letter-spacing:-.02em;display:flex;align-items:center}
+.nav-links{grid-column:span 6;display:flex;align-items:center;gap:2rem;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+.nav-cta{grid-column:span 2;display:flex;align-items:center;justify-content:flex-end;font-size:.78rem;font-weight:700;text-transform:uppercase;color:var(--red)}
+
+.hero-row{grid-template-columns:repeat(12,1fr)}
+.hero-num{grid-column:span 2;padding:2.5rem 1.4rem;font-size:.75rem;color:var(--m);display:flex;align-items:flex-start}
+.hero-h{grid-column:span 8;padding:2.5rem 1.4rem}
+.hero-h h1{font-size:clamp(2.6rem,6vw,5.2rem);font-weight:800;letter-spacing:-.04em;line-height:.95;text-transform:uppercase}
+.hero-h h1 span{color:var(--red)}
+.hero-side{grid-column:span 2;padding:2.5rem 1.4rem;font-size:.85rem;color:var(--m);line-height:1.6}
+
+.sub-row{grid-template-columns:repeat(12,1fr)}
+.sub-l{grid-column:span 8;padding:1.6rem 1.4rem;font-size:1.1rem;line-height:1.6}
+.sub-r{grid-column:span 4;padding:1.6rem 1.4rem;display:flex;align-items:center;justify-content:center}
+.btn{background:var(--red);color:var(--paper);font-weight:800;font-size:.8rem;text-transform:uppercase;padding:.9rem 1.6rem;letter-spacing:.03em;display:inline-block}
+
+.label-row .cell{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--m);padding:.7rem 1.4rem}
+
+.big-num{font-size:5rem;font-weight:800;letter-spacing:-.04em;line-height:1}
+.stat-row .cell{padding:1.8rem 1.4rem}
+.stat-l{font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;color:var(--m);margin-top:.4rem}
+
+.steps-row .cell{padding:2rem 1.4rem}
+.step-n{font-size:3rem;font-weight:800;color:var(--red);line-height:1;margin-bottom:1rem}
+.step-h{font-size:1rem;font-weight:800;text-transform:uppercase;margin-bottom:.6rem}
+.step-p{font-size:.85rem;color:var(--m);line-height:1.6}
+
+.roles-row .cell{padding:1.6rem 1.4rem}
+.role-t{font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--red);margin-bottom:.6rem}
+.role-q{font-size:.86rem;line-height:1.55;font-style:italic}
+
+.quote-row .cell{padding:3rem 1.4rem;text-align:center}
+.quote-row p{font-size:1.5rem;font-weight:300;line-height:1.5;max-width:760px;margin:0 auto}
+.quote-row span{display:block;margin-top:1rem;font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--m)}
+
+.foot-row .cell{padding:1.4rem;font-size:.75rem;color:var(--m);display:flex;align-items:center}
+</style>
+</head>
+<body>
+
+<div class="grid-outer">
+  <div class="row nav">
+    <div class="nav-logo cell">NIXARA</div>
+    <div class="nav-links cell"><a href="#how">How</a><a href="#roles">Roles</a><a href="#outcomes">Outcomes</a><a href="#about">About</a></div>
+    <div class="nav-cta cell">Try free →</div>
+  </div>
+
+  <div class="row hero-row">
+    <div class="hero-num cell">01 / DECISION<br>INTELLIGENCE</div>
+    <div class="hero-h cell"><h1>Stop reading<br>dashboards.<br><span>Start deciding.</span></h1></div>
+    <div class="hero-side cell">Personal decision intelligence for business leaders. Six roles, one dataset, sixty seconds.</div>
+  </div>
+
+  <div class="row sub-row">
+    <div class="sub-l cell">Nixara is the personal decision intelligence layer for business leaders — starting with the report no one has time to write, and growing into the platform that tracks whether the decisions made from it actually worked.</div>
+    <div class="sub-r cell"><a class="btn" href="#">Open Nixara</a></div>
+  </div>
+
+  <div class="row label-row"><div class="cell" style="grid-column:span 12">02 / BY THE NUMBERS</div></div>
+  <div class="row stat-row">
+    <div class="cell" style="grid-column:span 3"><div class="big-num">60</div><div class="stat-l">seconds, data to report</div></div>
+    <div class="cell" style="grid-column:span 3"><div class="big-num">06</div><div class="stat-l">roles recalibrated</div></div>
+    <div class="cell" style="grid-column:span 3"><div class="big-num">03</div><div class="stat-l">formats, one click</div></div>
+    <div class="cell" style="grid-column:span 3"><div class="big-num">91</div><div class="stat-l">percent tracked accuracy</div></div>
+  </div>
+
+  <div class="row label-row" id="how"><div class="cell" style="grid-column:span 12">03 / HOW IT WORKS</div></div>
+  <div class="row steps-row">
+    <div class="cell" style="grid-column:span 4"><div class="step-n">01</div><div class="step-h">Upload</div><div class="step-p">CSV, Excel, or a live Tableau connection. Handled automatically.</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="step-n">02</div><div class="step-h">Ask</div><div class="step-p">Plain language, your role, your time horizon. No query language.</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="step-n">03</div><div class="step-h">Decide</div><div class="step-p">Three reports in under 60 seconds. Approve, reject, postpone, track.</div></div>
+  </div>
+
+  <div class="row label-row" id="roles"><div class="cell" style="grid-column:span 12">04 / SIX ROLES, ONE REPORT</div></div>
+  <div class="row roles-row">
+    <div class="cell" style="grid-column:span 4"><div class="role-t">CFO</div><div class="role-q">"Burn rate exceeds forecast by 18%. Cost review required."</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="role-t">CEO</div><div class="role-q">"Pipeline closes 18% faster — this is the window to move."</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="role-t">COO</div><div class="role-q">"Viable only if six senior hires land by October 15."</div></div>
+  </div>
+  <div class="row roles-row">
+    <div class="cell" style="grid-column:span 4"><div class="role-t">Sales lead</div><div class="role-q">"Headcount request denied — velocity already supports the team."</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="role-t">Operations</div><div class="role-q">"Hub consolidation approved, 14% cost reduction."</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="role-t">Board</div><div class="role-q">"Pricing increase postponed pending a churn-risk read."</div></div>
+  </div>
+
+  <div class="row label-row" id="outcomes"><div class="cell" style="grid-column:span 12">05 / WAS NIXARA RIGHT?</div></div>
+  <div class="row steps-row">
+    <div class="cell" style="grid-column:span 4"><div class="step-n">PROJECTED</div><div class="step-h">$4.1M</div><div class="step-p">West Coast pipeline revenue, forecast at time of decision.</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="step-n">ACTUAL</div><div class="step-h">$3.9M</div><div class="step-p">Logged six weeks later against the original recommendation.</div></div>
+    <div class="cell" style="grid-column:span 4"><div class="step-n">VERDICT</div><div class="step-h">91%</div><div class="step-p">Tracked accuracy — exceeded, CFO risk flag was overcautious.</div></div>
+  </div>
+
+  <div class="row label-row" id="about"><div class="cell" style="grid-column:span 12">06 / FOUNDER NOTE</div></div>
+  <div class="row quote-row">
+    <div class="cell" style="grid-column:span 12">
+      <p>"We're not shipping a dashboard. We're shipping the fifteen minutes back to a founder who used to spend a weekend building this deck by hand."</p>
+      <span>Swapnil S. — Nixara</span>
+    </div>
+  </div>
+
+  <div class="row sub-row">
+    <div class="sub-l cell" style="grid-column:span 8;font-size:1.4rem;font-weight:800;text-transform:uppercase;letter-spacing:-.02em">Try the report,<br>not the pitch.</div>
+    <div class="sub-r cell"><a class="btn" href="#">Open Nixara</a></div>
+  </div>
+
+  <div class="row foot-row">
+    <div class="cell" style="grid-column:span 6">© 2026 Nixara</div>
+    <div class="cell" style="grid-column:span 6;justify-content:flex-end">Built by Swapnil S. — LinkedIn</div>
+  </div>
+</div>
+</body>
+</html>
