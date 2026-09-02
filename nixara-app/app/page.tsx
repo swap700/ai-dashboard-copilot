@@ -14,7 +14,7 @@ import ReportTabs from "@/components/ReportTabs";
 import { buildDataSummary, dashboardScore, numericColumns } from "@/lib/data-analysis";
 import type { Dataset } from "@/lib/data-analysis";
 import { REPORT_TYPES, type ReportType } from "@/lib/report";
-import { incrementFreeReportsUsed } from "@/lib/free-tier";
+import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
 
 export default function DashboardPage() {
   // ── Global store — survives navigation to Outcomes and back ──────────────
@@ -77,9 +77,18 @@ export default function DashboardPage() {
           }),
         });
         const data = await res.json();
+        // BUG FIX (2026-09): sync the display counter to the server's
+        // authoritative freeRemaining whenever it's present, on both the
+        // success and the blocked (429) path. Previously this only ever
+        // incremented a local sessionStorage counter on success, which
+        // could show "0 of 3 used" in a fresh tab while the real,
+        // persistent server-side gate (a 30-day cookie) correctly still
+        // remembered all 3 were already used and blocked the request.
+        if (data.freeRemaining !== undefined && data.tier !== "own" && data.tier !== "admin") {
+          setFreeReportsUsed(FREE_LIMIT - data.freeRemaining);
+        }
         if (!res.ok) throw new Error(data.error ?? "Report generation failed.");
         next[reportType] = data.text;
-        if (data.tier === "free" && !usingOwnKey) incrementFreeReportsUsed();
       }
 
       setReports(next as Record<ReportType, string>);

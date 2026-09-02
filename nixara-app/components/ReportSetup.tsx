@@ -26,9 +26,12 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
   const { apiKey, setApiKey } = useApiKey();
   const [freeUsed, setFreeUsed] = useState(0);
 
+  // Reads the counter on mount, and again whenever a generate attempt just
+  // finished (generating: true -> false) so the display picks up whatever
+  // page.tsx just synced from the server's authoritative freeRemaining.
   useEffect(() => {
-    setFreeUsed(getFreeReportsUsed());
-  }, []);
+    if (!generating) setFreeUsed(getFreeReportsUsed());
+  }, [generating]);
 
   useEffect(() => {
     onApiKeyResolved(apiKey);

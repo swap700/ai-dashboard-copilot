@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
           error:
             `You've used all ${FREE_LIMIT} free generate sessions. ` +
             "Paste your own OpenAI key (starts with sk-) in the field below to continue.",
+          freeRemaining: 0,
         },
         { status: 429 }
       );
