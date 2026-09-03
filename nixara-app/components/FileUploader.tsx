@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { loadFile } from "@/lib/file-parser";
+import { useSession } from "@/lib/session-context";
 import type { Dataset } from "@/lib/data-analysis";
 
 interface Props {
@@ -13,6 +14,7 @@ export default function FileUploader({ onLoaded }: Props) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { logFileUpload } = useSession();
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -20,6 +22,9 @@ export default function FileUploader({ onLoaded }: Props) {
       setLoading(true);
       try {
         const dataset = await loadFile(file);
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        const source = ext === "csv" ? "csv" : "excel";
+        logFileUpload(source, dataset.rows.length, dataset.columns.length);
         onLoaded(dataset, file.name);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to parse file.");
@@ -27,7 +32,7 @@ export default function FileUploader({ onLoaded }: Props) {
         setLoading(false);
       }
     },
-    [onLoaded]
+    [onLoaded, logFileUpload]
   );
 
   return (

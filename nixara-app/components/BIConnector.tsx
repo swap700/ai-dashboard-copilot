@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { loadFile, parseCsvText } from "@/lib/file-parser";
 import { cleanDataset } from "@/lib/data-analysis";
+import { useSession } from "@/lib/session-context";
 import type { Dataset } from "@/lib/data-analysis";
 
 type Source = "upload" | "tableau" | "powerbi";
@@ -49,6 +50,7 @@ function UploadTab({ onLoaded }: Props) {
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { logFileUpload } = useSession();
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -56,14 +58,18 @@ function UploadTab({ onLoaded }: Props) {
       setLoading(true);
       try {
         const raw = await loadFile(file);
-        onLoaded(cleanDataset(raw), file.name);
+        const dataset = cleanDataset(raw);
+        const ext = file.name.split(".").pop()?.toLowerCase();
+        const source = ext === "csv" ? "csv" : "excel";
+        logFileUpload(source, dataset.rows.length, dataset.columns.length);
+        onLoaded(dataset, file.name);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to parse file.");
       } finally {
         setLoading(false);
       }
     },
-    [onLoaded]
+    [onLoaded, logFileUpload]
   );
 
   return (
@@ -108,13 +114,14 @@ function UploadTab({ onLoaded }: Props) {
 // TABLEAU TAB
 // ═════════════════════════════════════════════════════════════════════════════
 function TableauTab({ onLoaded }: Props) {
-  const [server, setServer]         = useState("");
-  const [siteId, setSiteId]         = useState("");
-  const [tokenName, setTokenName]   = useState("");
+  const [server, setServer]           = useState("");
+  const [siteId, setSiteId]           = useState("");
+  const [tokenName, setTokenName]     = useState("");
   const [tokenSecret, setTokenSecret] = useState("");
-  const [viewName, setViewName]     = useState("");
-  const [loading, setLoading]       = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [viewName, setViewName]       = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
+  const { logFileUpload }             = useSession();
 
   const handleConnect = async () => {
     if (!server || !tokenName || !tokenSecret || !viewName) {
@@ -132,6 +139,7 @@ function TableauTab({ onLoaded }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Tableau connection failed.");
       const dataset = cleanDataset(parseCsvText(data.csvText));
+      logFileUpload("tableau", dataset.rows.length, dataset.columns.length);
       onLoaded(dataset, data.source);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Tableau connection failed.");
@@ -217,18 +225,17 @@ function TableauTab({ onLoaded }: Props) {
 // POWER BI TAB
 // ═════════════════════════════════════════════════════════════════════════════
 function PowerBITab({ onLoaded }: Props) {
-  const [tenantId, setTenantId]       = useState("");
-  const [clientId, setClientId]       = useState("");
-  const [clientSecret, setClientSecret] = useState("");
-  const [workspaceId, setWorkspaceId] = useState("");
-  const [datasetId, setDatasetId]     = useState("");
-
-  const [tables, setTables]           = useState<string[]>([]);
+  const [tenantId, setTenantId]           = useState("");
+  const [clientId, setClientId]           = useState("");
+  const [clientSecret, setClientSecret]   = useState("");
+  const [workspaceId, setWorkspaceId]     = useState("");
+  const [datasetId, setDatasetId]         = useState("");
+  const [tables, setTables]               = useState<string[]>([]);
   const [selectedTable, setSelectedTable] = useState("");
-  const [step, setStep]               = useState<"credentials" | "tables">("credentials");
-
-  const [loading, setLoading]         = useState(false);
-  const [error, setError]             = useState<string | null>(null);
+  const [step, setStep]                   = useState<"credentials" | "tables">("credentials");
+  const [loading, setLoading]             = useState(false);
+  const [error, setError]                 = useState<string | null>(null);
+  const { logFileUpload }                 = useSession();
 
   const creds = { tenantId, clientId, clientSecret, workspaceId, datasetId };
 
@@ -271,6 +278,7 @@ function PowerBITab({ onLoaded }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch table.");
       const dataset = cleanDataset(parseCsvText(data.csvText));
+      logFileUpload("powerbi", dataset.rows.length, dataset.columns.length);
       onLoaded(dataset, data.source);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Power BI fetch failed.");
@@ -285,8 +293,6 @@ function PowerBITab({ onLoaded }: Props) {
         Authenticate with Azure AD (service principal) to pull live dataset tables.
         Your credentials are used only to fetch data and are never stored.
       </p>
-
-      {/* Credentials form — always visible */}
       <div className="grid grid-cols-2 gap-2.5">
         <div>
           <label className="block text-xs font-medium text-text-mute mb-1">Tenant ID</label>
@@ -309,12 +315,10 @@ function PowerBITab({ onLoaded }: Props) {
           <input className={INPUT} value={datasetId} onChange={(e) => setDatasetId(e.target.value)} placeholder="xxxxxxxx-xxxx-…" />
         </div>
       </div>
-
-      {/* Step 2: table picker — shown after successful connect */}
       {step === "tables" && (
         <div className="rounded-lg bg-success-bg border border-success-border px-4 py-3">
           <p className="text-success text-xs font-semibold mb-2">
-            ✓ Connected — {tables.length} table{tables.length !== 1 ? "s" : ""} found
+            Connected - {tables.length} table{tables.length !== 1 ? "s" : ""} found
           </p>
           <label className="block text-xs font-medium text-text-mute mb-1">Select table to load</label>
           <select
@@ -328,11 +332,9 @@ function PowerBITab({ onLoaded }: Props) {
           </select>
         </div>
       )}
-
       {error && (
         <p className="text-danger text-xs mt-1" role="alert">{error}</p>
       )}
-
       {step === "credentials" ? (
         <button
           type="button"
@@ -373,14 +375,11 @@ export default function BIConnector({ onLoaded }: Props) {
 
   return (
     <div className="mb-6">
-      {/* Source selector tabs */}
       <div className="flex items-center gap-1 mb-4 p-1 bg-accent-bg-soft rounded-lg border border-accent-border w-fit">
-        <SourceTab label="Upload CSV / Excel" active={source === "upload"} onClick={() => setSource("upload")} />
+        <SourceTab label="Upload CSV / Excel" active={source === "upload"}  onClick={() => setSource("upload")} />
         <SourceTab label="Tableau"            active={source === "tableau"} onClick={() => setSource("tableau")} />
         <SourceTab label="Power BI"           active={source === "powerbi"} onClick={() => setSource("powerbi")} />
       </div>
-
-      {/* Tab content */}
       {source === "upload"  && <UploadTab  onLoaded={onLoaded} />}
       {source === "tableau" && (
         <div className="rounded-xl border border-border bg-surface px-5 py-5">

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { logDecisionRecord, logOutcome, updateDecisionChoice, type DecisionChoice, type OutcomeRating } from "./decisions";
+import { logEvent } from "./analytics";
 import type { ReportType } from "./report";
 
 const SESSION_ID_KEY = "nixara_analytics_session_id";
@@ -14,10 +15,8 @@ export interface RecordedDecision {
   datasetName: string;
   question: string;
   timeframe: string;
-  // Task 13: linked recommendation + responsible owner
   recommendation?: string;
   owner?: string;
-  // Task 14: reason when postponed
   postponeReason?: string;
 }
 
@@ -51,14 +50,14 @@ interface SessionState {
     reportType: ReportType,
     outcome: RecordedOutcome & { notes?: string }
   ) => Promise<void>;
-  /** Change the choice on an already-recorded decision (updates DB + local state). */
   updateDecision: (
     reportType: ReportType,
     newChoice: DecisionChoice,
     postponeReason?: string
   ) => Promise<void>;
-  /** Clear all in-memory and sessionStorage decisions + outcomes when new data is loaded. */
   clearDecisions: () => void;
+  /** Call this when a file or BI source is loaded — logs file_upload event */
+  logFileUpload: (dataSource: "csv" | "excel" | "tableau" | "powerbi", dataRows?: number, dataCols?: number) => void;
 }
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -72,21 +71,56 @@ function loadSessionId(): string {
   return fresh;
 }
 
+function getReferrer(): string | null {
+  if (typeof window === "undefined") return null;
+  return document.referrer || null;
+}
+
 const DECISIONS_KEY = "nixara_session_decisions";
-const OUTCOMES_KEY = "nixara_session_outcomes";
+const OUTCOMES_KEY  = "nixara_session_outcomes";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [sessionId, setSessionId] = useState("");
-  const [decisions, setDecisions] = useState<Partial<Record<ReportType, RecordedDecision>>>({});
-  const [outcomes, setOutcomes] = useState<Partial<Record<ReportType, RecordedOutcome>>>({});
+  const [sessionId, setSessionId]   = useState("");
+  const [decisions, setDecisions]   = useState<Partial<Record<ReportType, RecordedDecision>>>({});
+  const [outcomes,  setOutcomes]    = useState<Partial<Record<ReportType, RecordedOutcome>>>({});
 
   useEffect(() => {
-    setSessionId(loadSessionId());
+    const id = loadSessionId();
+    setSessionId(id);
+
+    // Restore persisted session state
     const savedDecisions = window.sessionStorage.getItem(DECISIONS_KEY);
     if (savedDecisions) setDecisions(JSON.parse(savedDecisions));
     const savedOutcomes = window.sessionStorage.getItem(OUTCOMES_KEY);
     if (savedOutcomes) setOutcomes(JSON.parse(savedOutcomes));
+
+    // Log session_start — only fires once per browser session
+    const startedKey = "nixara_session_started";
+    if (!window.sessionStorage.getItem(startedKey)) {
+      window.sessionStorage.setItem(startedKey, "1");
+      logEvent({
+        session_id: id,
+        event_type: "session_start",
+        referrer: getReferrer(),
+      });
+    }
   }, []);
+
+  const logFileUpload = (
+    dataSource: "csv" | "excel" | "tableau" | "powerbi",
+    dataRows?: number,
+    dataCols?: number
+  ) => {
+    if (!sessionId) return;
+    logEvent({
+      session_id: sessionId,
+      event_type: "file_upload",
+      data_source: dataSource,
+      data_rows: dataRows,
+      data_cols: dataCols,
+      referrer: getReferrer(),
+    });
+  };
 
   const recordDecision: SessionState["recordDecision"] = async (reportType, choice, ctx) => {
     const logged = await logDecisionRecord({
@@ -107,13 +141,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       [reportType]: {
         choice,
         decisionId: logged?.id ?? null,
-        publicId: logged?.publicId ?? null,
-        role: ctx.role,
+        publicId:   logged?.publicId ?? null,
+        role:       ctx.role,
         datasetName: ctx.datasetName,
-        question: ctx.question,
-        timeframe: ctx.timeframe,
+        question:   ctx.question,
+        timeframe:  ctx.timeframe,
         recommendation: ctx.recommendation,
-        owner: ctx.owner,
+        owner:      ctx.owner,
         postponeReason: ctx.postponeReason,
       },
     };
@@ -124,14 +158,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const recordOutcome: SessionState["recordOutcome"] = async (reportType, outcome) => {
     const decision = decisions[reportType];
     await logOutcome({
-      decisionId: decision?.decisionId ?? null,
+      decisionId:    decision?.decisionId ?? null,
       sessionId,
-      metricName: outcome.metricName,
-      metricBefore: outcome.metricBefore,
-      metricAfter: outcome.metricAfter,
-      metricUnit: outcome.metricUnit,
+      metricName:    outcome.metricName,
+      metricBefore:  outcome.metricBefore,
+      metricAfter:   outcome.metricAfter,
+      metricUnit:    outcome.metricUnit,
       outcomeRating: outcome.outcomeRating,
-      notes: outcome.notes,
+      notes:         outcome.notes,
     });
     const next = { ...outcomes, [reportType]: outcome };
     setOutcomes(next);
@@ -141,7 +175,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const updateDecision: SessionState["updateDecision"] = async (reportType, newChoice, postponeReason) => {
     const decision = decisions[reportType];
     if (!decision) return;
-    // Update DB if a decision ID exists
     if (decision.decisionId) {
       await updateDecisionChoice(decision.decisionId, sessionId, newChoice, postponeReason);
     }
@@ -165,7 +198,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, updateDecision, clearDecisions }),
+    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, updateDecision, clearDecisions, logFileUpload }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [sessionId, decisions, outcomes]
   );
