@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { parseReportLines } from "@/lib/report";
+import { parseExportPayload } from "@/lib/export-payload";
 
 export const runtime = "nodejs";
 
-interface Body {
-  reportText: string;
-  title: string;
-  who: string;
-  decision: string;
-  timeframe: string;
-}
-
 export async function POST(req: NextRequest) {
-  const { reportText, title, who, decision, timeframe }: Body = await req.json();
+  // M2: bounds-checked and type-checked; nothing here is trusted.
+  const parsed = await parseExportPayload(req);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+  }
+  const { reportText, title, who, decision, timeframe, filenameStem } = parsed.payload;
 
   const doc = new PDFDocument({
     size: "LETTER",
@@ -61,7 +59,8 @@ export async function POST(req: NextRequest) {
   return new NextResponse(new Blob([Uint8Array.from(buffer)]), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${title.toLowerCase().replace(/ /g, "_")}.pdf"`,
+      // M2: sanitized stem - never interpolate a caller-supplied string into a header.
+      "Content-Disposition": `attachment; filename="${filenameStem}.pdf"`,
     },
   });
 }
