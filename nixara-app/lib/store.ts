@@ -11,7 +11,7 @@
 import { create } from "zustand";
 import type { Dataset } from "./data-analysis";
 import type { ReportSetupValue } from "@/components/ReportSetup";
-import type { ReportType } from "./report";
+import type { ReportFailures, ReportSet } from "./report";
 
 interface NixaraState {
   // ── Dataset ──────────────────────────────────────────────────────────────
@@ -21,8 +21,11 @@ interface NixaraState {
   setup: ReportSetupValue;
   // ── API key (in-memory only — never persisted) ───────────────────────────
   apiKey: string;
-  // ── Generated report text ─────────────────────────────────────────────────
-  reports: Record<ReportType, string> | null;
+  // ── Generated reports ─────────────────────────────────────────────────────
+  // Partial: any subset of the three calls can fail, and the ones that
+  // succeeded are still worth showing (and were still paid for).
+  reports: ReportSet | null;
+  reportErrors: ReportFailures;
 }
 
 interface NixaraActions {
@@ -30,7 +33,7 @@ interface NixaraActions {
   setDataset: (dataset: Dataset | null, fileName?: string) => void;
   setSetup: (setup: ReportSetupValue) => void;
   setApiKey: (key: string) => void;
-  setReports: (reports: Record<ReportType, string> | null) => void;
+  setReports: (reports: ReportSet | null, errors?: ReportFailures) => void;
 }
 
 const DEFAULT_SETUP: ReportSetupValue = {
@@ -45,10 +48,11 @@ export const useNixaraStore = create<NixaraState & NixaraActions>((set) => ({
   setup: DEFAULT_SETUP,
   apiKey: "",
   reports: null,
+  reportErrors: {},
 
   setDataset: (dataset, fileName = "") =>
-    set({ dataset, fileName, reports: null }),
+    set({ dataset, fileName, reports: null, reportErrors: {} }),
   setSetup: (setup) => set({ setup }),
   setApiKey: (apiKey) => set({ apiKey }),
-  setReports: (reports) => set({ reports }),
+  setReports: (reports, errors = {}) => set({ reports, reportErrors: errors }),
 }));

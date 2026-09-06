@@ -11,6 +11,24 @@ export const REPORT_TYPES: ReportType[] = [
   "Risk Report",
 ];
 
+/** One generated report, plus whether the model was cut off producing it. */
+export interface GeneratedReport {
+  text: string;
+  truncated: boolean;
+}
+
+/**
+ * The reports from one generate click.
+ *
+ * Partial on purpose: a click fires three independent model calls and any
+ * subset of them can fail. Before 2026-09 the client held all three or
+ * nothing, so one failure discarded the two that had already been paid for.
+ */
+export type ReportSet = Partial<Record<ReportType, GeneratedReport>>;
+
+/** Per-report-type failure messages from the same click. */
+export type ReportFailures = Partial<Record<ReportType, string>>;
+
 export const REPORT_CONFIGS: Record<ReportType, string> = {
 
   "Executive Summary": `Structure your response EXACTLY as:

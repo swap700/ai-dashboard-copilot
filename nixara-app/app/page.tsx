@@ -13,12 +13,12 @@ import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
 import { buildDataSummary, dashboardScore, numericColumns } from "@/lib/data-analysis";
 import type { Dataset } from "@/lib/data-analysis";
-import { REPORT_TYPES, type ReportType } from "@/lib/report";
+import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
 
 export default function DashboardPage() {
   // ── Global store — survives navigation to Outcomes and back ──────────────
-  const { dataset, fileName, setup, apiKey, reports, setDataset, setSetup, setApiKey, setReports } =
+  const { dataset, fileName, setup, apiKey, reports, reportErrors, setDataset, setSetup, setApiKey, setReports } =
     useNixaraStore();
 
   // ── Session context — decisions + outcomes ────────────────────────────────
@@ -55,14 +55,12 @@ export default function DashboardPage() {
     setError(null);
     try {
       const summary = buildDataSummary(dataset);
-      const usingOwnKey = apiKey.trim().startsWith("sk-");
-      const next: Partial<Record<ReportType, string>> = {};
 
-      // One UUID per button click — shared across all report-type calls so the
+      // One UUID per button click - shared across all report-type calls so the
       // server counts this as a single generate SESSION, not 3 separate uses.
       const sessionId = crypto.randomUUID();
 
-      for (const reportType of REPORT_TYPES) {
+      const requestOne = async (reportType: ReportType) => {
         const res = await fetch("/api/generate-report", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -77,21 +75,77 @@ export default function DashboardPage() {
           }),
         });
         const data = await res.json();
-        // BUG FIX (2026-09): sync the display counter to the server's
-        // authoritative freeRemaining whenever it's present, on both the
-        // success and the blocked (429) path. Previously this only ever
-        // incremented a local sessionStorage counter on success, which
-        // could show "0 of 3 used" in a fresh tab while the real,
-        // persistent server-side gate (a 30-day cookie) correctly still
-        // remembered all 3 were already used and blocked the request.
+
+        // Sync the display counter to the server's authoritative freeRemaining
+        // whenever it is present, on both the success and the blocked path.
+        // A purely local counter can show "0 of 3 used" in a fresh tab while
+        // the persistent server-side gate correctly still remembers all 3.
         if (data.freeRemaining !== undefined && data.tier !== "own" && data.tier !== "admin") {
           setFreeReportsUsed(FREE_LIMIT - data.freeRemaining);
         }
-        if (!res.ok) throw new Error(data.error ?? "Report generation failed.");
-        next[reportType] = data.text;
+
+        if (!res.ok) {
+          const err = new Error(data.error ?? "Report generation failed.") as Error & {
+            status?: number;
+          };
+          err.status = res.status;
+          throw err;
+        }
+        return { text: data.text as string, truncated: Boolean(data.truncated) };
+      };
+
+      const results: ReportSet = {};
+      const failures: ReportFailures = {};
+      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean }>) => {
+        if (outcome.status === "fulfilled") results[type] = outcome.value;
+        else failures[type] = outcome.reason?.message ?? "Report generation failed.";
+      };
+
+      // The first call runs on its own, then the rest run together.
+      //
+      // Not an arbitrary choice: the first response is what sets the free-tier
+      // cookie and consumes this session's quota unit. Firing all three at once
+      // would send the same pre-update cookie three times, and the server would
+      // count one click as three separate generate sessions - burning the
+      // user's free allowance 3x faster. Awaiting the first means calls two and
+      // three carry the updated cookie and are recognised as the same session.
+      const [firstType, ...restTypes] = REPORT_TYPES;
+      const firstOutcome = await Promise.allSettled([requestOne(firstType)]);
+      record(firstType, firstOutcome[0]);
+
+      // If the first call was refused by a gate (rate limit, quota, free tier
+      // exhausted, backend unavailable) the other two would be refused too.
+      // Anything else - a timeout, a transient upstream error - is worth
+      // retrying the siblings for, since they are independent calls.
+      const firstStatus =
+        firstOutcome[0].status === "rejected"
+          ? (firstOutcome[0].reason as { status?: number })?.status
+          : undefined;
+      const gated = firstStatus === 429 || firstStatus === 503 || firstStatus === 401;
+
+      if (!gated) {
+        const restOutcomes = await Promise.allSettled(restTypes.map(requestOne));
+        restTypes.forEach((type, i) => record(type, restOutcomes[i]));
+      } else {
+        for (const type of restTypes) failures[type] = failures[firstType] ?? "Not attempted.";
       }
 
-      setReports(next as Record<ReportType, string>);
+      const succeeded = Object.keys(results).length;
+      if (succeeded === 0) {
+        // Nothing to show - surface the reason at the top of the page.
+        setError(failures[firstType] ?? "Something went wrong generating reports.");
+        setReports(null, failures);
+      } else {
+        // Keep whatever came back. Previously a single failure discarded every
+        // report from this click, including ones already paid for.
+        setReports(results, failures);
+        if (succeeded < REPORT_TYPES.length) {
+          setError(
+            `${REPORT_TYPES.length - succeeded} of ${REPORT_TYPES.length} reports could not be generated. ` +
+              "The others are below."
+          );
+        }
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong generating reports.");
     } finally {
@@ -132,7 +186,11 @@ export default function DashboardPage() {
           )}
 
           {reports && (
-            <ReportTabs reports={reports} context={{ ...setup, datasetName: fileName }} />
+            <ReportTabs
+              reports={reports}
+              errors={reportErrors}
+              context={{ ...setup, datasetName: fileName }}
+            />
           )}
         </>
       )}
