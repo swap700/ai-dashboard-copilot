@@ -22,7 +22,26 @@ const MAX_FIELD_CHARS   = 300;
 
 // ── OpenAI call bounds ──────────────────────────────────────────────────────
 const OPENAI_TIMEOUT_MS = 60_000;
-const OPENAI_MAX_TOKENS = 1024;
+
+/**
+ * BUG FIX (2026-09): this was 1024 and finish_reason was never inspected.
+ *
+ * The Operational Detail and Risk Report prompts both ask for "under 500
+ * words" across four or five headed sections, and the Risk Report additionally
+ * asks for three risks each with five labelled lines. 500 words of prose is
+ * roughly 700 tokens before any of that structure, so 1024 was not comfortable
+ * headroom - it was close enough that real reports hit the ceiling.
+ *
+ * When they did, the model stopped mid-sentence and the app rendered the
+ * fragment as a finished report. Nothing detected it, nothing told the user.
+ * A risk report that ends halfway through the second of three risks looks like
+ * a complete report that only found one and a half risks.
+ *
+ * Raised to give genuine headroom, AND checked, because a cap you do not
+ * inspect is a cap that fails silently. Output tokens are billed as used, so a
+ * higher ceiling costs nothing on reports that were never near it.
+ */
+const OPENAI_MAX_TOKENS = 1600;
 
 // ── Free-tier cookie (cheap first check only — see the note below) ──────────
 const FREE_LIMIT     = 3;
@@ -115,14 +134,35 @@ interface Body {
   dataSource?: "csv" | "excel" | "tableau" | "powerbi";
 }
 
-async function generate(apiKey: string, prompt: string): Promise<string> {
+interface GenerateResult {
+  text: string;
+  /** The model hit the token ceiling and the report is cut off mid-thought. */
+  truncated: boolean;
+}
+
+async function generate(apiKey: string, prompt: string): Promise<GenerateResult> {
   const client = new OpenAI({ apiKey, timeout: OPENAI_TIMEOUT_MS, maxRetries: 1 });
   const response = await client.chat.completions.create({
     model:      "gpt-4o",
     max_tokens: OPENAI_MAX_TOKENS,
     messages:   [{ role: "user", content: prompt }],
   });
-  return cleanAiOutput(response.choices[0]?.message?.content ?? "");
+
+  const choice = response.choices[0];
+  // "length" means the model was cut off by max_tokens rather than finishing.
+  // "stop" is a normal completion; anything else is unexpected but not a
+  // truncation, so it is not reported as one.
+  const truncated = choice?.finish_reason === "length";
+
+  if (truncated) {
+    console.warn(
+      `[generate-report] Output truncated at max_tokens=${OPENAI_MAX_TOKENS} ` +
+        `(completion_tokens=${response.usage?.completion_tokens ?? "unknown"}). ` +
+        "If this recurs, raise the ceiling or tighten the prompt's length rule."
+    );
+  }
+
+  return { text: cleanAiOutput(choice?.message?.content ?? ""), truncated };
 }
 
 export async function POST(req: NextRequest) {
@@ -178,9 +218,9 @@ export async function POST(req: NextRequest) {
   // ── Own key / admin tier: no spend gate, the caller pays ─────────────────
   if (tier !== "free") {
     try {
-      const text = await generate(apiKey, prompt);
+      const { text, truncated } = await generate(apiKey, prompt);
       void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
-      return NextResponse.json({ text, tier });
+      return NextResponse.json({ text, tier, truncated });
     } catch (err) {
       return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
     }
@@ -281,14 +321,14 @@ export async function POST(req: NextRequest) {
 
   // ── Cleared to spend ─────────────────────────────────────────────────────
   try {
-    const text = await generate(apiKey, prompt);
+    const { text, truncated } = await generate(apiKey, prompt);
 
     const updatedSessions = isNewSession && sessionId ? [...sessions, sessionId] : sessions;
     const freeRemaining = Math.max(0, FREE_LIMIT - updatedSessions.length);
 
     void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
 
-    const res = NextResponse.json({ text, tier, freeRemaining });
+    const res = NextResponse.json({ text, tier, freeRemaining, truncated });
     res.cookies.set(COOKIE_NAME, JSON.stringify(updatedSessions), {
       httpOnly: true,
       secure:   process.env.NODE_ENV === "production",
