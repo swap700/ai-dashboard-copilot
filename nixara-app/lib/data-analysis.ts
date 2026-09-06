@@ -501,6 +501,74 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
   return specs.slice(0, maxCharts);
 }
 
+/**
+ * Pearson correlation over PAIRWISE-COMPLETE observations.
+ *
+ * BUG FIX (2026-09): the previous implementation built the two value arrays
+ * independently -
+ *
+ *     const av = rows.map(r => r[a]).filter(isNumber);
+ *     const bv = rows.map(r => r[b]).filter(isNumber);
+ *     const n  = Math.min(av.length, bv.length);
+ *     // ...then paired av[k] with bv[k]
+ *
+ * - and then zipped them by index. Each filter removes a DIFFERENT set of
+ * rows, so as soon as the two columns have missing values in different places
+ * the pairs are shifted relative to each other and every subsequent value is
+ * matched against the wrong row. The result is not a noisy correlation, it is
+ * a correlation between two series that never coexisted. With a real dataset
+ * (missing values are the norm) the number was arbitrary, and it was reported
+ * to three decimal places, which reads as precision.
+ *
+ * Now a row contributes only when BOTH columns are numeric on that row, which
+ * is the standard pairwise-complete treatment.
+ *
+ * Returns null when there is not enough overlap to say anything. `n` is
+ * returned alongside `r` and printed in the summary because a correlation over
+ * 12 of 200,000 rows and one over all 200,000 are not the same claim, and the
+ * old output made them indistinguishable.
+ */
+export function pairwiseCorrelation(
+  rows: Row[],
+  colA: string,
+  colB: string,
+  minPairs = 10
+): { r: number; n: number } | null {
+  const xs: number[] = [];
+  const ys: number[] = [];
+
+  for (const row of rows) {
+    const x = row[colA];
+    const y = row[colB];
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    xs.push(x);
+    ys.push(y);
+  }
+
+  const n = xs.length;
+  if (n < minPairs) return null;
+
+  const mx = mean(xs);
+  const my = mean(ys);
+
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let k = 0; k < n; k++) {
+    const a = xs[k] - mx;
+    const b = ys[k] - my;
+    num += a * b;
+    dx += a * a;
+    dy += b * b;
+  }
+
+  const denom = Math.sqrt(dx * dy);
+  if (denom === 0) return null; // at least one column is constant
+
+  return { r: num / denom, n };
+}
+
 export interface DataSummaryOptions {
   filterCol?: string;
   filterVal?: string;
@@ -673,34 +741,25 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   }
 
   if (numericCols.length >= 2) {
-    lines.push("TOP CORRELATIONS");
-    const pairs: { a: string; b: string; corr: number }[] = [];
+    const pairs: { a: string; b: string; r: number; n: number }[] = [];
     for (let i = 0; i < numericCols.length; i++) {
       for (let j = i + 1; j < numericCols.length; j++) {
         const a = numericCols[i];
         const b = numericCols[j];
-        const av = rows.map((r) => r[a]).filter((v): v is number => typeof v === "number");
-        const bv = rows.map((r) => r[b]).filter((v): v is number => typeof v === "number");
-        const n = Math.min(av.length, bv.length);
-        if (n < 2) continue;
-        const ma = mean(av.slice(0, n));
-        const mb = mean(bv.slice(0, n));
-        let num = 0, da = 0, db = 0;
-        for (let k = 0; k < n; k++) {
-          num += (av[k] - ma) * (bv[k] - mb);
-          da += (av[k] - ma) ** 2;
-          db += (bv[k] - mb) ** 2;
-        }
-        const denom = Math.sqrt(da * db);
-        if (denom === 0) continue;
-        pairs.push({ a, b, corr: num / denom });
+        const result = pairwiseCorrelation(rows, a, b);
+        if (result) pairs.push({ a, b, r: result.r, n: result.n });
       }
     }
-    pairs.sort((x, y) => Math.abs(y.corr) - Math.abs(x.corr));
-    for (const p of pairs.slice(0, 5)) {
-      lines.push(`  ${p.a} ~ ${p.b}: ${p.corr.toFixed(3)}`);
+    if (pairs.length > 0) {
+      pairs.sort((x, y) => Math.abs(y.r) - Math.abs(x.r));
+      lines.push("TOP CORRELATIONS");
+      for (const p of pairs.slice(0, 5)) {
+        // n is printed so a coefficient over a handful of overlapping rows is
+        // visibly different from one over the whole dataset.
+        lines.push(`  ${p.a} ~ ${p.b}: ${p.r.toFixed(3)} (n=${p.n})`);
+      }
+      lines.push("");
     }
-    lines.push("");
   }
 
   lines.push(`Data Quality Score: ${dashboardScore(filtered)}/100`);

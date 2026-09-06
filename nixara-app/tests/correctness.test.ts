@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, type Dataset } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -144,6 +144,83 @@ const bySales = aggregateBy(dataset, "Region", "Sales");
 check("Sales is still summed",
   bySales.find((d) => d.key === "Central")!.value === 400,
   String(bySales.find((d) => d.key === "Central")!.value));
+
+// ── pairwiseCorrelation: the column misalignment bug ────────────────────────
+console.log("pairwiseCorrelation - misaligned columns");
+
+/**
+ * A dataset where the two columns have missing values in DIFFERENT rows.
+ *   rows 0-4    A only          (5 rows)
+ *   rows 5-16   both, B = 2*A   (12 rows -> true r is exactly +1)
+ *   rows 17-21  B only          (5 rows)
+ */
+const corrRows: Row[] = [
+  ...Array.from({ length: 5 }, (_, i) => ({ A: 100 + i, B: null })),
+  ...Array.from({ length: 12 }, (_, i) => ({ A: i + 1, B: 2 * (i + 1) })),
+  ...Array.from({ length: 5 }, () => ({ A: null, B: 999 })),
+];
+
+const corr = pairwiseCorrelation(corrRows, "A", "B");
+check("finds the 12 rows where both columns are present", corr?.n === 12, `n=${corr?.n}`);
+check("recovers the exact correlation (+1)", !!corr && Math.abs(corr.r - 1) < 1e-9,
+  `r=${corr?.r}`);
+
+// The old implementation, verbatim, on the same data - to show the bug was real.
+function correlationOld(rows: Row[], a: string, b: string): number | null {
+  const av = rows.map((r) => r[a]).filter((v): v is number => typeof v === "number");
+  const bv = rows.map((r) => r[b]).filter((v): v is number => typeof v === "number");
+  const n = Math.min(av.length, bv.length);
+  if (n < 2) return null;
+  const ma = av.slice(0, n).reduce((x, y) => x + y, 0) / n;
+  const mb = bv.slice(0, n).reduce((x, y) => x + y, 0) / n;
+  let num = 0, da = 0, db = 0;
+  for (let k = 0; k < n; k++) {
+    num += (av[k] - ma) * (bv[k] - mb);
+    da += (av[k] - ma) ** 2;
+    db += (bv[k] - mb) ** 2;
+  }
+  const denom = Math.sqrt(da * db);
+  return denom === 0 ? null : num / denom;
+}
+
+const oldR = correlationOld(corrRows, "A", "B");
+check(
+  "the old index-zip approach got this materially wrong",
+  oldR !== null && Math.abs(oldR - 1) > 0.1,
+  `old r=${oldR?.toFixed(3)} vs true 1.000`
+);
+
+// Symmetry, guards, and degenerate input
+const ab = pairwiseCorrelation(corrRows, "A", "B");
+const ba = pairwiseCorrelation(corrRows, "B", "A");
+check("correlation is symmetric", Math.abs((ab?.r ?? 0) - (ba?.r ?? 0)) < 1e-12);
+
+check("too little overlap returns null",
+  pairwiseCorrelation(
+    [...Array.from({ length: 5 }, (_, i) => ({ A: i, B: i })),
+     ...Array.from({ length: 20 }, (_, i) => ({ A: i, B: null }))],
+    "A", "B"
+  ) === null);
+
+check("a constant column returns null rather than NaN",
+  pairwiseCorrelation(
+    Array.from({ length: 20 }, (_, i) => ({ A: i, B: 7 })), "A", "B"
+  ) === null);
+
+check("non-finite values are excluded",
+  (() => {
+    const rows: Row[] = Array.from({ length: 20 }, (_, i) => ({ A: i, B: 2 * i }));
+    rows[0] = { A: Infinity, B: NaN };
+    const r = pairwiseCorrelation(rows, "A", "B");
+    return r !== null && r.n === 19 && Math.abs(r.r - 1) < 1e-9;
+  })());
+
+check("perfect negative correlation",
+  (() => {
+    const rows: Row[] = Array.from({ length: 20 }, (_, i) => ({ A: i, B: -3 * i }));
+    const r = pairwiseCorrelation(rows, "A", "B");
+    return r !== null && Math.abs(r.r + 1) < 1e-9;
+  })());
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
