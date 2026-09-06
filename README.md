@@ -31,7 +31,9 @@ Upload any business dataset and get instant AI-generated executive reports in se
 
 ## Use your own data
 
-Works with any CSV or Excel spreadsheet — export from Excel, Google Sheets, or any tool and upload directly. No accounts or API keys needed for your first 3 reports per session; paste your own OpenAI key for unlimited use.
+Works with any CSV or Excel spreadsheet - export from Excel, Google Sheets, or any tool and upload directly. No account or API key needed for your first 3 report runs per day; paste your own OpenAI key for unlimited use.
+
+Your file is parsed in the browser and never uploaded - only a statistical summary of it reaches the AI. See the in-app FAQ for exactly what is and is not stored.
 
 > Live Tableau and Power BI connectors exist in the original Streamlit version (see below) and are being ported to the new app — not yet available in `nixara-app`.
 
