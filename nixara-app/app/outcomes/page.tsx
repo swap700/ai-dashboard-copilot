@@ -48,7 +48,8 @@ export default function OutcomesPage() {
   const handleLookupOutcome = async (outcome: RecordedOutcome & { notes?: string }) => {
     if (!lookupResult) return;
     await logOutcome({
-      decisionId: lookupResult.id,
+      // H4: the token the user typed IS the capability to write here.
+      publicId: lookupResult.public_id,
       sessionId,
       metricName: outcome.metricName,
       metricBefore: outcome.metricBefore,

@@ -158,7 +158,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const recordOutcome: SessionState["recordOutcome"] = async (reportType, outcome) => {
     const decision = decisions[reportType];
     await logOutcome({
-      decisionId:    decision?.decisionId ?? null,
+      // H4: keyed on the unguessable public_id token, not the sequential id.
+      publicId:      decision?.publicId ?? null,
       sessionId,
       metricName:    outcome.metricName,
       metricBefore:  outcome.metricBefore,

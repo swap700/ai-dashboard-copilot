@@ -88,7 +88,11 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<Logg
 }
 
 export interface LogOutcomeParams {
-  decisionId: number | null;
+  /**
+   * The decision's public_id token, NOT its sequential internal id.
+   * See the security note on logOutcome below.
+   */
+  publicId: string | null;
   sessionId: string;
   metricName: string;
   metricBefore: number | null;
@@ -98,19 +102,51 @@ export interface LogOutcomeParams {
   notes?: string;
 }
 
-/** Mirrors log_outcome (lines 162-187) — fire-and-forget. */
-export async function logOutcome(params: LogOutcomeParams): Promise<void> {
-  if (!supabase) return;
-  await supabase.from("nixara_outcomes").insert({
-    decision_id: params.decisionId,
-    session_id: params.sessionId,
-    metric_name: params.metricName,
-    metric_before: params.metricBefore,
-    metric_after: params.metricAfter,
-    metric_unit: params.metricUnit,
-    outcome_rating: params.outcomeRating,
-    outcome_notes: params.notes ?? "",
+export interface LoggedOutcome {
+  id: number;
+  /** True when an outcome was already recorded for this decision; nothing was written. */
+  alreadyExisted: boolean;
+}
+
+/**
+ * Records an outcome against a decision, via the log_outcome_record
+ * SECURITY DEFINER RPC.
+ *
+ * SECURITY FIX (H4 — write IDOR): this used to be a direct anon .insert() into
+ * nixara_outcomes carrying a client-supplied `decision_id`, under a policy of
+ * WITH CHECK (true) and with no ownership check. decision_id is a sequential
+ * BIGSERIAL, so any caller could script 1, 2, 3 ... and attach fabricated
+ * outcomes to every decision ever logged — and because
+ * get_outcome_for_public_id returns the most recent outcome for a decision, a
+ * legitimate user looking up their own decision would then be shown the
+ * injected one. It also corrupts the accuracy record the product asks to be
+ * judged on.
+ *
+ * Section 11 of the schema already established the right model for this: key
+ * on the unguessable public_id token rather than the sequential id, so knowing
+ * the token is the capability. That preserves the intentional cross-session
+ * flow (logging an outcome for a decision from a previous session, found by
+ * its ID) while removing the enumeration. anon no longer has INSERT on the
+ * table at all.
+ *
+ * Returns null when Supabase is unconfigured or the token does not resolve.
+ */
+export async function logOutcome(params: LogOutcomeParams): Promise<LoggedOutcome | null> {
+  if (!supabase || !params.publicId) return null;
+  const { data, error } = await supabase.rpc("log_outcome_record", {
+    p_public_id:      params.publicId,
+    p_session_id:     params.sessionId,
+    p_metric_name:    params.metricName,
+    p_metric_before:  params.metricBefore,
+    p_metric_after:   params.metricAfter,
+    p_metric_unit:    params.metricUnit,
+    p_outcome_rating: params.outcomeRating,
+    p_notes:          params.notes ?? "",
   });
+  if (error || !data) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return { id: row.id as number, alreadyExisted: Boolean(row.already_existed) };
 }
 
 /**

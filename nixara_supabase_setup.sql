@@ -425,3 +425,179 @@ REVOKE EXECUTE ON FUNCTION prune_quota(INT) FROM PUBLIC, anon, authenticated;
 GRANT  EXECUTE ON FUNCTION prune_quota(INT) TO service_role;
 
 CREATE INDEX IF NOT EXISTS idx_nixara_quota_window_start ON nixara_quota (window_start);
+
+-- ============================================================
+-- 14. Outcome write IDOR (H4) — 2026-09
+--
+-- Section 11 replaced the guessable sequential key with an unguessable
+-- public_id token for the decision READ path, and session-scoped the decision
+-- WRITE path. The outcome write was missed.
+--
+-- Prior state: the app inserted straight into nixara_outcomes with a
+-- client-supplied decision_id, under a policy of WITH CHECK (true) and with no
+-- ownership check at all. decision_id is a sequential BIGSERIAL, so any caller
+-- could script decision_id = 1, 2, 3 ... and attach fabricated outcomes to
+-- every decision anyone had ever logged. Because get_outcome_for_public_id
+-- returns the most recent outcome for a decision, a legitimate user looking up
+-- their own decision would then be shown the injected result.
+--
+-- That is not only a data-integrity bug: the outcome table IS the accuracy
+-- record the product is built on, so a poisoned row corrupts the one number
+-- Nixara asks to be judged on.
+--
+-- Fix, matching the model section 11 established: the write is keyed on the
+-- unguessable public_id token, never on the sequential id, and it goes through
+-- a SECURITY DEFINER RPC so anon needs no direct INSERT on the table. Knowing
+-- the token is the capability, which preserves the intentional cross-session
+-- "log an outcome for a decision from a previous session" flow.
+-- ============================================================
+
+-- One outcome per decision. The UI already tried to enforce this; make it real.
+-- Historical duplicates are kept: only the most recent per decision survives as
+-- the canonical row, matching what get_outcome_for_public_id already returns.
+DELETE FROM nixara_outcomes o
+USING nixara_outcomes newer
+WHERE o.decision_id IS NOT NULL
+  AND o.decision_id = newer.decision_id
+  AND (newer.created_at, newer.id) > (o.created_at, o.id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_nixara_outcomes_one_per_decision
+    ON nixara_outcomes (decision_id)
+    WHERE decision_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION log_outcome_record(
+    p_public_id      TEXT,
+    p_session_id     TEXT,
+    p_metric_name    TEXT,
+    p_metric_before  NUMERIC,
+    p_metric_after   NUMERIC,
+    p_metric_unit    TEXT,
+    p_outcome_rating TEXT,
+    p_notes          TEXT DEFAULT ''
+)
+RETURNS TABLE (id BIGINT, already_existed BOOLEAN)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_decision_id BIGINT;
+    v_existing_id BIGINT;
+    v_new_id      BIGINT;
+BEGIN
+    -- Knowing the token is the capability. An unknown token resolves to
+    -- nothing and the function returns no rows.
+    SELECT d.id INTO v_decision_id
+    FROM nixara_decisions d
+    WHERE d.public_id = p_public_id
+    LIMIT 1;
+
+    IF v_decision_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    IF p_outcome_rating IS NULL OR p_outcome_rating NOT IN ('exceeded', 'met', 'missed') THEN
+        RAISE EXCEPTION 'invalid outcome_rating';
+    END IF;
+
+    -- Idempotent: never silently overwrite an outcome that is already recorded.
+    SELECT o.id INTO v_existing_id
+    FROM nixara_outcomes o
+    WHERE o.decision_id = v_decision_id
+    LIMIT 1;
+
+    IF v_existing_id IS NOT NULL THEN
+        RETURN QUERY SELECT v_existing_id, TRUE;
+        RETURN;
+    END IF;
+
+    INSERT INTO nixara_outcomes (
+        decision_id, session_id, metric_name, metric_before,
+        metric_after, metric_unit, outcome_rating, outcome_notes
+    ) VALUES (
+        v_decision_id, p_session_id, LEFT(COALESCE(p_metric_name, ''), 200), p_metric_before,
+        p_metric_after, LEFT(COALESCE(p_metric_unit, ''), 40), p_outcome_rating,
+        LEFT(COALESCE(p_notes, ''), 2000)
+    )
+    RETURNING nixara_outcomes.id INTO v_new_id;
+
+    RETURN QUERY SELECT v_new_id, FALSE;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT) TO anon;
+GRANT EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT) TO authenticated;
+
+-- Direct anon INSERT is what made the IDOR reachable. The RPC above is now the
+-- only supported write path, so drop the policy and the table-level grant.
+DROP POLICY IF EXISTS "outcomes_allow_anon_insert" ON nixara_outcomes;
+REVOKE INSERT ON TABLE nixara_outcomes FROM anon;
+
+-- Same reasoning for the decisions table: log_decision_record (section 10) is
+-- the only supported write path, so the blanket anon INSERT policy is dead
+-- weight that only widens the surface.
+DROP POLICY IF EXISTS "decisions_allow_anon_insert" ON nixara_decisions;
+REVOKE INSERT ON TABLE nixara_decisions FROM anon;
+
+-- ============================================================
+-- 15. The section 11 revokes never took effect (H5) — 2026-09
+--
+-- Section 11 closed the sequential-id enumeration IDOR by moving the lookups
+-- to an unguessable public_id token and then revoking the old id-keyed RPCs:
+--
+--     REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT) FROM anon;
+--
+-- That revoke does nothing. Postgres grants EXECUTE to PUBLIC by default on
+-- every newly created function, and anon is a member of PUBLIC. Revoking from
+-- anon leaves the PUBLIC grant untouched, so anon still resolves EXECUTE
+-- through it. Verified on a clean apply of this file:
+--
+--     get_decision_by_id  proacl = {=X/postgres, postgres=X/postgres}
+--                                   ^^ "=X" is the grant to PUBLIC
+--     SET ROLE anon; SELECT * FROM get_decision_by_id(1);  -- returns the row
+--
+-- So the attack section 11 was written to stop has been live the whole time:
+-- script id = 1, 2, 3 ... through PostgREST and harvest every decision ever
+-- logged, including question text, dataset name, notes and the owner's name.
+--
+-- The rule this file follows from here on: REVOKE FROM PUBLIC first, then
+-- GRANT explicitly to the roles that should have it. Revoking from a role
+-- without revoking from PUBLIC is a no-op that reads like a fix.
+-- ============================================================
+
+REVOKE EXECUTE ON FUNCTION get_decision_by_id(BIGINT)       FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION get_outcome_for_decision(BIGINT) FROM PUBLIC, anon, authenticated;
+
+-- Re-assert the intended grants on the supported RPCs, explicitly, so the
+-- privilege each role holds is stated rather than inherited from a default.
+REVOKE EXECUTE ON FUNCTION get_decision_by_public_id(TEXT)  FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION get_decision_by_public_id(TEXT)  TO anon, authenticated;
+
+REVOKE EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT)  FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT)  TO anon, authenticated;
+
+REVOKE EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT) TO anon, authenticated;
+
+REVOKE EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT) TO anon, authenticated;
+
+REVOKE EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT) TO anon, authenticated;
+
+-- rls_auto_enable(): section 11 revoked it from anon, authenticated AND public,
+-- so that one was already correct. Restated here only for completeness.
+REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM PUBLIC, anon, authenticated;
+
+-- ── Verification — run these and read the output ────────────────────────────
+-- Every row must show 'f' in the anon column.
+SELECT
+    f.fn,
+    has_function_privilege('anon',          f.fn, 'EXECUTE') AS anon_can_execute,
+    has_function_privilege('authenticated', f.fn, 'EXECUTE') AS auth_can_execute
+FROM (VALUES
+    ('get_decision_by_id(bigint)'),
+    ('get_outcome_for_decision(bigint)'),
+    ('consume_quota(text,int,int)'),
+    ('prune_quota(int)')
+) AS f(fn);
