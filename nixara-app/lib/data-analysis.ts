@@ -185,6 +185,51 @@ function std(values: number[], m: number): number {
   return Math.sqrt(variance);
 }
 
+export interface NumericStats {
+  count: number;
+  mean: number;
+  std: number;
+  min: number;
+  max: number;
+  total: number;
+}
+
+/**
+ * BUG FIX (2026-09): buildDataSummary computed min and max with
+ * Math.min(...values) / Math.max(...values). Spreading an array into a call
+ * passes one argument per element, and every JS engine caps that at a fixed
+ * number of stack slots - V8 throws
+ *
+ *     RangeError: Maximum call stack size exceeded
+ *
+ * somewhere around 125k arguments. Reproduced at 300k. The upload limit is
+ * 20 MB, which for a typical business CSV is several hundred thousand rows,
+ * so any large file crashed report generation outright - and it crashed
+ * inside the summary builder, so the user saw a generic failure with no clue
+ * that file size was the cause.
+ *
+ * Computed in a single explicit pass instead. No stack involvement, and it
+ * folds the mean/total/min/max walks the caller was doing separately into one.
+ */
+export function numericStats(values: number[]): NumericStats {
+  if (values.length === 0) {
+    return { count: 0, mean: 0, std: 0, min: 0, max: 0, total: 0 };
+  }
+
+  let min = Infinity;
+  let max = -Infinity;
+  let total = 0;
+
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+    total += v;
+  }
+
+  const m = total / values.length;
+  return { count: values.length, mean: m, std: std(values, m), min, max, total };
+}
+
 /** Mirrors detect_anomalies: rows where |z-score| > 2 for the given numeric column. */
 export function detectAnomalies(dataset: Dataset, col: string): Row[] {
   const present = dataset.rows
@@ -224,36 +269,106 @@ export function dashboardScore(dataset: Dataset): number {
   return Math.max(score, 0);
 }
 
-const SUM_KEYWORDS = [
-  "sales", "revenue", "profit", "income", "earnings", "cost", "costs", "price",
-  "amount", "total", "spend", "spending", "expense", "expenses", "budget",
-  "quantity", "qty", "units", "volume", "billing", "charge", "charges", "fee",
-  "fees", "payment", "payments", "count", "visits", "orders", "transactions",
-];
-const MEAN_KEYWORDS = [
-  "average", "avg", "mean", "rate", "ratio", "margin", "score", "pct", "percent",
-  "age", "duration", "tenure", "bmi", "height", "weight", "index", "level",
-  "days", "years", "months", "rating", "satisfaction", "length", "distance",
-  "temperature", "speed", "density", "concentration",
-];
+/**
+ * Aggregation vocabulary, stored as TOKENS rather than substrings.
+ *
+ * BUG FIX (2026-09): matching was `colName.toLowerCase().includes(keyword)`,
+ * which matches anywhere inside a word. "count" is a SUM keyword, and
+ * "Discount" contains it, so smartAgg("Discount") returned "sum" and the app
+ * summed a discount RATE across every row in a group - producing figures like
+ * "Discount by Region = 219.4" for a column whose values are 0 to 0.8. The
+ * Risk and Operational prompts then explicitly ask the model to cite discount
+ * percentages as business metrics, so the nonsense number went straight into
+ * the report. superstore_data.csv, the sample file the README tells people to
+ * try first, has a Discount column, so this was reachable in the demo.
+ *
+ * Same class of false positive: "Headcount" and "Account Balance" both
+ * contain "count"; "Percentage" contains "age".
+ *
+ * Fixed by tokenising the column name (the same camelCase / snake_case /
+ * punctuation split and singulariser used for chart-column relevance) and
+ * requiring a whole-token match. Sets are built through singularize() so the
+ * keyword and the parsed token are normalised identically.
+ *
+ * Note what is deliberately NOT in either list: "discount". Left unmatched,
+ * a bare "Discount" falls through to the mean default (right - it is a rate),
+ * while "Discount Amount" still matches "amount" and sums (also right), and
+ * "Discount Rate" matches "rate" and averages. Adding it to MEAN_KEYWORDS
+ * would break the "Discount Amount" case, since mean is checked first.
+ */
+const SUM_KEYWORDS = new Set(
+  [
+    "sales", "revenue", "profit", "income", "earnings", "cost", "costs", "price",
+    "amount", "total", "spend", "spending", "expense", "expenses", "budget",
+    "quantity", "qty", "units", "volume", "billing", "charge", "charges", "fee",
+    "fees", "payment", "payments", "count", "visits", "orders", "transactions",
+    // Additive things whose names are single compound words, so they can no
+    // longer be caught by a substring match on "count" and friends.
+    "headcount", "hours", "items", "tickets", "claims", "invoices",
+  ].map(singularize)
+);
+
+const MEAN_KEYWORDS = new Set(
+  [
+    "average", "avg", "mean", "rate", "ratio", "margin", "score", "pct", "percent",
+    "percentage", "age", "duration", "tenure", "bmi", "height", "weight", "index",
+    "level", "days", "years", "months", "rating", "satisfaction", "length",
+    "distance", "temperature", "speed", "density", "concentration",
+  ].map(singularize)
+);
+
+function matchesVocabulary(tokens: string[], vocabulary: Set<string>): boolean {
+  return tokens.some((token) => vocabulary.has(token));
+}
+
+/**
+ * True when a column's values look like proportions rather than amounts:
+ * everything sits in [0, 1] and a meaningful share of them are fractional.
+ *
+ * This is the backstop for the problem the 2026-08 note below describes - that
+ * no keyword list will ever cover every column name across every industry. A
+ * name-based guess can be wrong; values in [0, 1] with decimals are almost
+ * never something you add up. Requires a reasonable sample so a handful of
+ * rows cannot trip it, and excludes negatives so that a genuinely additive
+ * metric which happens to dip below zero is never caught.
+ */
+function looksLikeProportion(values: number[]): boolean {
+  if (values.length < 8) return false;
+  let fractional = 0;
+  for (const v of values) {
+    if (v < 0 || v > 1) return false;
+    if (!Number.isInteger(v)) fractional++;
+  }
+  return fractional / values.length >= 0.3;
+}
 
 /**
  * BUG FIX (2026-08): this used to default to "sum" for any column that didn't
- * match a short "mean-like" keyword list — which meant a column like "Age"
+ * match a short "mean-like" keyword list - which meant a column like "Age"
  * (not on the list) got summed across every row in a group, producing
  * meaningless totals like 1,430,368 instead of an average. A hardcoded
  * keyword list will never cover every possible per-entity attribute name
  * across every industry Nixara sees data from (age, BMI, tenure, GPA,
  * rating, days-since...), so instead of trying to enumerate all of them,
- * the fallback for an *unrecognized* column name is now "mean" — the safer
- * assumption for an arbitrary numeric column — and only the smaller, more
+ * the fallback for an *unrecognized* column name is now "mean" - the safer
+ * assumption for an arbitrary numeric column - and only the smaller, more
  * stable vocabulary of clearly-additive business terms (sales, cost,
  * quantity, count...) triggers "sum".
+ *
+ * Order matters. An explicit mean-like name wins outright. Then the value
+ * shape gets a veto, so a column named like an amount but shaped like a rate
+ * is averaged. Then explicit sum-like names. Then the mean default.
+ *
+ * @param values Optional sample of the column's numeric values. Callers that
+ *   already walk the column should pass them; the decision is strictly better
+ *   with them and unchanged in behaviour without.
  */
-export function smartAgg(colName: string): "mean" | "sum" {
-  const lower = colName.toLowerCase();
-  if (MEAN_KEYWORDS.some((k) => lower.includes(k))) return "mean";
-  if (SUM_KEYWORDS.some((k) => lower.includes(k))) return "sum";
+export function smartAgg(colName: string, values?: number[]): "mean" | "sum" {
+  const tokens = tokenize(colName);
+
+  if (matchesVocabulary(tokens, MEAN_KEYWORDS)) return "mean";
+  if (values && looksLikeProportion(values)) return "mean";
+  if (matchesVocabulary(tokens, SUM_KEYWORDS)) return "sum";
   return "mean";
 }
 
@@ -262,17 +377,22 @@ export function aggregateBy(
   groupCol: string,
   valueCol: string
 ): { key: string; value: number }[] {
-  const agg = smartAgg(valueCol);
   const groups = new Map<string, number[]>();
+  // Collected in the pass we already make, so passing the value shape to
+  // smartAgg costs nothing extra.
+  const allValues: number[] = [];
 
   for (const row of dataset.rows) {
     const raw = row[groupCol];
     const key = raw instanceof Date ? formatDateSafe(raw) : String(raw ?? "—");
     const v = row[valueCol];
     if (typeof v !== "number") continue;
+    allValues.push(v);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(v);
   }
+
+  const agg = smartAgg(valueCol, allValues);
 
   return Array.from(groups.entries())
     .map(([key, values]) => ({
@@ -295,14 +415,15 @@ export interface ChartSpec {
  * to chart directly, but perfectly readable once bucketed to month).
  */
 export function bucketByMonth(dataset: Dataset, dateCol: string, valueCol: string): { key: string; value: number }[] {
-  const agg = smartAgg(valueCol);
   const groups = new Map<string, number[]>();
   const sortKeys = new Map<string, number>();
+  const allValues: number[] = [];
 
   for (const row of dataset.rows) {
     const d = row[dateCol];
     const v = row[valueCol];
     if (!(d instanceof Date) || typeof v !== "number") continue;
+    allValues.push(v);
     const key = monthBucketKey(d);
     if (!groups.has(key)) {
       groups.set(key, []);
@@ -310,6 +431,8 @@ export function bucketByMonth(dataset: Dataset, dateCol: string, valueCol: strin
     }
     groups.get(key)!.push(v);
   }
+
+  const agg = smartAgg(valueCol, allValues);
 
   return Array.from(groups.entries())
     .map(([key, values]) => ({
@@ -385,7 +508,8 @@ export interface DataSummaryOptions {
 
 /** Mirrors build_data_summary: produces the text block sent to the AI report generator. */
 export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}): string {
-  let { rows, columns } = dataset;
+  const { columns } = dataset;
+  let { rows } = dataset;
   const { filterCol, filterVal } = opts;
 
   if (filterCol && filterVal && columns.includes(filterCol)) {
@@ -403,43 +527,63 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   lines.push(`Categorical columns: [${catCols.join(", ")}]`);
   lines.push("");
 
-  // Identify profit/revenue/sales columns — these should always be summed, never averaged
-  const profitKeywords = ["profit", "revenue", "sales", "income", "earnings", "margin"];
-  const profitCols = numericCols.filter(col =>
-    profitKeywords.some(k => col.toLowerCase().includes(k))
+  // Each numeric column is walked once, and both its stats and its aggregation
+  // type are derived from that single walk. Every later decision in this
+  // function reads from these maps, so a column can never be described one way
+  // in NUMERIC SUMMARY and aggregated another way in a breakdown.
+  const columnStats = new Map<string, NumericStats>();
+  const aggTypes = new Map<string, "mean" | "sum">();
+  for (const col of numericCols) {
+    const values = rows
+      .map((r) => r[col])
+      .filter((v): v is number => typeof v === "number");
+    columnStats.set(col, numericStats(values));
+    aggTypes.set(col, smartAgg(col, values));
+  }
+  const aggTypeOf = (col: string) => aggTypes.get(col) ?? smartAgg(col);
+
+  // Identify the dollar-amount columns - the ones a total is meaningful for.
+  //
+  // BUG FIX (2026-09): this was a substring match, and it included "margin".
+  // A "Profit Margin" column therefore matched, was promoted to profitCols,
+  // and could be chosen as primaryMetric - the figure labelled to the model as
+  // the primary dollar metric in TOP/BOTTOM and CROSS-BREAKDOWN. A margin is a
+  // ratio, not an amount. Now token-matched, and margin is excluded (it is a
+  // MEAN keyword, so smartAgg already averages it; this makes the two agree).
+  const AMOUNT_TOKENS = new Set(
+    ["profit", "revenue", "sales", "income", "earnings"].map(singularize)
   );
-  // Primary dollar metric: first profit-like col, or first sum-type numeric col
+  const profitCols = numericCols.filter((col) =>
+    tokenize(col).some((t) => AMOUNT_TOKENS.has(t))
+  );
+
+  // Primary dollar metric: first amount-like col, or first sum-type numeric col
   const primaryMetric =
     profitCols[0] ??
-    numericCols.find(c => smartAgg(c) === "sum") ??
+    numericCols.find((c) => aggTypeOf(c) === "sum") ??
     numericCols[0];
 
   if (numericCols.length > 0) {
     lines.push("NUMERIC SUMMARY");
     for (const col of numericCols) {
-      const values = rows.map((r) => r[col]).filter((v): v is number => typeof v === "number");
-      if (values.length === 0) continue;
-      const m = mean(values);
-      const s = std(values, m);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      // Show absolute total for sum-type columns (profit, sales, revenue, etc.)
-      const aggType = smartAgg(col);
-      const total = aggType === "sum" ? values.reduce((a, b) => a + b, 0) : null;
+      const st = columnStats.get(col)!;
+      if (st.count === 0) continue;
+      // Show an absolute total only where adding the column up means something.
+      const total = aggTypeOf(col) === "sum" ? st.total : null;
       lines.push(
-        `  ${col}: count=${values.length} mean=${m.toFixed(2)} std=${s.toFixed(2)} ` +
-        `min=${min.toFixed(2)} max=${max.toFixed(2)}` +
+        `  ${col}: count=${st.count} mean=${st.mean.toFixed(2)} std=${st.std.toFixed(2)} ` +
+        `min=${st.min.toFixed(2)} max=${st.max.toFixed(2)}` +
         (total !== null ? ` TOTAL=${total.toFixed(2)}` : "")
       );
     }
     lines.push("");
   }
 
-  // Prioritise profit/sales cols in breakdowns so AI always sees dollar totals
+  // Prioritise amount columns in breakdowns so the model always sees dollar totals
   const breakdownMetrics = [
     ...profitCols,
-    ...numericCols.filter(c => !profitCols.includes(c) && smartAgg(c) === "sum"),
-    ...numericCols.filter(c => !profitCols.includes(c) && smartAgg(c) !== "sum"),
+    ...numericCols.filter(c => !profitCols.includes(c) && aggTypeOf(c) === "sum"),
+    ...numericCols.filter(c => !profitCols.includes(c) && aggTypeOf(c) !== "sum"),
   ].slice(0, 4);
 
   // Find the most useful categorical columns: prefer low-cardinality (2–20 unique values)
@@ -498,7 +642,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push(v);
     }
-    const aggType = smartAgg(primaryMetric);
+    const aggType = aggTypeOf(primaryMetric);
     const crossAgg = Array.from(groups.entries())
       .map(([key, vals]) => ({
         key,
