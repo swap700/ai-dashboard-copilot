@@ -334,3 +334,94 @@ REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM public;
 SELECT COUNT(*) AS total_events    FROM nixara_events;
 SELECT COUNT(*) AS total_decisions FROM nixara_decisions;
 SELECT COUNT(*) AS total_outcomes  FROM nixara_outcomes;
+
+-- ============================================================
+-- 13. Shared quota counters (H3) — 2026-09
+--
+-- Prior state: the only limit on free-tier report generation (which spends
+-- the SERVER's OpenAI key) was an HttpOnly cookie, plus an in-memory Map in
+-- edge middleware. The cookie is cleared by incognito or by curl. The Map is
+-- per-instance and resets on every cold start, so in a serverless deployment
+-- it is close to no limit at all. There was no global spend cap anywhere.
+-- Net effect: an unauthenticated caller could run unlimited GPT-4o traffic
+-- on the operator's card.
+--
+-- This table is the shared, atomic counter that replaces both. One row per
+-- bucket ("ip:1.2.3.4:generate", "global:generate", ...), fixed-window.
+--
+-- NOTE: execute is granted to service_role ONLY, never to anon. If anon could
+-- call consume_quota it could burn the global bucket itself and deny service
+-- to everyone. The app reaches this through a server-only Supabase client
+-- using SUPABASE_SERVICE_ROLE_KEY.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS nixara_quota (
+    bucket       TEXT PRIMARY KEY,
+    count        BIGINT      NOT NULL DEFAULT 0,
+    window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE nixara_quota ENABLE ROW LEVEL SECURITY;
+-- No policies: RLS on with zero policies denies anon/authenticated entirely.
+-- service_role bypasses RLS, and the RPC below is SECURITY DEFINER.
+
+REVOKE ALL ON TABLE nixara_quota FROM anon, authenticated;
+
+-- Atomic fixed-window consume. Single statement, so concurrent callers
+-- serialise on the row lock rather than racing a read-then-write.
+CREATE OR REPLACE FUNCTION consume_quota(
+    p_bucket         TEXT,
+    p_limit          INT,
+    p_window_seconds INT
+)
+RETURNS TABLE (allowed BOOLEAN, used BIGINT, resets_at TIMESTAMPTZ)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_count BIGINT;
+    v_start TIMESTAMPTZ;
+BEGIN
+    INSERT INTO nixara_quota AS q (bucket, count, window_start)
+    VALUES (p_bucket, 1, NOW())
+    ON CONFLICT (bucket) DO UPDATE
+        SET count = CASE
+                WHEN NOW() - q.window_start >= make_interval(secs => p_window_seconds)
+                THEN 1 ELSE q.count + 1 END,
+            window_start = CASE
+                WHEN NOW() - q.window_start >= make_interval(secs => p_window_seconds)
+                THEN NOW() ELSE q.window_start END
+    RETURNING q.count, q.window_start INTO v_count, v_start;
+
+    RETURN QUERY SELECT
+        (v_count <= p_limit),
+        v_count,
+        v_start + make_interval(secs => p_window_seconds);
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION consume_quota(TEXT, INT, INT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION consume_quota(TEXT, INT, INT) TO service_role;
+
+-- Housekeeping: drop rows whose window closed long ago. Safe to run on a
+-- schedule (pg_cron) or manually; nothing depends on the history.
+CREATE OR REPLACE FUNCTION prune_quota(p_older_than_hours INT DEFAULT 48)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE v_deleted BIGINT;
+BEGIN
+    DELETE FROM nixara_quota
+    WHERE window_start < NOW() - make_interval(hours => p_older_than_hours);
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RETURN v_deleted;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION prune_quota(INT) FROM PUBLIC, anon, authenticated;
+GRANT  EXECUTE ON FUNCTION prune_quota(INT) TO service_role;
+
+CREATE INDEX IF NOT EXISTS idx_nixara_quota_window_start ON nixara_quota (window_start);

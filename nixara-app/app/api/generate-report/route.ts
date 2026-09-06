@@ -3,6 +3,16 @@ import OpenAI from "openai";
 import { buildPrompt, cleanAiOutput, REPORT_TYPES, type ReportType } from "@/lib/report";
 import { resolveApiKey } from "@/lib/openai-key";
 import { supabase } from "@/lib/supabase";
+import {
+  consumeQuota,
+  clientIp,
+  isQuotaBackendConfigured,
+  FREE_SESSIONS_PER_IP,
+  FREE_IP_WINDOW_SECONDS,
+  GLOBAL_DAILY_SESSION_CAP,
+  BURST_PER_IP,
+  BURST_WINDOW_SECONDS,
+} from "@/lib/quota";
 
 export const runtime = "nodejs";
 
@@ -10,10 +20,39 @@ export const runtime = "nodejs";
 const MAX_SUMMARY_CHARS = 8_000;
 const MAX_FIELD_CHARS   = 300;
 
-// ── Free-tier limits ─────────────────────────────────────────────────────────
+// ── OpenAI call bounds ──────────────────────────────────────────────────────
+const OPENAI_TIMEOUT_MS = 60_000;
+const OPENAI_MAX_TOKENS = 1024;
+
+// ── Free-tier cookie (cheap first check only — see the note below) ──────────
 const FREE_LIMIT     = 3;
 const COOKIE_NAME    = "nixara_ftu";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
+/**
+ * SECURITY FIX (H3 — unbounded spend on the server's OpenAI key).
+ *
+ * The free tier resolves to the OPERATOR's OPENAI_API_KEY. Before this fix the
+ * only thing standing between an anonymous caller and unlimited GPT-4o traffic
+ * on that key was:
+ *   - an HttpOnly cookie, which incognito clears and curl never sends; and
+ *   - an in-memory Map in edge middleware, which is per-instance and resets on
+ *     every cold start, so in a serverless deployment it is close to no limit.
+ * There was no global cap of any kind.
+ *
+ * The cookie is kept, because it is free and it gives an honest returning user
+ * the right message. But it is now only the first of three gates, and it is no
+ * longer the one that protects the money:
+ *
+ *   1. cookie              — cheap, advisory, trivially bypassed
+ *   2. per-IP quota        — shared across instances, survives cold starts
+ *   3. global daily cap    — bounds the worst-case daily bill even against a
+ *                            distributed attack from many IPs
+ *
+ * Gates 2 and 3 fail closed: if the quota backend is unreachable, free-tier
+ * requests are refused rather than allowed. Callers using their own key are
+ * never gated by any of this.
+ */
 
 function checkFreeTierCookie(
   req: NextRequest,
@@ -76,6 +115,16 @@ interface Body {
   dataSource?: "csv" | "excel" | "tableau" | "powerbi";
 }
 
+async function generate(apiKey: string, prompt: string): Promise<string> {
+  const client = new OpenAI({ apiKey, timeout: OPENAI_TIMEOUT_MS, maxRetries: 1 });
+  const response = await client.chat.completions.create({
+    model:      "gpt-4o",
+    max_tokens: OPENAI_MAX_TOKENS,
+    messages:   [{ role: "user", content: prompt }],
+  });
+  return cleanAiOutput(response.choices[0]?.message?.content ?? "");
+}
+
 export async function POST(req: NextRequest) {
   let body: Body;
   try {
@@ -123,70 +172,131 @@ export async function POST(req: NextRequest) {
 
   const referrer    = req.headers.get("referer");
   const resolvedSid = sessionId ?? "unknown";
+  const ip          = clientIp(req.headers);
   const prompt      = buildPrompt({ who, decision, timeframe, reportType, summary });
 
-  // ── Free-tier gate ───────────────────────────────────────────────────────
-  if (tier === "free") {
-    const { allowed, sessions, isNewSession } = checkFreeTierCookie(req, sessionId);
-
-    if (!allowed) {
-      return NextResponse.json(
-        {
-          error:
-            `You've used all ${FREE_LIMIT} free generate sessions. ` +
-            "Paste your own OpenAI key (starts with sk-) in the field below to continue.",
-        },
-        { status: 429 }
-      );
-    }
-
+  // ── Own key / admin tier: no spend gate, the caller pays ─────────────────
+  if (tier !== "free") {
     try {
-      const client   = new OpenAI({ apiKey });
-      const response = await client.chat.completions.create({
-        model:      "gpt-4o",
-        max_tokens: 1024,
-        messages:   [{ role: "user", content: prompt }],
-      });
-      const raw  = response.choices[0]?.message?.content ?? "";
-      const text = cleanAiOutput(raw);
-
-      const updatedSessions = isNewSession && sessionId
-        ? [...sessions, sessionId]
-        : sessions;
-      const freeRemaining = Math.max(0, FREE_LIMIT - updatedSessions.length);
-
-      // Log analytics — after success, before returning
+      const text = await generate(apiKey, prompt);
       void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
-
-      const res = NextResponse.json({ text, tier, freeRemaining });
-      res.cookies.set(COOKIE_NAME, JSON.stringify(updatedSessions), {
-        httpOnly: true,
-        secure:   process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge:   COOKIE_MAX_AGE,
-        path:     "/",
-      });
-      return res;
+      return NextResponse.json({ text, tier });
     } catch (err) {
       return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
     }
   }
 
-  // ── Own key / admin tier ─────────────────────────────────────────────────
-  try {
-    const client   = new OpenAI({ apiKey });
-    const response = await client.chat.completions.create({
-      model:      "gpt-4o",
-      max_tokens: 1024,
-      messages:   [{ role: "user", content: prompt }],
-    });
-    const raw  = response.choices[0]?.message?.content ?? "";
-    const text = cleanAiOutput(raw);
+  // ── Free tier: three gates before a single token is spent ────────────────
 
-    // Log analytics — after success, before returning
+  // Gate 0 — refuse outright if the spend controls are not wired up.
+  if (!isQuotaBackendConfigured) {
+    console.error(
+      "[generate-report] Free tier disabled: SUPABASE_SERVICE_ROLE_KEY is unset, " +
+        "so server-key spend cannot be bounded."
+    );
+    return NextResponse.json(
+      {
+        error:
+          "The free tier is temporarily unavailable. Paste your own OpenAI key " +
+          "(starts with sk-) to continue.",
+      },
+      { status: 503 }
+    );
+  }
+
+  // Gate 1 — cookie. Cheap and advisory; not the control that protects spend.
+  const { allowed: cookieAllowed, sessions, isNewSession } = checkFreeTierCookie(req, sessionId);
+  if (!cookieAllowed) {
+    return NextResponse.json(
+      {
+        error:
+          `You've used all ${FREE_LIMIT} free generate sessions. ` +
+          "Paste your own OpenAI key (starts with sk-) in the field below to continue.",
+        freeRemaining: 0,
+        tier,
+      },
+      { status: 429 }
+    );
+  }
+
+  // Gate 2 — per-IP burst, on every request including repeats within a session.
+  const burst = await consumeQuota(`burst:${ip}`, BURST_PER_IP, BURST_WINDOW_SECONDS);
+  if (!burst.allowed) {
+    return NextResponse.json(
+      {
+        error: burst.degraded
+          ? "The free tier is temporarily unavailable. Paste your own OpenAI key to continue."
+          : "Too many requests — please wait a moment before trying again.",
+      },
+      { status: burst.degraded ? 503 : 429, headers: { "Retry-After": String(BURST_WINDOW_SECONDS) } }
+    );
+  }
+
+  // Gates 3 and 4 apply once per generate SESSION, not once per report type,
+  // so one click (three report types) costs one unit.
+  if (isNewSession) {
+    const perIp = await consumeQuota(
+      `free:${ip}`,
+      FREE_SESSIONS_PER_IP,
+      FREE_IP_WINDOW_SECONDS
+    );
+    if (!perIp.allowed) {
+      return NextResponse.json(
+        {
+          error: perIp.degraded
+            ? "The free tier is temporarily unavailable. Paste your own OpenAI key (starts with sk-) to continue."
+            : `You've used all ${FREE_SESSIONS_PER_IP} free reports for today. ` +
+              "Paste your own OpenAI key (starts with sk-) to keep going.",
+          freeRemaining: 0,
+          tier,
+        },
+        { status: perIp.degraded ? 503 : 429 }
+      );
+    }
+
+    const global = await consumeQuota(
+      "global:free-sessions",
+      GLOBAL_DAILY_SESSION_CAP,
+      86_400
+    );
+    if (!global.allowed) {
+      if (!global.degraded) {
+        console.warn(
+          `[generate-report] Global daily free-tier cap reached ` +
+            `(${global.used}/${GLOBAL_DAILY_SESSION_CAP}).`
+        );
+      }
+      return NextResponse.json(
+        {
+          error:
+            "Nixara's free tier is at capacity for today. Paste your own OpenAI key " +
+            "(starts with sk-) to continue right away.",
+          freeRemaining: 0,
+          tier,
+        },
+        { status: 503 }
+      );
+    }
+  }
+
+  // ── Cleared to spend ─────────────────────────────────────────────────────
+  try {
+    const text = await generate(apiKey, prompt);
+
+    const updatedSessions = isNewSession && sessionId ? [...sessions, sessionId] : sessions;
+    const freeRemaining = Math.max(0, FREE_LIMIT - updatedSessions.length);
+
     void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
 
-    return NextResponse.json({ text, tier });
+    const res = NextResponse.json({ text, tier, freeRemaining });
+    res.cookies.set(COOKIE_NAME, JSON.stringify(updatedSessions), {
+      httpOnly: true,
+      secure:   process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge:   COOKIE_MAX_AGE,
+      path:     "/",
+    });
+    return res;
   } catch (err) {
     return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
   }

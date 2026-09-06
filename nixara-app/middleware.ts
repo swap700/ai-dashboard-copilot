@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * Edge middleware — IP-based sliding-window rate limiter for all /api/* routes.
+ * Edge middleware - best-effort IP burst limiter for /api/* routes.
  *
- * Uses an in-memory Map (resets on cold start). For cross-instance persistence
- * upgrade to @upstash/ratelimit + Upstash Redis (free tier covers this app).
+ * IMPORTANT (H3): this is NOT the control that protects the operator's OpenAI
+ * spend, and it must never be relied on as one. The Map below lives in a
+ * single instance's memory: it resets on every cold start and each concurrent
+ * instance keeps its own copy, so the effective limit in a serverless
+ * deployment is some unknown multiple of the number below. It is kept only
+ * because it is free and it sheds the most naive floods before they reach a
+ * function invocation.
  *
- * Limits:
- *   /api/generate-report  →  6 req / IP / min  (1 full analysis = 3 reports, 2 attempts)
- *   /api/export/*         →  20 req / IP / min
- *   everything else       →  30 req / IP / min
+ * The real, shared, cross-instance limits live in lib/quota.ts and are applied
+ * inside /api/generate-report itself, backed by an atomic Postgres counter.
+ * If you are changing limits, change them there.
  */
 
 const ipMap = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 60_000;
 
 const ROUTE_LIMITS: Record<string, number> = {
-  "/api/generate-report": 6,
+  "/api/generate-report": 6,   // advisory only - see lib/quota.ts for the real gate
   "/api/export/pdf":      20,
   "/api/export/docx":     20,
 };
