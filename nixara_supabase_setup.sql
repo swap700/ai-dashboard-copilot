@@ -589,6 +589,149 @@ GRANT  EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEX
 -- so that one was already correct. Restated here only for completeness.
 REVOKE EXECUTE ON FUNCTION rls_auto_enable() FROM PUBLIC, anon, authenticated;
 
+-- ============================================================
+-- 16. Reject-semantics bug (H6) — 2026-09
+--
+-- log_outcome_record had no check on the decision's own choice. A decision
+-- logged as "rejected" or "postponed" (meaning the recommendation was never
+-- acted on) could still have an outcome attached to it, and the outcome UI
+-- would then show "Accuracy: Exceeded/Met/Fell Short" for something nobody
+-- actually did. Not a security hole like H3/H4/H5, but it corrupts the same
+-- accuracy record those fixes were protecting — a scorecard built on this
+-- data would show a real-looking number that isn't defensible.
+--
+-- Fix: log_outcome_record now requires nixara_decisions.decision = 'approved'
+-- before writing. Enforced here (not just in the client UI) so no future
+-- client bug can bypass it.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION log_outcome_record(
+    p_public_id      TEXT,
+    p_session_id     TEXT,
+    p_metric_name    TEXT,
+    p_metric_before  NUMERIC,
+    p_metric_after   NUMERIC,
+    p_metric_unit    TEXT,
+    p_outcome_rating TEXT,
+    p_notes          TEXT DEFAULT ''
+)
+RETURNS TABLE (id BIGINT, already_existed BOOLEAN)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_decision_id     BIGINT;
+    v_decision_choice TEXT;
+    v_existing_id     BIGINT;
+    v_new_id          BIGINT;
+BEGIN
+    SELECT d.id, d.decision INTO v_decision_id, v_decision_choice
+    FROM nixara_decisions d
+    WHERE d.public_id = p_public_id
+    LIMIT 1;
+
+    IF v_decision_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    IF v_decision_choice IS DISTINCT FROM 'approved' THEN
+        RAISE EXCEPTION 'Outcomes can only be logged for approved decisions (this one is %)', COALESCE(v_decision_choice, 'unset');
+    END IF;
+
+    IF p_outcome_rating IS NULL OR p_outcome_rating NOT IN ('exceeded', 'met', 'missed') THEN
+        RAISE EXCEPTION 'invalid outcome_rating';
+    END IF;
+
+    SELECT o.id INTO v_existing_id
+    FROM nixara_outcomes o
+    WHERE o.decision_id = v_decision_id
+    LIMIT 1;
+
+    IF v_existing_id IS NOT NULL THEN
+        RETURN QUERY SELECT v_existing_id, TRUE;
+        RETURN;
+    END IF;
+
+    INSERT INTO nixara_outcomes (
+        decision_id, session_id, metric_name, metric_before,
+        metric_after, metric_unit, outcome_rating, outcome_notes
+    ) VALUES (
+        v_decision_id, p_session_id, LEFT(COALESCE(p_metric_name, ''), 200), p_metric_before,
+        p_metric_after, LEFT(COALESCE(p_metric_unit, ''), 40), p_outcome_rating,
+        LEFT(COALESCE(p_notes, ''), 2000)
+    )
+    RETURNING nixara_outcomes.id INTO v_new_id;
+
+    RETURN QUERY SELECT v_new_id, FALSE;
+END;
+$$;
+
+-- Grants unchanged from section 15 (PUBLIC revoked, anon+authenticated granted
+-- explicitly) — CREATE OR REPLACE preserves existing grants, nothing to redo.
+
+-- ============================================================
+-- 17. Decision Memory (2026-09) — session-scoped decision history.
+--
+-- No browsable history existed before this: the client only ever held the
+-- current session's decisions in React state (lost on refresh) or looked up
+-- ONE decision at a time by its public_id token. This adds a real list view.
+--
+-- Scoped to session_id, the same capability pattern already used by
+-- update_decision_choice — a session can list (and, via existing RPCs,
+-- modify) only the decisions it itself created. This does NOT reopen the
+-- H5 enumeration hole: session_id is a client-generated UUID with no
+-- guessable relationship to any other session's id, unlike the old
+-- sequential BIGSERIAL id sections 11/15 closed off.
+--
+-- One outcome per decision is already enforced by
+-- idx_nixara_outcomes_one_per_decision, so the LEFT JOIN below can never
+-- fan out a decision into duplicate rows.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION list_decisions_for_session(p_session_id TEXT)
+RETURNS TABLE (
+  id                     BIGINT,
+  public_id              TEXT,
+  created_at             TIMESTAMPTZ,
+  report_type            TEXT,
+  role                   TEXT,
+  dataset_name           TEXT,
+  decision               TEXT,
+  notes                  TEXT,
+  timeframe              TEXT,
+  question               TEXT,
+  recommendation         TEXT,
+  owner                  TEXT,
+  postpone_reason        TEXT,
+  outcome_metric_name    TEXT,
+  outcome_metric_before  NUMERIC,
+  outcome_metric_after   NUMERIC,
+  outcome_metric_unit    TEXT,
+  outcome_rating         TEXT,
+  outcome_notes          TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.session_id = p_session_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_session(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_session(TEXT) TO anon, authenticated;
+
 -- ── Verification — run these and read the output ────────────────────────────
 -- Every row must show 'f' in the anon column.
 SELECT
@@ -600,4 +743,158 @@ FROM (VALUES
     ('get_outcome_for_decision(bigint)'),
     ('consume_quota(text,int,int)'),
     ('prune_quota(int)')
+) AS f(fn);
+
+-- ============================================================
+-- 18. Decision Inbox (2026-09) — real due-date field + unresolved queue.
+--
+-- Scoped down from "Nixara reminds you" (no cron/background jobs exist in
+-- this architecture — see section 17's Drift note for the same constraint)
+-- to: a due_date the user sets when approving a decision (or adds later),
+-- and a page that lists approved-but-not-yet-outcome-logged decisions
+-- sorted soonest-due-first, with overdue ones flagged client-side against
+-- today's date. `timeframe` ("Next 30 days" / "This quarter" / "This year")
+-- stays free-text scaffolding for the AI prompt — due_date is the new, real,
+-- sortable field this feature actually needs.
+-- ============================================================
+
+ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS due_date DATE;
+CREATE INDEX IF NOT EXISTS idx_nixara_decisions_due_date ON nixara_decisions (due_date);
+
+-- 18a. log_decision_record gains an optional p_due_date. Adding a parameter
+-- changes the function's identity (arg count), so the old 11-arg overload is
+-- dropped first rather than left dangling — same pattern as section 11's
+-- update_decision_choice replacement below.
+DROP FUNCTION IF EXISTS log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT);
+
+CREATE OR REPLACE FUNCTION log_decision_record(
+  p_session_id TEXT,
+  p_report_type TEXT,
+  p_role TEXT,
+  p_dataset_name TEXT,
+  p_decision TEXT,
+  p_notes TEXT DEFAULT '',
+  p_timeframe TEXT DEFAULT '',
+  p_question TEXT DEFAULT '',
+  p_owner TEXT DEFAULT NULL,
+  p_recommendation TEXT DEFAULT NULL,
+  p_postpone_reason TEXT DEFAULT NULL,
+  p_due_date DATE DEFAULT NULL
+)
+RETURNS TABLE (id BIGINT, public_id TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id BIGINT;
+  v_public_id TEXT;
+BEGIN
+  INSERT INTO nixara_decisions (
+    session_id, report_type, role, dataset_name, decision,
+    notes, timeframe, question, owner, recommendation, postpone_reason, due_date
+  ) VALUES (
+    p_session_id, p_report_type, p_role, p_dataset_name, p_decision,
+    p_notes, p_timeframe, p_question, p_owner, p_recommendation, p_postpone_reason, p_due_date
+  ) RETURNING nixara_decisions.id, nixara_decisions.public_id INTO v_id, v_public_id;
+
+  RETURN QUERY SELECT v_id, v_public_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE) TO anon;
+GRANT EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE) TO authenticated;
+
+-- 18b. Dedicated due-date setter — kept separate from update_decision_choice
+-- rather than folded into it, so editing a due date can never accidentally
+-- change (or requires re-sending) the approve/reject/postpone choice.
+-- Same ownership pattern as update_decision_choice: session_id must match.
+CREATE OR REPLACE FUNCTION update_decision_due_date(
+  p_id BIGINT,
+  p_session_id TEXT,
+  p_due_date DATE
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_updated BIGINT;
+BEGIN
+  UPDATE nixara_decisions
+  SET due_date = p_due_date
+  WHERE id = p_id
+    AND session_id = p_session_id
+  RETURNING id INTO v_updated;
+
+  RETURN v_updated IS NOT NULL;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION update_decision_due_date(BIGINT, TEXT, DATE) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION update_decision_due_date(BIGINT, TEXT, DATE) TO anon, authenticated;
+
+-- 18c. list_decisions_for_session gains due_date in its output. Adding a
+-- return column changes the function's return type, which CREATE OR REPLACE
+-- cannot do in place — drop first, same as 18a.
+DROP FUNCTION IF EXISTS list_decisions_for_session(TEXT);
+
+CREATE OR REPLACE FUNCTION list_decisions_for_session(p_session_id TEXT)
+RETURNS TABLE (
+  id                     BIGINT,
+  public_id              TEXT,
+  created_at             TIMESTAMPTZ,
+  report_type            TEXT,
+  role                   TEXT,
+  dataset_name           TEXT,
+  decision               TEXT,
+  notes                  TEXT,
+  timeframe              TEXT,
+  question               TEXT,
+  recommendation         TEXT,
+  owner                  TEXT,
+  postpone_reason        TEXT,
+  due_date               DATE,
+  outcome_metric_name    TEXT,
+  outcome_metric_before  NUMERIC,
+  outcome_metric_after   NUMERIC,
+  outcome_metric_unit    TEXT,
+  outcome_rating         TEXT,
+  outcome_notes          TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.session_id = p_session_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_session(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_session(TEXT) TO anon, authenticated;
+
+-- ── Verification — run these and read the output ────────────────────────────
+-- Every row must show 'f' in the anon column (PUBLIC revoked, only anon/
+-- authenticated explicitly granted), and 't' in the other two.
+SELECT
+    f.fn,
+    has_function_privilege('public',        f.fn, 'EXECUTE') AS public_can_execute,
+    has_function_privilege('anon',          f.fn, 'EXECUTE') AS anon_can_execute,
+    has_function_privilege('authenticated', f.fn, 'EXECUTE') AS auth_can_execute
+FROM (VALUES
+    ('update_decision_due_date(bigint,text,date)'),
+    ('list_decisions_for_session(text)'),
+    ('log_decision_record(text,text,text,text,text,text,text,text,text,text,text,date)')
 ) AS f(fn);

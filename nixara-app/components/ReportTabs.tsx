@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { buildVisualSections } from "@/lib/report-visual";
+import { buildEvidenceFacts } from "@/lib/evidence";
+import type { Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
 import ReportVisualBody from "./ReportVisual";
@@ -12,6 +14,12 @@ interface Props {
   reports: ReportSet;
   errors: ReportFailures;
   context: ReportSetupValue & { datasetName: string };
+  /**
+   * Evidence Trail needs the source rows to rebuild the same stats the report
+   * was generated from. Optional so ReportTabs still renders (minus evidence
+   * links) in the unlikely case a caller doesn't have the dataset in scope.
+   */
+  dataset?: Dataset | null;
 }
 
 async function downloadExport(
@@ -41,7 +49,13 @@ async function downloadExport(
   URL.revokeObjectURL(url);
 }
 
-export default function ReportTabs({ reports, errors, context }: Props) {
+export default function ReportTabs({ reports, errors, context, dataset }: Props) {
+  // Computed once per dataset (not per report/tab render) — buildEvidenceFacts
+  // walks every business-metric column plus a few category breakdowns, which
+  // is the same order of work buildDataSummary already does at generate time,
+  // not something to redo on every tab switch.
+  const evidenceFacts = useMemo(() => (dataset ? buildEvidenceFacts(dataset) : []), [dataset]);
+
   // Open on a tab that actually has a report. With partial results the first
   // report type is not necessarily one of the ones that came back.
   const firstAvailable = REPORT_TYPES.find((t) => reports[t]) ?? REPORT_TYPES[0];
@@ -128,7 +142,7 @@ export default function ReportTabs({ reports, errors, context }: Props) {
               </div>
             )}
 
-            <ReportVisualBody sections={buildVisualSections(current.text, active)} />
+            <ReportVisualBody sections={buildVisualSections(current.text, active, evidenceFacts)} />
 
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button

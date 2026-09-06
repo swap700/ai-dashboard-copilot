@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
+import type { EvidenceFact } from "@/lib/evidence";
 
 /**
  * Shared inline number/currency emphasis, used everywhere body text renders.
@@ -25,6 +27,33 @@ function emphasizeParts(text: string): React.ReactNode[] {
 
 function Prose({ text }: { text: string }) {
   return <p className="text-text text-[0.95rem] leading-7">{emphasizeParts(text)}</p>;
+}
+
+/**
+ * Evidence Trail's "click a number, see its source" affordance. Only renders
+ * when report-visual.ts's evidence matching actually found something — a
+ * cited figure with no match renders as an ordinary number via
+ * emphasizeParts() above, never as a broken or misleading link.
+ */
+function EvidenceTag({ fact }: { fact: EvidenceFact }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="inline-block align-middle ml-1.5">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="See where this number comes from"
+        className="text-[0.68rem] font-semibold text-accent border border-accent-border bg-accent-bg-soft rounded-full px-1.5 py-0 hover:bg-accent hover:text-white transition-colors align-middle"
+      >
+        {"\u{1F50D}"} source
+      </button>
+      {open && (
+        <span className="block text-[0.78rem] text-text-mute bg-bg border border-border rounded-lg px-2.5 py-1.5 mt-1 max-w-sm">
+          From your data: {fact.description}.
+        </span>
+      )}
+    </span>
+  );
 }
 
 function Card({ heading, children }: { heading: string; children: React.ReactNode }) {
@@ -133,7 +162,12 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
       <div className="grid sm:grid-cols-2 gap-3">
         {items.map((item, i) => (
           <div key={i} className="bg-success-bg border border-success-border rounded-lg p-3.5">
-            {item.stat && <div className="text-2xl font-extrabold text-success mb-1">{item.stat}</div>}
+            {item.stat && (
+              <div className="text-2xl font-extrabold text-success mb-1 flex items-center flex-wrap">
+                {item.stat}
+                {item.evidence && <EvidenceTag fact={item.evidence} />}
+              </div>
+            )}
             <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body)}</div>
           </div>
         ))}
@@ -203,8 +237,18 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
                 Impact <b className={SEVERITY_TEXT_CLASS[risk.impact]}>{SEVERITY_LABEL[risk.impact]}</b>
               </div>
             </div>
-            {risk.signal && <div className="text-[0.85rem] leading-snug mb-1"><span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal)}</div>}
-            {risk.consequence && <div className="text-[0.85rem] leading-snug"><span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence)}</div>}
+            {risk.signal && (
+              <div className="text-[0.85rem] leading-snug mb-1">
+                <span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal)}
+                {risk.signalEvidence && <EvidenceTag fact={risk.signalEvidence} />}
+              </div>
+            )}
+            {risk.consequence && (
+              <div className="text-[0.85rem] leading-snug">
+                <span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence)}
+                {risk.consequenceEvidence && <EvidenceTag fact={risk.consequenceEvidence} />}
+              </div>
+            )}
           </div>
         </div>
       ))}

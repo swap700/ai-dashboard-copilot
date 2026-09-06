@@ -76,7 +76,20 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
       )}
 
       {/* Outcome section */}
-      {outcome ? (
+      {/*
+        H6 (Reject-semantics bug): a rejected or postponed decision means the
+        recommendation was never implemented, so there is no real-world result
+        to score it against. Outcome logging/display is gated to approved
+        decisions only — this mirrors the same check now enforced server-side
+        in log_outcome_record, so this is belt-and-suspenders, not the only guard.
+      */}
+      {decision.choice !== "approved" ? (
+        <p className="text-text-dim text-xs mt-2 italic">
+          {decision.choice === "rejected"
+            ? "Rejected — nothing was implemented, so there's no outcome to track."
+            : "Postponed — outcome tracking becomes available once this is approved."}
+        </p>
+      ) : outcome ? (
         <div className="mt-2 space-y-2">
           {/* Metric row */}
           <div className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-sm text-text">

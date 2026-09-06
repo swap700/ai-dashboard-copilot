@@ -18,6 +18,7 @@ export interface RecordedDecision {
   recommendation?: string;
   owner?: string;
   postponeReason?: string;
+  dueDate?: string;
 }
 
 export interface RecordedOutcome {
@@ -44,6 +45,7 @@ interface SessionState {
       recommendation?: string;
       owner?: string;
       postponeReason?: string;
+      dueDate?: string;
     }
   ) => Promise<void>;
   recordOutcome: (
@@ -135,6 +137,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       recommendation: ctx.recommendation,
       owner: ctx.owner,
       postponeReason: ctx.postponeReason,
+      dueDate: ctx.dueDate,
     });
     const next: typeof decisions = {
       ...decisions,
@@ -149,6 +152,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         recommendation: ctx.recommendation,
         owner:      ctx.owner,
         postponeReason: ctx.postponeReason,
+        dueDate:    ctx.dueDate,
       },
     };
     setDecisions(next);

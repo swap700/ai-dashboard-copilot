@@ -17,6 +17,7 @@
  */
 
 import { parseReportLines, type ReportLine, type ReportType } from "./report";
+import { findEvidence, type EvidenceFact } from "./evidence";
 
 export type Severity = "low" | "medium" | "high";
 
@@ -38,6 +39,8 @@ export interface ProcessItem {
 export interface QuickWinItem {
   stat: string | null; // e.g. "34%" or "$1,234.56"
   body: string;
+  /** Evidence Trail: where `stat` came from in the uploaded dataset, if a match was found. */
+  evidence: EvidenceFact | null;
 }
 
 export interface RiskCard {
@@ -47,6 +50,9 @@ export interface RiskCard {
   signal: string | null;
   consequence: string | null;
   type: "Strategic Risk" | "Operational Risk" | null;
+  /** Evidence Trail: source for the number cited in `signal` / `consequence`, if a match was found. */
+  signalEvidence: EvidenceFact | null;
+  consequenceEvidence: EvidenceFact | null;
 }
 
 export interface MitigationItem {
@@ -136,7 +142,11 @@ function parseActionVerb(text: string): ActionItem["verb"] {
  * heading it is. Unrecognized headings fall back to plain prose so nothing
  * is ever silently dropped.
  */
-export function buildVisualSections(reportText: string, reportType: ReportType): VisualSection[] {
+export function buildVisualSections(
+  reportText: string,
+  reportType: ReportType,
+  evidenceFacts: EvidenceFact[] = []
+): VisualSection[] {
   const lines = parseReportLines(reportText);
   const buckets: { heading: string; lines: ReportLine[] }[] = [];
   let current: { heading: string; lines: ReportLine[] } | null = null;
@@ -151,10 +161,10 @@ export function buildVisualSections(reportText: string, reportType: ReportType):
     current.lines.push(line);
   }
 
-  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType));
+  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType, evidenceFacts));
 }
 
-function parseSection(heading: string, lines: ReportLine[], reportType: ReportType): VisualSection {
+function parseSection(heading: string, lines: ReportLine[], reportType: ReportType, evidenceFacts: EvidenceFact[]): VisualSection {
   switch (heading) {
     case "Recommended Actions":
       return {
@@ -212,26 +222,35 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
         items: lines
           .map(anyLineText)
           .filter((t): t is string => t !== null)
-          .map((body) => ({ stat: extractFirstStat(body), body })),
+          .map((body) => {
+            const stat = extractFirstStat(body);
+            return { stat, body, evidence: stat ? findEvidence(stat, evidenceFacts) : null };
+          }),
       };
 
     case "Top Risks Identified": {
       const risks: RiskCard[] = [];
       let cur: Partial<RiskCard> | null = null;
 
+      const flush = (c: Partial<RiskCard>) => {
+        risks.push({
+          name: c.name ?? "Risk",
+          likelihood: c.likelihood ?? "medium",
+          impact: c.impact ?? "medium",
+          signal: c.signal ?? null,
+          consequence: c.consequence ?? null,
+          type: c.type ?? null,
+          signalEvidence: c.signal ? findEvidence(c.signal, evidenceFacts) : null,
+          consequenceEvidence: c.consequence ? findEvidence(c.consequence, evidenceFacts) : null,
+        });
+      };
+
       for (const l of lines) {
         if (l.kind === "tag") {
           if (cur) {
             const t = l.text.trim();
             cur.type = t === "Strategic Risk" || t === "Operational Risk" ? (t as RiskCard["type"]) : null;
-            risks.push({
-              name: cur.name ?? "Risk",
-              likelihood: cur.likelihood ?? "medium",
-              impact: cur.impact ?? "medium",
-              signal: cur.signal ?? null,
-              consequence: cur.consequence ?? null,
-              type: cur.type ?? null,
-            });
+            flush(cur);
             cur = null;
           }
           continue;
@@ -249,16 +268,10 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
 
         // Not a labeled field -> this is a new risk's name line.
         // Flush an unterminated previous risk defensively (missing tag line).
-        if (cur) risks.push({
-          name: cur.name ?? "Risk", likelihood: cur.likelihood ?? "medium", impact: cur.impact ?? "medium",
-          signal: cur.signal ?? null, consequence: cur.consequence ?? null, type: cur.type ?? null,
-        });
+        if (cur) flush(cur);
         cur = { name: l.text.trim() };
       }
-      if (cur) risks.push({
-        name: cur.name ?? "Risk", likelihood: cur.likelihood ?? "medium", impact: cur.impact ?? "medium",
-        signal: cur.signal ?? null, consequence: cur.consequence ?? null, type: cur.type ?? null,
-      });
+      if (cur) flush(cur);
 
       return { kind: "topRisks", heading, risks };
     }

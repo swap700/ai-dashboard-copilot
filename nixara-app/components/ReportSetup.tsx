@@ -2,6 +2,7 @@
 
 import { useApiKey } from "@/lib/use-api-key";
 import { FREE_LIMIT, getFreeReportsUsed } from "@/lib/free-tier";
+import { DECISION_TEMPLATES } from "@/lib/decision-templates";
 import { useEffect, useState } from "react";
 
 const ROLES = ["COO", "CEO", "CFO", "Sales Lead", "Operations Lead", "Board"];
@@ -54,6 +55,25 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
   return (
     <div className="bg-surface border border-border rounded-xl p-5 mb-8 space-y-4">
       <p className="text-text-dim text-xs uppercase tracking-wider font-semibold">Report Setup</p>
+
+      <div>
+        <label className="block text-xs font-medium text-text-mute mb-1.5">
+          Common decisions <span className="opacity-60">(optional starting point)</span>
+        </label>
+        <div className="flex flex-wrap gap-1.5 mb-3">
+          {DECISION_TEMPLATES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              title={`Commonly involves: ${t.metricKeywords.join(", ")}`}
+              onClick={() => onChange({ ...value, decision: t.decisionText })}
+              className="text-xs font-medium text-text-mute bg-accent-bg-soft border border-accent-border rounded-full px-3 py-1 hover:text-accent hover:border-accent transition-colors"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div>
         <label className="block text-sm font-medium text-text mb-1">Decision Context</label>

@@ -11,10 +11,12 @@ import Charts from "@/components/Charts";
 import AnomalyWarnings from "@/components/AnomalyWarnings";
 import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
+import DriftBanner from "@/components/DriftBanner";
 import { buildDataSummary, dashboardScore, numericColumns } from "@/lib/data-analysis";
 import type { Dataset } from "@/lib/data-analysis";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
+import { detectDrift, type DriftFlag } from "@/lib/drift";
 
 export default function DashboardPage() {
   // ── Global store — survives navigation to Outcomes and back ──────────────
@@ -22,11 +24,12 @@ export default function DashboardPage() {
     useNixaraStore();
 
   // ── Session context — decisions + outcomes ────────────────────────────────
-  const { clearDecisions } = useSession();
+  const { decisions, outcomes, clearDecisions } = useSession();
 
   // ── Transient UI state (don't need to survive navigation) ────────────────
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [driftFlags, setDriftFlags] = useState<DriftFlag[]>([]);
 
   // Bug fix (React error #185): only feed Charts a new decision text after
   // the user pauses typing — see use-debounced-value.ts for the full story.
@@ -34,7 +37,14 @@ export default function DashboardPage() {
 
   // BIConnector already calls cleanDataset before calling onLoaded.
   // Clear prior decisions so they don't ghost-persist from a previous dataset.
+  //
+  // Decision Drift (scoped): before wiping the outgoing session's decisions/
+  // outcomes, check whether the NEW dataset touches any metric a past
+  // approved decision was scored on, and whether that metric has moved a lot
+  // since. See lib/drift.ts for why this is upload-time only, not continuous
+  // monitoring — this architecture has no background jobs to do the latter.
   const handleLoaded = (dataset: Dataset, name: string) => {
+    setDriftFlags(detectDrift(dataset, decisions, outcomes));
     setDataset(dataset, name);
     clearDecisions();
   };
@@ -165,6 +175,7 @@ export default function DashboardPage() {
           <p className="text-text-dim text-xs uppercase tracking-wider font-semibold mb-3">
             {fileName} · {dataset.rows.length} rows
           </p>
+          <DriftBanner flags={driftFlags} />
           <MetricsRow metrics={metrics} />
           <DataPreview dataset={dataset} />
           <Charts dataset={dataset} decisionText={debouncedDecision} />
@@ -190,6 +201,7 @@ export default function DashboardPage() {
               reports={reports}
               errors={reportErrors}
               context={{ ...setup, datasetName: fileName }}
+              dataset={dataset}
             />
           )}
         </>

@@ -36,6 +36,10 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
   // Form state
   const [notes, setNotes] = useState("");
   const [owner, setOwner] = useState("");
+  // Decision Inbox: only meaningful for an approved decision — there's
+  // nothing to chase down for a rejection, and postponed items get a reason
+  // instead (see POSTPONE_REASONS below), not a date.
+  const [dueDate, setDueDate] = useState("");
   const [selectedRec, setSelectedRec] = useState<string | null>(null);
   const [recError, setRecError] = useState(false);
 
@@ -76,6 +80,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
       owner: owner.trim() || undefined,
       recommendation: selectedRec ?? undefined,
       postponeReason: overridePostponeReason,
+      dueDate: choice === "approved" ? (dueDate || undefined) : undefined,
     });
     setSaving(null);
     setPendingPostpone(false);
@@ -217,6 +222,11 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
               👤 {prior.owner}
             </span>
           )}
+          {prior.choice === "approved" && prior.dueDate && (
+            <span className="text-xs text-text-mute bg-surface border border-border rounded-md px-2.5 py-1">
+              📅 Due {new Date(prior.dueDate + "T00:00:00").toLocaleDateString()}
+            </span>
+          )}
           {prior.postponeReason && (
             <span className="text-xs text-warn bg-warn-bg border border-warn-border rounded-md px-2.5 py-1">
               {prior.postponeReason}
@@ -347,6 +357,19 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Revisit end of Q3, pending budget approval…"
+          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+        />
+      </div>
+
+      {/* Decision Inbox: due date — only takes effect if you approve */}
+      <div className="mb-3">
+        <label className="block text-xs font-medium text-text-mute mb-1">
+          Due by <span className="opacity-60">(optional — only applies if you approve)</span>
+        </label>
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(e) => setDueDate(e.target.value)}
           className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
         />
       </div>

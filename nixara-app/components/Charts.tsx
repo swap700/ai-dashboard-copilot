@@ -41,7 +41,7 @@ function ChartFrame({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function BarPanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
+export function BarPanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
   const height = Math.max(220, data.length * 32);
   return (
     <ChartFrame title={title}>
@@ -73,7 +73,7 @@ function BarPanel({ title, data }: { title: string; data: { key: string; value: 
   );
 }
 
-function PiePanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
+export function PiePanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
   return (
     <ChartFrame title={title}>
       <ResponsiveContainer width="100%" height={260}>

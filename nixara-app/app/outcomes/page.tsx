@@ -121,7 +121,14 @@ export default function OutcomesPage() {
             )}
 
             {/* Outcome section — show existing outcome OR form to log one */}
-            {lookupOutcomeLogged ? (
+            {/* H6: a rejected/postponed decision has nothing to score — gate before the form. */}
+            {lookupResult.decision !== "approved" ? (
+              <p className="text-text-dim text-xs italic">
+                {lookupResult.decision === "rejected"
+                  ? "Rejected — nothing was implemented, so there's no outcome to track."
+                  : "Postponed — outcome tracking becomes available once this is approved."}
+              </p>
+            ) : lookupOutcomeLogged ? (
               <p className="text-success text-sm font-medium">✓ Outcome logged. Thanks!</p>
             ) : lookupOutcome && lookupOutcome !== "none" ? (
               // Already has an outcome — show it read-only

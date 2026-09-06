@@ -116,7 +116,7 @@ function singularize(word: string): string {
 }
 
 /** Splits a string (free text OR a column name, including camelCase/snake_case) into normalized tokens. */
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2") // camelCase -> camel Case
     .split(/[^a-zA-Z0-9]+/)
@@ -332,7 +332,7 @@ function matchesVocabulary(tokens: string[], vocabulary: Set<string>): boolean {
  * rows cannot trip it, and excludes negatives so that a genuinely additive
  * metric which happens to dip below zero is never caught.
  */
-function looksLikeProportion(values: number[]): boolean {
+export function looksLikeProportion(values: number[]): boolean {
   if (values.length < 8) return false;
   let fractional = 0;
   for (const v of values) {

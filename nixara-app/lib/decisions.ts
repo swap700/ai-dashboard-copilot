@@ -45,6 +45,9 @@ export interface LogDecisionParams {
   owner?: string;
   // Added Task 14: reason for postponing (Budget constraint / Need more data / Not a priority now)
   postponeReason?: string;
+  // Decision Inbox: real due date (ISO "YYYY-MM-DD"), distinct from the
+  // free-text timeframe used for the AI prompt.
+  dueDate?: string;
 }
 
 export interface LoggedDecision {
@@ -79,6 +82,7 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<Logg
     p_owner:           params.owner ?? null,
     p_recommendation:  params.recommendation ?? null,
     p_postpone_reason: params.postponeReason ?? null,
+    p_due_date:        params.dueDate ?? null,
   });
   if (error || !data) return null;
   // RPC returns an array — unwrap the first row.
@@ -189,6 +193,27 @@ export async function updateDecisionChoice(
   return !error && data === true;
 }
 
+/**
+ * Sets (or clears, if newDueDate is null) the due date on an existing
+ * decision, via the update_decision_due_date SECURITY DEFINER RPC — kept
+ * separate from updateDecisionChoice so editing a due date never touches the
+ * approve/reject/postpone choice. Same session_id ownership check as every
+ * other write RPC here. Returns true only if a row was actually updated.
+ */
+export async function updateDecisionDueDate(
+  id: number,
+  sessionId: string,
+  newDueDate: string | null
+): Promise<boolean> {
+  if (!supabase) return false;
+  const { data, error } = await supabase.rpc("update_decision_due_date", {
+    p_id:         id,
+    p_session_id: sessionId,
+    p_due_date:   newDueDate,
+  });
+  return !error && data === true;
+}
+
 export interface OutcomeRow {
   id: number;
   metric_name: string;
@@ -213,6 +238,64 @@ export async function fetchOutcomeForPublicId(publicId: string): Promise<Outcome
   if (error || !data) return null;
   const row = Array.isArray(data) ? (data[0] ?? null) : data;
   return row as OutcomeRow | null;
+}
+
+export interface DecisionWithOutcome {
+  id: number;
+  publicId: string;
+  createdAt: string;
+  reportType: string | null;
+  role: string | null;
+  datasetName: string | null;
+  decision: DecisionChoice | null;
+  notes: string | null;
+  timeframe: string | null;
+  question: string | null;
+  recommendation: string | null;
+  owner: string | null;
+  postponeReason: string | null;
+  dueDate: string | null;
+  outcome: OutcomeRow | null;
+}
+
+/**
+ * Fetches every decision logged in this browser session, most recent first,
+ * with its outcome (if any) already joined — powers the Decision Memory page.
+ * See list_decisions_for_session in nixara_supabase_setup.sql: scoped to
+ * session_id using the same capability pattern as update_decision_choice, so
+ * this only ever returns the caller's own history.
+ */
+export async function fetchDecisionsForSession(sessionId: string): Promise<DecisionWithOutcome[]> {
+  if (!supabase || !sessionId) return [];
+  const { data, error } = await supabase.rpc("list_decisions_for_session", { p_session_id: sessionId });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: row.id as number,
+    publicId: row.public_id as string,
+    createdAt: row.created_at as string,
+    reportType: row.report_type as string | null,
+    role: row.role as string | null,
+    datasetName: row.dataset_name as string | null,
+    decision: (row.decision as DecisionChoice | null) ?? null,
+    notes: row.notes as string | null,
+    timeframe: row.timeframe as string | null,
+    question: row.question as string | null,
+    recommendation: row.recommendation as string | null,
+    owner: row.owner as string | null,
+    postponeReason: row.postpone_reason as string | null,
+    dueDate: row.due_date as string | null,
+    outcome: row.outcome_metric_name
+      ? {
+          id: 0,
+          metric_name: row.outcome_metric_name as string,
+          metric_before: row.outcome_metric_before as number | null,
+          metric_after: row.outcome_metric_after as number | null,
+          metric_unit: row.outcome_metric_unit as string,
+          outcome_rating: row.outcome_rating as string,
+          outcome_notes: row.outcome_notes as string,
+        }
+      : null,
+  }));
 }
 
 interface LogEventParams {
