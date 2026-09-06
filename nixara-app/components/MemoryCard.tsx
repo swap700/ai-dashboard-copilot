@@ -1,8 +1,6 @@
 "use client";
 
-import { logOutcome, formatDecisionId, type DecisionWithOutcome } from "@/lib/decisions";
-import type { RecordedOutcome } from "@/lib/session-context";
-import OutcomeForm from "./OutcomeForm";
+import { formatDecisionId, type DecisionWithOutcome } from "@/lib/decisions";
 
 const BORDER: Record<string, string> = {
   approved: "border-l-success",
@@ -22,31 +20,23 @@ const ACCURACY: Record<string, { badge: string; bg: string; fg: string }> = {
 
 interface Props {
   row: DecisionWithOutcome;
-  sessionId: string;
-  onOutcomeLogged: (publicId: string, outcome: RecordedOutcome & { notes?: string }) => void;
 }
 
-export default function MemoryCard({ row, sessionId, onOutcomeLogged }: Props) {
+/**
+ * Memory is a read-only history — the "log outcome" action itself lives only
+ * in Inbox (the actionable, filtered-to-what's-still-open view) and Outcomes
+ * (the cross-session ID lookup). Memory used to carry its own copy of the
+ * same form, which meant the identical action showed up in three places for
+ * no reason — resolving an item should happen where it's meant to be acted
+ * on, not everywhere it's merely visible.
+ */
+export default function MemoryCard({ row }: Props) {
   const choice = row.decision ?? "approved";
   const outcome = row.outcome;
   const pctChange =
     outcome?.metric_before && outcome.metric_before !== 0 && outcome.metric_after !== null
       ? ((outcome.metric_after - outcome.metric_before) / Math.abs(outcome.metric_before)) * 100
       : null;
-
-  const handleSubmit = async (o: RecordedOutcome & { notes?: string }) => {
-    await logOutcome({
-      publicId: row.publicId,
-      sessionId,
-      metricName: o.metricName,
-      metricBefore: o.metricBefore,
-      metricAfter: o.metricAfter,
-      metricUnit: o.metricUnit,
-      outcomeRating: o.outcomeRating,
-      notes: o.notes,
-    });
-    onOutcomeLogged(row.publicId, o);
-  };
 
   return (
     <div className={`bg-surface border border-border ${BORDER[choice]} border-l-4 rounded-xl p-5 mb-4`}>
@@ -116,12 +106,9 @@ export default function MemoryCard({ row, sessionId, onOutcomeLogged }: Props) {
           {outcome.outcome_notes && <p className="text-text-mute text-xs">{outcome.outcome_notes}</p>}
         </div>
       ) : (
-        <details className="mt-2">
-          <summary className="text-accent text-sm font-medium cursor-pointer">
-            📝 Log outcome for {row.reportType}
-          </summary>
-          <OutcomeForm onSubmit={handleSubmit} />
-        </details>
+        <p className="text-text-dim text-xs mt-2 italic">
+          Still open — head to the <span className="font-medium not-italic text-text-mute">Inbox</span> tab to log its outcome.
+        </p>
       )}
     </div>
   );
