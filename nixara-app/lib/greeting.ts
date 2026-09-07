@@ -112,11 +112,14 @@ export interface GreetingSegment {
 }
 
 export interface Greeting {
-  /** Small uppercase label above the line -- mirrors the source mockup's trigger tag. */
+  /** Not rendered -- kept for logging/aria-label only. */
   trigger: string;
-  segments: GreetingSegment[];
+  /** The large hero line -- time-of-day tone, e.g. "Good morning." Never a name (no accounts yet). */
+  headline: string;
+  /** The smaller line under the headline -- the actual thing Nixara knows (pending count, drift, ...). */
+  detail: GreetingSegment[];
   href: string | null;
-  /** Whether to use the emphasized "highlight" card style (zero-pending / drift). */
+  /** Whether this variant is the more attention-worthy kind (zero-pending / drift) -- tints the headline. */
   highlight: boolean;
 }
 
@@ -142,8 +145,8 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
   if (ctx.drift) {
     return {
       trigger: "Decision Drift detected overnight",
-      segments: [
-        { text: `${salutation[tod]} ` },
+      headline: salutation[tod],
+      detail: [
         { text: "Something shifted", bold: true },
         { text: " since your last decision — worth a look before anything else." },
       ],
@@ -157,7 +160,8 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
   if (tod === "late-night") {
     return {
       trigger: "Late night (after 11pm)",
-      segments: [{ text: "Still here? Whatever it is, it'll still be true in the morning." }],
+      headline: "Still here?",
+      detail: [{ text: "Whatever it is, it'll still be true in the morning." }],
       href: ctx.pendingCount > 0 ? "/inbox" : null,
       highlight: false,
     };
@@ -166,8 +170,8 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
   if (ctx.pendingCount === 0) {
     return {
       trigger: "Zero decisions pending",
-      segments: [
-        { text: `${salutation[tod]} ` },
+      headline: salutation[tod],
+      detail: [
         { text: "Clean slate", bold: true },
         { text: " — nothing's waiting on you today. Rare. Enjoy it." },
       ],
@@ -179,7 +183,8 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
   if (tod === "evening") {
     return {
       trigger: "Evening",
-      segments: [{ text: "Good evening. Decisions don't clock out — but you probably should." }],
+      headline: "Good evening.",
+      detail: [{ text: "Decisions don't clock out — but you probably should." }],
       href: "/inbox",
       highlight: false,
     };
@@ -191,8 +196,9 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
     const earlierLabel = timeOfDay(ctx.previousLastSeenAt!) === "morning" ? "this morning" : "earlier today";
     return {
       trigger: "Afternoon · nothing's changed",
-      segments: [
-        { text: "Good afternoon. Still the same " },
+      headline: "Good afternoon.",
+      detail: [
+        { text: "Still the same " },
         { text: `${ctx.pendingCount} ${plural}`, bold: true },
         { text: ` from ${earlierLabel} — they haven't gone anywhere.` },
       ],
@@ -203,8 +209,8 @@ export function buildGreeting(now: Date, ctx: GreetingContext): Greeting {
 
   return {
     trigger: tod === "morning" ? "Morning · decisions pending" : "Decisions pending",
-    segments: [
-      { text: `${salutation[tod]} ` },
+    headline: salutation[tod],
+    detail: [
       { text: `${ctx.pendingCount} ${plural}`, bold: true },
       { text: ` ${verb} waiting on you.` },
     ],

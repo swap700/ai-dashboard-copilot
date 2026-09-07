@@ -9,12 +9,15 @@ Upload any business dataset and get instant AI-generated executive reports in se
 
 ## What it does
 
+- Get a personalized greeting the moment you open the app — before you've uploaded anything — built from what Nixara already knows: how many of your decisions are still pending, whether anything's changed since your last visit, and whether a Decision Drift alert fired overnight
 - Upload a CSV or Excel file
+- See a plain-language data quality readout right on the upload screen — a headline and, when the score isn't 100, the specific reasons why (missing data, too many columns, too few rows) — before you spend one of your free reports
 - Tell the AI who you are (CEO, CFO, Sales Lead…) and what decision you're trying to make
 - Get three structured reports instantly: Executive Summary, Operational Detail, and Risk Report
 - Download each report as a Word doc or PDF
 - Approve, reject, or postpone each recommendation — every decision gets a unique ID
 - Come back later and log what actually happened, to track whether Nixara's analysis was accurate
+- Your pending decisions and any drift alerts follow you across visits (not just within one browser tab) via the Decision Inbox and Decision Memory pages, and the greeting and drift alerts link straight to the decision they're about
 
 ---
 
