@@ -247,10 +247,34 @@ export function detectAnomalies(dataset: Dataset, col: string): Row[] {
     .map((x) => x.row);
 }
 
-/** Mirrors dashboard_score: starts at 100, deducts for missing data / shape issues. */
-export function dashboardScore(dataset: Dataset): number {
+export interface DashboardScoreReason {
+  key: "missingData" | "columnCount" | "rowCount";
+  penalty: number;
+  message: string;
+}
+
+export interface DashboardScoreBreakdown {
+  score: number;
+  missingRatio: number;
+  /** Empty when nothing knocked the score down from 100. */
+  reasons: DashboardScoreReason[];
+}
+
+/**
+ * Mirrors dashboard_score: starts at 100, deducts for missing data / shape
+ * issues. Returns the full breakdown (which deductions applied and the
+ * human-readable reason for each) instead of only the final number -- the
+ * upload-screen quality card and the Risk Report's Data Quality section both
+ * need the reasons, and every one of them was already being computed here
+ * and then thrown away. dashboardScore() below is a thin wrapper kept for
+ * every caller that only ever wanted the number (buildDataSummary's text
+ * block sent to the AI, primarily).
+ */
+export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdown {
   const { rows, columns } = dataset;
   let score = 100;
+  const reasons: DashboardScoreReason[] = [];
+  let missingRatio = 0;
 
   if (rows.length > 0 && columns.length > 0) {
     let missing = 0;
@@ -260,13 +284,41 @@ export function dashboardScore(dataset: Dataset): number {
         if (v === null || v === undefined || v === "") missing++;
       }
     }
-    const missingRatio = missing / (rows.length * columns.length);
-    if (missingRatio > 0.2) score -= 20;
+    missingRatio = missing / (rows.length * columns.length);
+    if (missingRatio > 0.2) {
+      score -= 20;
+      reasons.push({
+        key: "missingData",
+        penalty: 20,
+        message: `${(missingRatio * 100).toFixed(1)}% of cells are missing or blank`,
+      });
+    }
   }
-  if (columns.length > 20) score -= 10;
-  if (rows.length < 10) score -= 10;
 
-  return Math.max(score, 0);
+  if (columns.length > 20) {
+    score -= 10;
+    reasons.push({
+      key: "columnCount",
+      penalty: 10,
+      message: `${columns.length} columns is on the high side for clean analysis`,
+    });
+  }
+
+  if (rows.length < 10) {
+    score -= 10;
+    reasons.push({
+      key: "rowCount",
+      penalty: 10,
+      message: `Only ${rows.length} row${rows.length === 1 ? "" : "s"} -- too few for reliable patterns`,
+    });
+  }
+
+  return { score: Math.max(score, 0), missingRatio, reasons };
+}
+
+/** Mirrors dashboard_score: starts at 100, deducts for missing data / shape issues. */
+export function dashboardScore(dataset: Dataset): number {
+  return dashboardScoreBreakdown(dataset).score;
 }
 
 /**

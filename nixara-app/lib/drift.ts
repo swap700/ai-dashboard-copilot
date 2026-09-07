@@ -20,6 +20,13 @@ export interface DriftFlag {
   currentValue: number;
   pctChange: number;
   decisionQuestion: string;
+  /**
+   * The drifted decision's public_id token (see decisions.ts) -- lets the
+   * banner link straight to that decision in Decision Memory instead of just
+   * naming it in prose. Null only if the decision somehow has no token,
+   * which shouldn't happen in practice (every logged decision gets one).
+   */
+  decisionPublicId: string | null;
 }
 
 const DRIFT_THRESHOLD_PCT = 15;
@@ -78,6 +85,7 @@ export function detectDrift(
         currentValue,
         pctChange,
         decisionQuestion: decision.question,
+        decisionPublicId: decision.publicId,
       });
     }
   }

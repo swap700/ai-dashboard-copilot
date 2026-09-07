@@ -1,22 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/session-context";
-import { fetchDecisionsForSession, type DecisionWithOutcome } from "@/lib/decisions";
+import { fetchDecisionsForVisitor, type DecisionWithOutcome } from "@/lib/decisions";
 import type { RecordedOutcome } from "@/lib/session-context";
 import { buildInbox } from "@/lib/inbox";
 import InboxCard from "@/components/InboxCard";
 
-export default function InboxPage() {
-  const { sessionId } = useSession();
+function InboxPageInner() {
+  const { visitorId, sessionId } = useSession();
   const [rows, setRows] = useState<DecisionWithOutcome[] | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Deep link from the Greeting card / Drift Banner elsewhere in the app --
+  // scrolls to and flashes the matching item instead of leaving the person
+  // to find it themselves in a list.
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  const highlightedRef = useRef<HTMLDivElement | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+
   useEffect(() => {
-    if (!sessionId) return;
+    if (!visitorId) return;
     let cancelled = false;
     setLoading(true);
-    fetchDecisionsForSession(sessionId).then((data) => {
+    fetchDecisionsForVisitor(visitorId).then((data) => {
       if (!cancelled) {
         setRows(data);
         setLoading(false);
@@ -25,7 +34,13 @@ export default function InboxPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [visitorId]);
+
+  useEffect(() => {
+    if (scrolled || !highlightId || !highlightedRef.current) return;
+    highlightedRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    setScrolled(true);
+  }, [scrolled, highlightId, rows]);
 
   const handleOutcomeLogged = (publicId: string, outcome: RecordedOutcome & { notes?: string }) => {
     // Logging an outcome resolves the item — it drops out of the inbox on
@@ -84,14 +99,32 @@ export default function InboxPage() {
 
       {!loading &&
         inbox.map((item) => (
-          <InboxCard
+          <div
             key={item.id}
-            item={item}
-            sessionId={sessionId}
-            onOutcomeLogged={handleOutcomeLogged}
-            onDueDateChanged={handleDueDateChanged}
-          />
+            ref={item.publicId === highlightId ? highlightedRef : undefined}
+            className={
+              item.publicId === highlightId
+                ? "rounded-xl ring-2 ring-accent ring-offset-2 ring-offset-bg transition-shadow"
+                : undefined
+            }
+          >
+            <InboxCard
+              item={item}
+              sessionId={sessionId}
+              visitorId={visitorId}
+              onOutcomeLogged={handleOutcomeLogged}
+              onDueDateChanged={handleDueDateChanged}
+            />
+          </div>
         ))}
     </div>
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={null}>
+      <InboxPageInner />
+    </Suspense>
   );
 }

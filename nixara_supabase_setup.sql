@@ -898,3 +898,364 @@ FROM (VALUES
     ('list_decisions_for_session(text)'),
     ('log_decision_record(text,text,text,text,text,text,text,text,text,text,text,date)')
 ) AS f(fn);
+
+-- ============================================================
+-- 19. Greeting continuity (2026-09) — persistent visitor identity across
+-- browser sessions, feeding the dashboard's opening greeting.
+--
+-- Every existing capability token in this schema (session_id) is
+-- deliberately tab-lifetime: it lives in sessionStorage and is gone the
+-- moment the tab closes (see lib/session-context.tsx). That's the right
+-- scope for the free-tier display counter and for "list only what THIS
+-- session created" — but it means nothing in this schema can answer "is
+-- anything still open from before?" once the tab that logged it is closed,
+-- which is exactly what the greeting needs to say anything true.
+--
+-- Fix: a second, longer-lived client-generated token (visitor_id), stored
+-- in localStorage instead of sessionStorage, so it survives tab closes and
+-- browser restarts. Same capability-token model as session_id — an
+-- unguessable client-generated UUID, checked by SECURITY DEFINER RPCs that
+-- only accept it as a value, never used to grant broader table access.
+-- session_id is untouched everywhere it already exists.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS nixara_visitors (
+  visitor_id     TEXT PRIMARY KEY,
+  first_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE nixara_visitors ENABLE ROW LEVEL SECURITY;
+-- No policies: RLS on with zero policies denies anon/authenticated entirely,
+-- same convention as nixara_quota. Only reachable via the SECURITY DEFINER
+-- RPC below.
+
+CREATE TABLE IF NOT EXISTS nixara_drift_events (
+  id                   BIGSERIAL PRIMARY KEY,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  visitor_id           TEXT NOT NULL,
+  report_type          TEXT,
+  metric_name          TEXT,
+  matched_column       TEXT,
+  prior_value          NUMERIC,
+  current_value        NUMERIC,
+  pct_change           NUMERIC,
+  decision_question    TEXT,
+  decision_public_id   TEXT,
+  acknowledged         BOOLEAN NOT NULL DEFAULT false
+);
+CREATE INDEX IF NOT EXISTS idx_nixara_drift_events_visitor
+  ON nixara_drift_events (visitor_id, acknowledged, created_at DESC);
+ALTER TABLE nixara_drift_events ENABLE ROW LEVEL SECURITY;
+
+-- 19a. nixara_decisions gains an optional visitor_id, so an approved decision
+-- can be counted toward its visitor's pending total after the tab that
+-- logged it is gone. Additive, nullable — every existing session_id-scoped
+-- RPC (list_decisions_for_session, ...) is unchanged.
+ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS visitor_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_nixara_decisions_visitor ON nixara_decisions (visitor_id);
+
+-- 19b. log_decision_record gains an optional p_visitor_id (13th arg) — same
+-- drop-then-recreate pattern as section 18a, since adding a parameter
+-- changes the function's identity.
+DROP FUNCTION IF EXISTS log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE);
+
+CREATE OR REPLACE FUNCTION log_decision_record(
+  p_session_id TEXT,
+  p_report_type TEXT,
+  p_role TEXT,
+  p_dataset_name TEXT,
+  p_decision TEXT,
+  p_notes TEXT DEFAULT '',
+  p_timeframe TEXT DEFAULT '',
+  p_question TEXT DEFAULT '',
+  p_owner TEXT DEFAULT NULL,
+  p_recommendation TEXT DEFAULT NULL,
+  p_postpone_reason TEXT DEFAULT NULL,
+  p_due_date DATE DEFAULT NULL,
+  p_visitor_id TEXT DEFAULT NULL
+)
+RETURNS TABLE (id BIGINT, public_id TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id BIGINT;
+  v_public_id TEXT;
+BEGIN
+  INSERT INTO nixara_decisions (
+    session_id, report_type, role, dataset_name, decision,
+    notes, timeframe, question, owner, recommendation, postpone_reason, due_date, visitor_id
+  ) VALUES (
+    p_session_id, p_report_type, p_role, p_dataset_name, p_decision,
+    p_notes, p_timeframe, p_question, p_owner, p_recommendation, p_postpone_reason, p_due_date, p_visitor_id
+  ) RETURNING nixara_decisions.id, nixara_decisions.public_id INTO v_id, v_public_id;
+
+  RETURN QUERY SELECT v_id, v_public_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE,TEXT) TO anon, authenticated;
+
+-- 19c. checkin_and_get_greeting — one round trip that both records "this
+-- visitor is here now" and returns everything the greeting needs: the
+-- previous last_seen_at, the count of approved-and-not-yet-scored decisions
+-- across every session this visitor has ever logged, and the single most
+-- recent not-yet-acknowledged drift event (if any), consumed (marked
+-- acknowledged) as part of this same call so it surfaces exactly once.
+CREATE OR REPLACE FUNCTION checkin_and_get_greeting(p_visitor_id TEXT)
+RETURNS TABLE (
+  previous_last_seen_at   TIMESTAMPTZ,
+  pending_count           INT,
+  drift_report_type       TEXT,
+  drift_metric_name       TEXT,
+  drift_matched_column    TEXT,
+  drift_prior_value       NUMERIC,
+  drift_current_value     NUMERIC,
+  drift_pct_change        NUMERIC,
+  drift_decision_question TEXT,
+  drift_decision_public_id TEXT,
+  drift_created_at        TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_previous     TIMESTAMPTZ;
+  v_pending      INT;
+  v_drift        RECORD;
+  v_found_drift  BOOLEAN := false;
+BEGIN
+  SELECT last_seen_at INTO v_previous FROM nixara_visitors WHERE visitor_id = p_visitor_id;
+
+  INSERT INTO nixara_visitors (visitor_id, first_seen_at, last_seen_at)
+  VALUES (p_visitor_id, now(), now())
+  ON CONFLICT (visitor_id) DO UPDATE SET last_seen_at = now();
+
+  SELECT count(*) INTO v_pending
+  FROM nixara_decisions d
+  WHERE d.visitor_id = p_visitor_id
+    AND d.decision = 'approved'
+    AND NOT EXISTS (SELECT 1 FROM nixara_outcomes o WHERE o.decision_id = d.id);
+
+  SELECT * INTO v_drift
+  FROM nixara_drift_events
+  WHERE visitor_id = p_visitor_id AND acknowledged = false
+  ORDER BY created_at DESC
+  LIMIT 1;
+  v_found_drift := FOUND;
+
+  IF v_found_drift THEN
+    UPDATE nixara_drift_events SET acknowledged = true
+    WHERE visitor_id = p_visitor_id AND acknowledged = false;
+  END IF;
+
+  RETURN QUERY SELECT
+    v_previous,
+    COALESCE(v_pending, 0),
+    v_drift.report_type, v_drift.metric_name, v_drift.matched_column,
+    v_drift.prior_value, v_drift.current_value, v_drift.pct_change,
+    v_drift.decision_question, v_drift.decision_public_id, v_drift.created_at;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION checkin_and_get_greeting(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION checkin_and_get_greeting(TEXT) TO anon, authenticated;
+
+-- 19d. log_drift_event — called client-side, once per flag, at the moment
+-- detectDrift() finds one (upload time — this architecture still has no
+-- background jobs, so "overnight" drift is still only ever discovered the
+-- next time a dataset happens to be uploaded; this just persists that
+-- finding past the tab it was found in, instead of letting it evaporate in
+-- React state, so a LATER visit's greeting can still say "something shifted").
+CREATE OR REPLACE FUNCTION log_drift_event(
+  p_visitor_id TEXT,
+  p_report_type TEXT,
+  p_metric_name TEXT,
+  p_matched_column TEXT,
+  p_prior_value NUMERIC,
+  p_current_value NUMERIC,
+  p_pct_change NUMERIC,
+  p_decision_question TEXT,
+  p_decision_public_id TEXT DEFAULT NULL
+)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id BIGINT;
+BEGIN
+  INSERT INTO nixara_drift_events (
+    visitor_id, report_type, metric_name, matched_column,
+    prior_value, current_value, pct_change, decision_question, decision_public_id
+  ) VALUES (
+    p_visitor_id, p_report_type, p_metric_name, p_matched_column,
+    p_prior_value, p_current_value, p_pct_change, p_decision_question, p_decision_public_id
+  ) RETURNING id INTO v_id;
+  RETURN v_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION log_drift_event(TEXT,TEXT,TEXT,TEXT,NUMERIC,NUMERIC,NUMERIC,TEXT,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_drift_event(TEXT,TEXT,TEXT,TEXT,NUMERIC,NUMERIC,NUMERIC,TEXT,TEXT) TO anon, authenticated;
+
+-- ============================================================
+-- 20. Visitor-scoped decision history (2026-09) — companion to section 19.
+--
+-- Extends the same continuity to the two pages that display decision
+-- history (Inbox, Memory): they can now see a visitor's full history, not
+-- just the current tab's. Existing session_id scoping is untouched — this
+-- is additive, read via a NEW function, not a change to
+-- list_decisions_for_session.
+--
+-- The two WRITE RPCs that gate on session_id ownership
+-- (update_decision_choice, update_decision_due_date) gain visitor_id as an
+-- ALTERNATE valid credential — same capability-token model as session_id,
+-- just longer-lived. Without this, widening the read side alone would
+-- create a broken interaction: Inbox/Memory would show a decision from a
+-- closed session, but editing its due date or re-opening it would silently
+-- fail the session_id-only check. log_outcome_record needs no change here —
+-- it already gates on the public_id capability token alone (section 14),
+-- which is why "log an outcome for a decision from a previous session" has
+-- always worked; only the two session_id-ownership writes had this gap.
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION list_decisions_for_visitor(p_visitor_id TEXT)
+RETURNS TABLE (
+  id                     BIGINT,
+  public_id              TEXT,
+  created_at             TIMESTAMPTZ,
+  report_type            TEXT,
+  role                   TEXT,
+  dataset_name           TEXT,
+  decision               TEXT,
+  notes                  TEXT,
+  timeframe              TEXT,
+  question               TEXT,
+  recommendation         TEXT,
+  owner                  TEXT,
+  postpone_reason        TEXT,
+  due_date               DATE,
+  outcome_metric_name    TEXT,
+  outcome_metric_before  NUMERIC,
+  outcome_metric_after   NUMERIC,
+  outcome_metric_unit    TEXT,
+  outcome_rating         TEXT,
+  outcome_notes          TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_visitor_id IS NULL OR p_visitor_id = '' THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.visitor_id = p_visitor_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) TO anon, authenticated;
+
+-- 20a. update_decision_choice gains p_visitor_id as an alternate credential.
+DROP FUNCTION IF EXISTS update_decision_choice(BIGINT, TEXT, TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION update_decision_choice(
+  p_id BIGINT,
+  p_decision TEXT,
+  p_postpone_reason TEXT DEFAULT NULL,
+  p_session_id TEXT DEFAULT NULL,
+  p_visitor_id TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_updated BIGINT;
+BEGIN
+  UPDATE nixara_decisions
+  SET decision        = p_decision,
+      postpone_reason = p_postpone_reason
+  WHERE id = p_id
+    AND (
+      (p_session_id IS NOT NULL AND session_id = p_session_id)
+      OR (p_visitor_id IS NOT NULL AND visitor_id IS NOT NULL AND visitor_id = p_visitor_id)
+    )
+  RETURNING id INTO v_updated;
+
+  RETURN v_updated IS NOT NULL;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION update_decision_choice(BIGINT, TEXT, TEXT, TEXT, TEXT) TO anon, authenticated;
+
+-- 20b. update_decision_due_date gains the same alternate credential.
+DROP FUNCTION IF EXISTS update_decision_due_date(BIGINT, TEXT, DATE);
+
+CREATE OR REPLACE FUNCTION update_decision_due_date(
+  p_id BIGINT,
+  p_session_id TEXT DEFAULT NULL,
+  p_due_date DATE DEFAULT NULL,
+  p_visitor_id TEXT DEFAULT NULL
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_updated BIGINT;
+BEGIN
+  UPDATE nixara_decisions
+  SET due_date = p_due_date
+  WHERE id = p_id
+    AND (
+      (p_session_id IS NOT NULL AND session_id = p_session_id)
+      OR (p_visitor_id IS NOT NULL AND visitor_id IS NOT NULL AND visitor_id = p_visitor_id)
+    )
+  RETURNING id INTO v_updated;
+
+  RETURN v_updated IS NOT NULL;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION update_decision_due_date(BIGINT, TEXT, DATE, TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION update_decision_due_date(BIGINT, TEXT, DATE, TEXT) TO anon, authenticated;
+
+-- ── Verification — run these and read the output ────────────────────────────
+-- Every row must show 'f' in the public column and 't' in the other two.
+-- (Applied directly to the live Supabase project via MCP on 2026-09-07 and
+-- verified with these same checks plus a smoke test of checkin_and_get_greeting
+-- / log_drift_event round-tripping and correctly consuming drift exactly once.)
+SELECT
+    f.fn,
+    has_function_privilege('public',        f.fn, 'EXECUTE') AS public_can_execute,
+    has_function_privilege('anon',          f.fn, 'EXECUTE') AS anon_can_execute,
+    has_function_privilege('authenticated', f.fn, 'EXECUTE') AS auth_can_execute
+FROM (VALUES
+    ('checkin_and_get_greeting(text)'),
+    ('log_drift_event(text,text,text,text,numeric,numeric,numeric,text,text)'),
+    ('log_decision_record(text,text,text,text,text,text,text,text,text,text,text,date,text)'),
+    ('list_decisions_for_visitor(text)'),
+    ('update_decision_choice(bigint,text,text,text,text)'),
+    ('update_decision_due_date(bigint,text,date,text)')
+) AS f(fn);

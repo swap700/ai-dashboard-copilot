@@ -110,7 +110,8 @@ Mitigation Actions
 
 Data Quality Risks
 (Apply this rule strictly:
-— If the data quality score is above 90/100 AND detected anomalies are explainable as normal business variation (seasonality, promotions, pricing tiers), write: "Data quality is strong (score: [X]/100). Detected outliers in [field] reflect business patterns — treat as signals, not data errors."
+— If the data quality score is above 90/100 AND detected anomalies are explainable as normal business variation (seasonality, promotions, pricing tiers), write: "Data quality is strong. Detected outliers in [field] reflect business patterns — treat as signals, not data errors."
+— Never state a numeric data quality score yourself, in this sentence or anywhere else in the report — Nixara already computes that score from the data directly and displays it next to this text; a number you write here would just be a second, unverified copy of the same figure.
 — Only flag genuine data integrity problems: missing values in critical fields, impossible values, duplicates that distort totals, or conflicting summary statistics.
 — NEVER say data quality is both high AND a risk in the same report. Pick one position and defend it.
 — This is the ONLY section of the report allowed to use the words "outlier" or "anomalies"/"anomalous".)

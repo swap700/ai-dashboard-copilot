@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { logDecisionRecord, logOutcome, updateDecisionChoice, type DecisionChoice, type OutcomeRating } from "./decisions";
 import { logEvent } from "./analytics";
+import { getVisitorId } from "./visitor";
 import type { ReportType } from "./report";
 
 const SESSION_ID_KEY = "nixara_analytics_session_id";
@@ -31,6 +32,8 @@ export interface RecordedOutcome {
 
 interface SessionState {
   sessionId: string;
+  /** Persistent (localStorage) identity -- see lib/visitor.ts. */
+  visitorId: string;
   decisions: Partial<Record<ReportType, RecordedDecision>>;
   outcomes: Partial<Record<ReportType, RecordedOutcome>>;
   recordDecision: (
@@ -83,12 +86,14 @@ const OUTCOMES_KEY  = "nixara_session_outcomes";
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessionId, setSessionId]   = useState("");
+  const [visitorId, setVisitorId]   = useState("");
   const [decisions, setDecisions]   = useState<Partial<Record<ReportType, RecordedDecision>>>({});
   const [outcomes,  setOutcomes]    = useState<Partial<Record<ReportType, RecordedOutcome>>>({});
 
   useEffect(() => {
     const id = loadSessionId();
     setSessionId(id);
+    setVisitorId(getVisitorId());
 
     // Restore persisted session state
     const savedDecisions = window.sessionStorage.getItem(DECISIONS_KEY);
@@ -138,6 +143,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       owner: ctx.owner,
       postponeReason: ctx.postponeReason,
       dueDate: ctx.dueDate,
+      visitorId,
     });
     const next: typeof decisions = {
       ...decisions,
@@ -181,7 +187,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const decision = decisions[reportType];
     if (!decision) return;
     if (decision.decisionId) {
-      await updateDecisionChoice(decision.decisionId, sessionId, newChoice, postponeReason);
+      await updateDecisionChoice(decision.decisionId, sessionId, newChoice, postponeReason, visitorId);
     }
     const next: typeof decisions = {
       ...decisions,
@@ -203,9 +209,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ sessionId, decisions, outcomes, recordDecision, recordOutcome, updateDecision, clearDecisions, logFileUpload }),
+    () => ({ sessionId, visitorId, decisions, outcomes, recordDecision, recordOutcome, updateDecision, clearDecisions, logFileUpload }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sessionId, decisions, outcomes]
+    [sessionId, visitorId, decisions, outcomes]
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

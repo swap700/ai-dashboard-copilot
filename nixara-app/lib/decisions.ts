@@ -48,6 +48,10 @@ export interface LogDecisionParams {
   // Decision Inbox: real due date (ISO "YYYY-MM-DD"), distinct from the
   // free-text timeframe used for the AI prompt.
   dueDate?: string;
+  // Greeting continuity: the persistent (localStorage) visitor id, alongside
+  // the tab-lifetime sessionId -- see lib/visitor.ts. Optional so this keeps
+  // working if Supabase is unconfigured or the caller has no visitor id yet.
+  visitorId?: string;
 }
 
 export interface LoggedDecision {
@@ -83,6 +87,7 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<Logg
     p_recommendation:  params.recommendation ?? null,
     p_postpone_reason: params.postponeReason ?? null,
     p_due_date:        params.dueDate ?? null,
+    p_visitor_id:      params.visitorId ?? null,
   });
   if (error || !data) return null;
   // RPC returns an array — unwrap the first row.
@@ -181,7 +186,8 @@ export async function updateDecisionChoice(
   id: number,
   sessionId: string,
   newChoice: DecisionChoice,
-  postponeReason?: string
+  postponeReason?: string,
+  visitorId?: string
 ): Promise<boolean> {
   if (!supabase) return false;
   const { data, error } = await supabase.rpc("update_decision_choice", {
@@ -189,6 +195,7 @@ export async function updateDecisionChoice(
     p_decision:        newChoice,
     p_postpone_reason: postponeReason ?? null,
     p_session_id:      sessionId,
+    p_visitor_id:      visitorId ?? null,
   });
   return !error && data === true;
 }
@@ -203,13 +210,15 @@ export async function updateDecisionChoice(
 export async function updateDecisionDueDate(
   id: number,
   sessionId: string,
-  newDueDate: string | null
+  newDueDate: string | null,
+  visitorId?: string
 ): Promise<boolean> {
   if (!supabase) return false;
   const { data, error } = await supabase.rpc("update_decision_due_date", {
     p_id:         id,
     p_session_id: sessionId,
     p_due_date:   newDueDate,
+    p_visitor_id: visitorId ?? null,
   });
   return !error && data === true;
 }
@@ -268,6 +277,47 @@ export interface DecisionWithOutcome {
 export async function fetchDecisionsForSession(sessionId: string): Promise<DecisionWithOutcome[]> {
   if (!supabase || !sessionId) return [];
   const { data, error } = await supabase.rpc("list_decisions_for_session", { p_session_id: sessionId });
+  if (error || !data) return [];
+  return (data as Record<string, unknown>[]).map((row) => ({
+    id: row.id as number,
+    publicId: row.public_id as string,
+    createdAt: row.created_at as string,
+    reportType: row.report_type as string | null,
+    role: row.role as string | null,
+    datasetName: row.dataset_name as string | null,
+    decision: (row.decision as DecisionChoice | null) ?? null,
+    notes: row.notes as string | null,
+    timeframe: row.timeframe as string | null,
+    question: row.question as string | null,
+    recommendation: row.recommendation as string | null,
+    owner: row.owner as string | null,
+    postponeReason: row.postpone_reason as string | null,
+    dueDate: row.due_date as string | null,
+    outcome: row.outcome_metric_name
+      ? {
+          id: 0,
+          metric_name: row.outcome_metric_name as string,
+          metric_before: row.outcome_metric_before as number | null,
+          metric_after: row.outcome_metric_after as number | null,
+          metric_unit: row.outcome_metric_unit as string,
+          outcome_rating: row.outcome_rating as string,
+          outcome_notes: row.outcome_notes as string,
+        }
+      : null,
+  }));
+}
+
+/**
+ * Fetches every decision logged by this VISITOR -- across every browser tab
+ * / session it has ever opened, not just the current one. Powers Decision
+ * Memory and Decision Inbox, which need to keep showing what's still open
+ * after the tab that created it is long closed (see list_decisions_for_visitor,
+ * nixara_supabase_setup.sql section 20, and lib/visitor.ts for why session_id
+ * alone can't do this).
+ */
+export async function fetchDecisionsForVisitor(visitorId: string): Promise<DecisionWithOutcome[]> {
+  if (!supabase || !visitorId) return [];
+  const { data, error } = await supabase.rpc("list_decisions_for_visitor", { p_visitor_id: visitorId });
   if (error || !data) return [];
   return (data as Record<string, unknown>[]).map((row) => ({
     id: row.id as number,

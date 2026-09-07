@@ -5,6 +5,7 @@ import { useNixaraStore } from "@/lib/store";
 import { useDebouncedValue } from "@/lib/use-debounced-value";
 import { useSession } from "@/lib/session-context";
 import BIConnector from "@/components/BIConnector";
+import Greeting from "@/components/Greeting";
 import MetricsRow from "@/components/MetricsRow";
 import DataPreview from "@/components/DataPreview";
 import Charts from "@/components/Charts";
@@ -12,11 +13,13 @@ import AnomalyWarnings from "@/components/AnomalyWarnings";
 import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
 import DriftBanner from "@/components/DriftBanner";
-import { buildDataSummary, dashboardScore, numericColumns } from "@/lib/data-analysis";
+import { buildDataSummary, dashboardScoreBreakdown, numericColumns } from "@/lib/data-analysis";
 import type { Dataset } from "@/lib/data-analysis";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
 import { detectDrift, type DriftFlag } from "@/lib/drift";
+import { getVisitorId } from "@/lib/visitor";
+import { logDriftEvent } from "@/lib/greeting";
 
 export default function DashboardPage() {
   // ── Global store — survives navigation to Outcomes and back ──────────────
@@ -44,20 +47,52 @@ export default function DashboardPage() {
   // since. See lib/drift.ts for why this is upload-time only, not continuous
   // monitoring — this architecture has no background jobs to do the latter.
   const handleLoaded = (dataset: Dataset, name: string) => {
-    setDriftFlags(detectDrift(dataset, decisions, outcomes));
+    const flags = detectDrift(dataset, decisions, outcomes);
+    setDriftFlags(flags);
+
+    // Persist each finding past this tab -- this architecture still has no
+    // background jobs, so a LATER visit's greeting can only ever learn about
+    // drift that happened to be found at an upload like this one. Without
+    // this, detectDrift's result would live only in React state and vanish
+    // the moment the tab closes, and the greeting could never say "something
+    // shifted overnight" truthfully. Fire-and-forget: a failed write here
+    // should never block getting the new dataset on screen.
+    if (flags.length > 0) {
+      const visitorId = getVisitorId();
+      for (const f of flags) {
+        void logDriftEvent({
+          visitorId,
+          reportType: f.reportType,
+          metricName: f.metricName,
+          matchedColumn: f.matchedColumn,
+          priorValue: f.priorValue,
+          currentValue: f.currentValue,
+          pctChange: f.pctChange,
+          decisionQuestion: f.decisionQuestion,
+          decisionPublicId: f.decisionPublicId,
+        });
+      }
+    }
+
     setDataset(dataset, name);
     clearDecisions();
   };
 
+  // Computed once per dataset and shared by the MetricsRow tile (the number)
+  // and its quality card (the reasons) -- see data-analysis.ts's
+  // dashboardScoreBreakdown for why these used to be two different call
+  // sites silently allowed to disagree.
+  const qualityBreakdown = useMemo(() => (dataset ? dashboardScoreBreakdown(dataset) : null), [dataset]);
+
   const metrics = useMemo(() => {
-    if (!dataset) return [];
+    if (!dataset || !qualityBreakdown) return [];
     return [
       { label: "Rows",          value: dataset.rows.length },
       { label: "Columns",       value: dataset.columns.length },
       { label: "Numeric fields",value: numericColumns(dataset).length },
-      { label: "Quality score", value: dashboardScore(dataset) },
+      { label: "Quality score", value: qualityBreakdown.score },
     ];
-  }, [dataset]);
+  }, [dataset, qualityBreakdown]);
 
   const handleGenerate = async () => {
     if (!dataset) return;
@@ -168,6 +203,8 @@ export default function DashboardPage() {
 
   return (
     <div>
+      {/* Renders even before a dataset is uploaded -- see components/Greeting.tsx. */}
+      <Greeting />
       <BIConnector onLoaded={handleLoaded} />
 
       {dataset && (
@@ -176,7 +213,7 @@ export default function DashboardPage() {
             {fileName} · {dataset.rows.length} rows
           </p>
           <DriftBanner flags={driftFlags} />
-          <MetricsRow metrics={metrics} />
+          <MetricsRow metrics={metrics} qualityBreakdown={qualityBreakdown ?? undefined} />
           <DataPreview dataset={dataset} />
           <Charts dataset={dataset} decisionText={debouncedDecision} />
           <AnomalyWarnings dataset={dataset} />

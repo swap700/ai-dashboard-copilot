@@ -9,11 +9,15 @@ import OutcomeForm from "./OutcomeForm";
 interface Props {
   item: InboxItem;
   sessionId: string;
+  /** Persistent identity -- lets due-date edits succeed even when this item
+   * was created in a session that has since closed (see lib/visitor.ts and
+   * update_decision_due_date's visitor_id ownership check). */
+  visitorId: string;
   onOutcomeLogged: (publicId: string, outcome: RecordedOutcome & { notes?: string }) => void;
   onDueDateChanged: (id: number, newDueDate: string | null) => void;
 }
 
-export default function InboxCard({ item, sessionId, onOutcomeLogged, onDueDateChanged }: Props) {
+export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged, onDueDateChanged }: Props) {
   const [editingDate, setEditingDate] = useState(false);
   const [draftDate, setDraftDate] = useState(item.dueDate ?? "");
   const [saving, setSaving] = useState(false);
@@ -34,7 +38,7 @@ export default function InboxCard({ item, sessionId, onOutcomeLogged, onDueDateC
 
   const handleSaveDate = async () => {
     setSaving(true);
-    const ok = await updateDecisionDueDate(item.id, sessionId, draftDate || null);
+    const ok = await updateDecisionDueDate(item.id, sessionId, draftDate || null, visitorId);
     setSaving(false);
     if (ok) {
       onDueDateChanged(item.id, draftDate || null);

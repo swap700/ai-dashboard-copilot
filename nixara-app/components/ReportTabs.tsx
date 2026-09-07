@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { buildVisualSections } from "@/lib/report-visual";
 import { buildEvidenceFacts } from "@/lib/evidence";
-import type { Dataset } from "@/lib/data-analysis";
+import { dashboardScore, type Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
 import ReportVisualBody from "./ReportVisual";
@@ -55,6 +55,11 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
   // is the same order of work buildDataSummary already does at generate time,
   // not something to redo on every tab switch.
   const evidenceFacts = useMemo(() => (dataset ? buildEvidenceFacts(dataset) : []), [dataset]);
+
+  // The Risk Report's Data Quality section is fed this directly instead of
+  // trusting the model to have restated it correctly in its own prose — see
+  // report-visual.ts's dataQuality case.
+  const qualityScore = useMemo(() => (dataset ? dashboardScore(dataset) : null), [dataset]);
 
   // Open on a tab that actually has a report. With partial results the first
   // report type is not necessarily one of the ones that came back.
@@ -142,7 +147,7 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
               </div>
             )}
 
-            <ReportVisualBody sections={buildVisualSections(current.text, active, evidenceFacts)} />
+            <ReportVisualBody sections={buildVisualSections(current.text, active, evidenceFacts, qualityScore)} />
 
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button

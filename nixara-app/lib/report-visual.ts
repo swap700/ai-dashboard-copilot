@@ -145,7 +145,18 @@ function parseActionVerb(text: string): ActionItem["verb"] {
 export function buildVisualSections(
   reportText: string,
   reportType: ReportType,
-  evidenceFacts: EvidenceFact[] = []
+  evidenceFacts: EvidenceFact[] = [],
+  /**
+   * The real data quality score, computed directly from the dataset via
+   * dashboardScore() -- the same number shown on the upload screen. Passed
+   * in rather than parsed back out of the AI's own prose (see the
+   * dataQuality case in parseSection below): the model is still asked to
+   * write the surrounding sentence, but it is never trusted to have
+   * restated the number correctly. null when no dataset is available to
+   * score (parseSection then falls back to whatever the model wrote, if
+   * anything, so the section still renders rather than showing nothing).
+   */
+  qualityScore: number | null = null
 ): VisualSection[] {
   const lines = parseReportLines(reportText);
   const buckets: { heading: string; lines: ReportLine[] }[] = [];
@@ -161,10 +172,16 @@ export function buildVisualSections(
     current.lines.push(line);
   }
 
-  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType, evidenceFacts));
+  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType, evidenceFacts, qualityScore));
 }
 
-function parseSection(heading: string, lines: ReportLine[], reportType: ReportType, evidenceFacts: EvidenceFact[]): VisualSection {
+function parseSection(
+  heading: string,
+  lines: ReportLine[],
+  reportType: ReportType,
+  evidenceFacts: EvidenceFact[],
+  qualityScore: number | null
+): VisualSection {
   switch (heading) {
     case "Recommended Actions":
       return {
@@ -298,9 +315,19 @@ function parseSection(heading: string, lines: ReportLine[], reportType: ReportTy
       };
 
     case "Data Quality Risks": {
-      const text = lines.map(anyLineText).filter((t): t is string => t !== null).join(" ");
-      const scoreM = /score:\s*(\d+)\s*\/\s*100/i.exec(text);
-      return { kind: "dataQuality", heading, text, score: scoreM ? parseInt(scoreM[1], 10) : null };
+      // BUG FIX (2026-09): this used to regex-scrape "score: X/100" back out
+      // of the AI's own sentence -- the exact anti-pattern the rest of this
+      // file's header comment warns against, just for this one section. The
+      // model was asked to restate a number it was handed, and the ring
+      // gauge then trusted whatever it wrote back, with no guarantee the two
+      // ever agreed. qualityScore now comes from dashboardScore(dataset) --
+      // computed once, shown identically on the upload screen and here.
+      // Defensively strip any stray "(score: X/100)" the model writes anyway
+      // (the prompt now tells it not to), so a leftover fragment never
+      // shows a second, possibly different number next to the real one.
+      const rawText = lines.map(anyLineText).filter((t): t is string => t !== null).join(" ");
+      const text = rawText.replace(/\(?\s*score:\s*\[?\d+\]?\s*\/\s*100\s*\)?\.?/gi, "").replace(/\s{2,}/g, " ").trim();
+      return { kind: "dataQuality", heading, text, score: qualityScore };
     }
 
     default:
