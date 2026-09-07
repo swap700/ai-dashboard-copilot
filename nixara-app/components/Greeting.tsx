@@ -12,18 +12,30 @@ const FALLBACK_HEADLINE: Record<string, string> = {
   "late-night": "Still here?",
 };
 
-/** Eight-point sparkle -- same spot every render, no library, just a path. */
-function SparkleIcon() {
+/**
+ * Classic trishul silhouette -- straight center shaft, a crossbar, two
+ * outer prongs curving outward. Chosen over a generic sparkle/letterform
+ * after review; drawn as an open stroke (no fill, no background badge) so
+ * it sits directly on the page the same way the rest of this hero line does.
+ */
+function TrishulIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
       width="1.35em"
       height="1.35em"
-      fill="currentColor"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
       className="shrink-0"
       aria-hidden="true"
     >
-      <path d="M 12.0 2.0 L 13.22 9.04 L 19.07 4.93 L 14.96 10.78 L 22.0 12.0 L 14.96 13.22 L 19.07 19.07 L 13.22 14.96 L 12.0 22.0 L 10.78 14.96 L 4.93 19.07 L 9.04 13.22 L 2.0 12.0 L 9.04 10.78 L 4.93 4.93 L 10.78 9.04 Z" />
+      <path d="M12 2 L12 21" />
+      <path d="M7 9 L17 9" />
+      <path d="M9 9 Q5 8 6 3" />
+      <path d="M15 9 Q19 8 18 3" />
     </svg>
   );
 }
@@ -39,6 +51,10 @@ function SparkleIcon() {
  * greeting (think: the line an assistant opens a session with) and not as
  * an alert. Deliberately carries no name: there's no login yet, so nothing
  * here should imply a personal identity that isn't real yet.
+ *
+ * The detail line ends in a small arrow whenever the greeting is a link
+ * (href set) -- so the click target is visible at rest, not only revealed
+ * by hovering over an otherwise plain-looking sentence.
  *
  * Fetches on mount, independent of the upload flow -- see lib/greeting.ts's
  * checkinAndGetGreeting. This is a client-rendered fetch, not a zero-flash
@@ -69,7 +85,7 @@ export default function Greeting() {
     return (
       <div className="flex items-center gap-3 py-6 mb-6">
         <span className="text-accent">
-          <SparkleIcon />
+          <TrishulIcon />
         </span>
         <h1 className="font-serif text-text text-[1.65rem] sm:text-[1.9rem] tracking-tight">
           {FALLBACK_HEADLINE[tod]}
@@ -86,7 +102,7 @@ export default function Greeting() {
     <div className="py-6 mb-6">
       <div className="flex items-center gap-3">
         <span className="text-accent">
-          <SparkleIcon />
+          <TrishulIcon />
         </span>
         <h1 className={headlineClass}>{greeting.headline}</h1>
       </div>
@@ -100,6 +116,7 @@ export default function Greeting() {
             <span key={i}>{seg.text}</span>
           )
         )}
+        {greeting.href && <span className="text-accent font-semibold ml-1">→</span>}
       </p>
     </div>
   );
