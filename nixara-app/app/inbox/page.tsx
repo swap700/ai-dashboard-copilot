@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useSession } from "@/lib/session-context";
+import { useNixaraStore } from "@/lib/store";
 import { fetchDecisionsForVisitor, type DecisionWithOutcome } from "@/lib/decisions";
 import type { RecordedOutcome } from "@/lib/session-context";
 import { buildInbox } from "@/lib/inbox";
@@ -10,6 +11,14 @@ import InboxCard from "@/components/InboxCard";
 
 function InboxPageInner() {
   const { visitorId, sessionId } = useSession();
+  // Decision Drift: the Inbox lists approved-but-unscored decisions from ANY
+  // past session/day (fetchDecisionsForVisitor), so the dataset currently
+  // loaded in this tab isn't necessarily the one a given item was recorded
+  // against -- unlike the Outcomes page's "This Session" list, which is
+  // always in sync (see app/outcomes/page.tsx). Only hand the dataset to an
+  // InboxCard when its stored dataset_name matches what's actually loaded
+  // right now, so auto-fill/slicing never runs against the wrong file.
+  const { dataset, fileName } = useNixaraStore();
   const [rows, setRows] = useState<DecisionWithOutcome[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -116,6 +125,7 @@ function InboxPageInner() {
               visitorId={visitorId}
               onOutcomeLogged={handleOutcomeLogged}
               onDueDateChanged={handleDueDateChanged}
+              dataset={item.datasetName === fileName ? (dataset ?? undefined) : undefined}
             />
           </div>
         ))}

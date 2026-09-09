@@ -4,6 +4,7 @@ import { useState } from "react";
 import { logOutcome, updateDecisionDueDate, formatDecisionId } from "@/lib/decisions";
 import type { RecordedOutcome } from "@/lib/session-context";
 import type { InboxItem } from "@/lib/inbox";
+import type { Dataset } from "@/lib/data-analysis";
 import OutcomeForm from "./OutcomeForm";
 
 interface Props {
@@ -15,9 +16,17 @@ interface Props {
   visitorId: string;
   onOutcomeLogged: (publicId: string, outcome: RecordedOutcome & { notes?: string }) => void;
   onDueDateChanged: (id: number, newDueDate: string | null) => void;
+  /**
+   * The dataset currently loaded in this session, passed only when it
+   * actually matches this item's dataset_name (see app/inbox/page.tsx) --
+   * lets OutcomeForm auto-fill/slice the metric from real data instead of
+   * free text, for the common "Approve -> Inbox -> Log outcome" flow where
+   * the dataset is still the same one the decision was recorded against.
+   */
+  dataset?: Dataset;
 }
 
-export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged, onDueDateChanged }: Props) {
+export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged, onDueDateChanged, dataset }: Props) {
   const [editingDate, setEditingDate] = useState(false);
   const [draftDate, setDraftDate] = useState(item.dueDate ?? "");
   const [saving, setSaving] = useState(false);
@@ -32,9 +41,10 @@ export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged,
       metricUnit: o.metricUnit,
       outcomeRating: o.outcomeRating,
       notes: o.notes,
-      // Decision Inbox lists decisions from any past session/day, so this
-      // form isn't given the currently loaded dataset (see OutcomeForm.tsx) --
-      // these are always null in practice, wired through for consistency.
+      // Populated when app/inbox/page.tsx handed this card the currently
+      // loaded dataset (only when it matches this item's dataset_name) and
+      // the person picked a "Slice by" dimension in OutcomeForm; null
+      // otherwise (no dataset match, or no slice chosen).
       metricDimension: o.metricDimension ?? null,
       metricDimensionValue: o.metricDimensionValue ?? null,
     });
@@ -144,7 +154,7 @@ export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged,
         <summary className="text-accent text-sm font-medium cursor-pointer">
           📝 Log outcome for {item.reportType}
         </summary>
-        <OutcomeForm onSubmit={handleSubmitOutcome} />
+        <OutcomeForm onSubmit={handleSubmitOutcome} dataset={dataset} />
       </details>
     </div>
   );
