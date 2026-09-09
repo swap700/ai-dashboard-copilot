@@ -4,6 +4,7 @@ import OutcomeForm from "./OutcomeForm";
 import type { RecordedDecision, RecordedOutcome } from "@/lib/session-context";
 import type { DecisionChoice, OutcomeRating } from "@/lib/decisions";
 import { formatDecisionId } from "@/lib/decisions";
+import type { Dataset } from "@/lib/data-analysis";
 
 const BORDER: Record<DecisionChoice, string> = {
   approved:  "border-l-success",
@@ -28,9 +29,12 @@ interface Props {
   decision: RecordedDecision;
   outcome?: RecordedOutcome;
   onLogOutcome: (outcome: RecordedOutcome & { notes?: string }) => Promise<void>;
+  /** The dataset currently loaded in this session -- see OutcomeForm.tsx for
+   *  why passing it through enables auto-filled, dimension-aware scoring. */
+  dataset?: Dataset;
 }
 
-export default function DecisionCard({ reportType, decision, outcome, onLogOutcome }: Props) {
+export default function DecisionCard({ reportType, decision, outcome, onLogOutcome, dataset }: Props) {
   const pctChange =
     outcome?.metricBefore && outcome.metricBefore !== 0 && outcome.metricAfter !== null
       ? (((outcome.metricAfter as number) - outcome.metricBefore) / Math.abs(outcome.metricBefore)) * 100
@@ -93,7 +97,11 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
         <div className="mt-2 space-y-2">
           {/* Metric row */}
           <div className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-sm text-text">
-            <strong>{outcome.metricName}</strong>:{" "}
+            <strong>{outcome.metricName}</strong>
+            {outcome.metricDimension && outcome.metricDimensionValue && (
+              <span className="text-text-mute"> ({outcome.metricDimensionValue})</span>
+            )}
+            :{" "}
             {outcome.metricBefore ?? "—"} → {outcome.metricAfter ?? "—"} {outcome.metricUnit}
             {pctChange !== null && (
               <span className="text-success font-medium">
@@ -111,7 +119,7 @@ export default function DecisionCard({ reportType, decision, outcome, onLogOutco
           <summary className="text-accent text-sm font-medium cursor-pointer">
             📝 Log outcome for {reportType}
           </summary>
-          <OutcomeForm onSubmit={onLogOutcome} />
+          <OutcomeForm onSubmit={onLogOutcome} dataset={dataset} />
         </details>
       )}
     </div>

@@ -1259,3 +1259,261 @@ FROM (VALUES
     ('update_decision_choice(bigint,text,text,text,text)'),
     ('update_decision_due_date(bigint,text,date,text)')
 ) AS f(fn);
+
+-- ============================================================
+-- 21. Decision Drift — structured metric baseline (2026-09)
+--
+-- Root cause of "drift never triggers" (bug report, 2026-09): nixara_outcomes
+-- only ever stored a free-text metric_name plus manually-typed before/after
+-- numbers, with:
+--   1. No requirement that metric_after actually be filled in -- OutcomeForm
+--      let it submit blank, and detectDrift() (lib/drift.ts) silently skips
+--      any outcome whose metric_after is null. A decision recorded, approved
+--      and "scored" with an empty Value AFTER field was therefore invisible
+--      to drift detection forever, with no error or explanation surfaced.
+--   2. No link to WHICH SLICE of the dataset a metric was scored against.
+--      A decision explicitly about "Furniture Category Profit Margin" was
+--      being compared (whenever metric_after WAS filled in) against the
+--      average Profit Margin across the WHOLE dataset -- a different number
+--      that can easily sit under the drift threshold while the actual
+--      Furniture-only figure has moved 25%+.
+--
+-- Additive fix: two new nullable columns capture the slice a metric was
+-- scored on, alongside the metric name/values that already existed. NULL in
+-- both (every pre-existing row) means "whole dataset", which is exactly the
+-- old behavior -- nothing about already-logged outcomes changes.
+--
+-- Applied directly to the live Supabase project via MCP on 2026-09-09.
+-- ============================================================
+
+ALTER TABLE nixara_outcomes ADD COLUMN IF NOT EXISTS metric_dimension       TEXT;
+ALTER TABLE nixara_outcomes ADD COLUMN IF NOT EXISTS metric_dimension_value TEXT;
+
+-- log_outcome_record gains two new trailing params. Same convention as
+-- section 18/20's due_date additions: a changed argument list means DROP,
+-- not just CREATE OR REPLACE, or the old 8-arg signature keeps existing
+-- alongside the new one as a separate overload.
+DROP FUNCTION IF EXISTS log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT);
+
+CREATE OR REPLACE FUNCTION log_outcome_record(
+    p_public_id              TEXT,
+    p_session_id             TEXT,
+    p_metric_name            TEXT,
+    p_metric_before          NUMERIC,
+    p_metric_after           NUMERIC,
+    p_metric_unit            TEXT,
+    p_outcome_rating         TEXT,
+    p_notes                  TEXT DEFAULT '',
+    p_metric_dimension       TEXT DEFAULT NULL,
+    p_metric_dimension_value TEXT DEFAULT NULL
+)
+RETURNS TABLE (id BIGINT, already_existed BOOLEAN)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_decision_id     BIGINT;
+    v_decision_choice TEXT;
+    v_existing_id     BIGINT;
+    v_new_id          BIGINT;
+BEGIN
+    SELECT d.id, d.decision INTO v_decision_id, v_decision_choice
+    FROM nixara_decisions d
+    WHERE d.public_id = p_public_id
+    LIMIT 1;
+
+    IF v_decision_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    IF v_decision_choice IS DISTINCT FROM 'approved' THEN
+        RAISE EXCEPTION 'Outcomes can only be logged for approved decisions (this one is %)', COALESCE(v_decision_choice, 'unset');
+    END IF;
+
+    IF p_outcome_rating IS NULL OR p_outcome_rating NOT IN ('exceeded', 'met', 'missed') THEN
+        RAISE EXCEPTION 'invalid outcome_rating';
+    END IF;
+
+    SELECT o.id INTO v_existing_id
+    FROM nixara_outcomes o
+    WHERE o.decision_id = v_decision_id
+    LIMIT 1;
+
+    IF v_existing_id IS NOT NULL THEN
+        RETURN QUERY SELECT v_existing_id, TRUE;
+        RETURN;
+    END IF;
+
+    INSERT INTO nixara_outcomes (
+        decision_id, session_id, metric_name, metric_before,
+        metric_after, metric_unit, outcome_rating, outcome_notes,
+        metric_dimension, metric_dimension_value
+    ) VALUES (
+        v_decision_id, p_session_id, LEFT(COALESCE(p_metric_name, ''), 200), p_metric_before,
+        p_metric_after, LEFT(COALESCE(p_metric_unit, ''), 40), p_outcome_rating,
+        LEFT(COALESCE(p_notes, ''), 2000),
+        NULLIF(LEFT(COALESCE(p_metric_dimension, ''), 200), ''),
+        NULLIF(LEFT(COALESCE(p_metric_dimension_value, ''), 200), '')
+    )
+    RETURNING nixara_outcomes.id INTO v_new_id;
+
+    RETURN QUERY SELECT v_new_id, FALSE;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT,TEXT,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_outcome_record(TEXT,TEXT,TEXT,NUMERIC,NUMERIC,TEXT,TEXT,TEXT,TEXT,TEXT) TO anon, authenticated;
+
+-- get_outcome_for_public_id gains the two new columns -- return type change,
+-- so DROP + create, same reasoning as above.
+DROP FUNCTION IF EXISTS get_outcome_for_public_id(TEXT);
+
+CREATE OR REPLACE FUNCTION get_outcome_for_public_id(p_public_id TEXT)
+RETURNS TABLE (
+  id BIGINT, metric_name TEXT, metric_before NUMERIC, metric_after NUMERIC,
+  metric_unit TEXT, outcome_rating TEXT, outcome_notes TEXT,
+  metric_dimension TEXT, metric_dimension_value TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT o.id, o.metric_name, o.metric_before, o.metric_after,
+         o.metric_unit, o.outcome_rating, o.outcome_notes,
+         o.metric_dimension, o.metric_dimension_value
+  FROM nixara_outcomes o
+  JOIN nixara_decisions d ON d.id = o.decision_id
+  WHERE d.public_id = p_public_id
+  ORDER BY o.created_at DESC
+  LIMIT 1;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION get_outcome_for_public_id(TEXT) TO anon, authenticated;
+
+-- list_decisions_for_session / list_decisions_for_visitor gain the same two
+-- columns in their outcome_* projection.
+DROP FUNCTION IF EXISTS list_decisions_for_session(TEXT);
+
+CREATE OR REPLACE FUNCTION list_decisions_for_session(p_session_id TEXT)
+RETURNS TABLE (
+  id                             BIGINT,
+  public_id                      TEXT,
+  created_at                     TIMESTAMPTZ,
+  report_type                    TEXT,
+  role                           TEXT,
+  dataset_name                   TEXT,
+  decision                       TEXT,
+  notes                          TEXT,
+  timeframe                      TEXT,
+  question                       TEXT,
+  recommendation                 TEXT,
+  owner                          TEXT,
+  postpone_reason                TEXT,
+  due_date                       DATE,
+  outcome_metric_name            TEXT,
+  outcome_metric_before          NUMERIC,
+  outcome_metric_after           NUMERIC,
+  outcome_metric_unit            TEXT,
+  outcome_rating                 TEXT,
+  outcome_notes                  TEXT,
+  outcome_metric_dimension       TEXT,
+  outcome_metric_dimension_value TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes,
+    o.metric_dimension, o.metric_dimension_value
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.session_id = p_session_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_session(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_session(TEXT) TO anon, authenticated;
+
+DROP FUNCTION IF EXISTS list_decisions_for_visitor(TEXT);
+
+CREATE OR REPLACE FUNCTION list_decisions_for_visitor(p_visitor_id TEXT)
+RETURNS TABLE (
+  id                             BIGINT,
+  public_id                      TEXT,
+  created_at                     TIMESTAMPTZ,
+  report_type                    TEXT,
+  role                           TEXT,
+  dataset_name                   TEXT,
+  decision                       TEXT,
+  notes                          TEXT,
+  timeframe                      TEXT,
+  question                       TEXT,
+  recommendation                 TEXT,
+  owner                          TEXT,
+  postpone_reason                TEXT,
+  due_date                       DATE,
+  outcome_metric_name            TEXT,
+  outcome_metric_before          NUMERIC,
+  outcome_metric_after           NUMERIC,
+  outcome_metric_unit            TEXT,
+  outcome_rating                 TEXT,
+  outcome_notes                  TEXT,
+  outcome_metric_dimension       TEXT,
+  outcome_metric_dimension_value TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_visitor_id IS NULL OR p_visitor_id = '' THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes,
+    o.metric_dimension, o.metric_dimension_value
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.visitor_id = p_visitor_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) TO anon, authenticated;
+
+-- ── Verification — run these and read the output ────────────────────────────
+-- Every row must show 'f' in the public column and 't' in the other two.
+-- (Applied directly to the live Supabase project via MCP on 2026-09-09 and
+-- verified with these same checks plus a smoke test of the drift.test.ts
+-- suite exercising the whole-dataset and dimension-sliced comparison paths.)
+SELECT
+    f.fn,
+    has_function_privilege('public',        f.fn, 'EXECUTE') AS public_can_execute,
+    has_function_privilege('anon',          f.fn, 'EXECUTE') AS anon_can_execute,
+    has_function_privilege('authenticated', f.fn, 'EXECUTE') AS auth_can_execute
+FROM (VALUES
+    ('log_outcome_record(text,text,text,numeric,numeric,text,text,text,text,text)'),
+    ('get_outcome_for_public_id(text)'),
+    ('list_decisions_for_session(text)'),
+    ('list_decisions_for_visitor(text)')
+) AS f(fn);

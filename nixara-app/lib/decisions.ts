@@ -109,6 +109,13 @@ export interface LogOutcomeParams {
   metricUnit: string;
   outcomeRating: OutcomeRating;
   notes?: string;
+  /**
+   * Decision Drift baseline slice -- see the matching field on RecordedOutcome
+   * (lib/session-context.tsx) for why this exists. Optional/null for outcomes
+   * logged with no dataset loaded (cross-session lookup, Decision Inbox).
+   */
+  metricDimension?: string | null;
+  metricDimensionValue?: string | null;
 }
 
 export interface LoggedOutcome {
@@ -151,6 +158,8 @@ export async function logOutcome(params: LogOutcomeParams): Promise<LoggedOutcom
     p_metric_unit:    params.metricUnit,
     p_outcome_rating: params.outcomeRating,
     p_notes:          params.notes ?? "",
+    p_metric_dimension:       params.metricDimension ?? null,
+    p_metric_dimension_value: params.metricDimensionValue ?? null,
   });
   if (error || !data) return null;
   const row = Array.isArray(data) ? data[0] : data;
@@ -231,6 +240,10 @@ export interface OutcomeRow {
   metric_unit: string;
   outcome_rating: string;
   outcome_notes: string;
+  /** Decision Drift baseline slice -- see RecordedOutcome. Null for outcomes
+   *  logged before this existed, or with no dataset loaded. */
+  metric_dimension: string | null;
+  metric_dimension_value: string | null;
 }
 
 /**
@@ -302,6 +315,8 @@ export async function fetchDecisionsForSession(sessionId: string): Promise<Decis
           metric_unit: row.outcome_metric_unit as string,
           outcome_rating: row.outcome_rating as string,
           outcome_notes: row.outcome_notes as string,
+          metric_dimension: (row.outcome_metric_dimension as string | null) ?? null,
+          metric_dimension_value: (row.outcome_metric_dimension_value as string | null) ?? null,
         }
       : null,
   }));
@@ -343,6 +358,8 @@ export async function fetchDecisionsForVisitor(visitorId: string): Promise<Decis
           metric_unit: row.outcome_metric_unit as string,
           outcome_rating: row.outcome_rating as string,
           outcome_notes: row.outcome_notes as string,
+          metric_dimension: (row.outcome_metric_dimension as string | null) ?? null,
+          metric_dimension_value: (row.outcome_metric_dimension_value as string | null) ?? null,
         }
       : null,
   }));

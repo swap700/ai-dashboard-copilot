@@ -28,6 +28,17 @@ export interface RecordedOutcome {
   metricAfter: number | null;
   metricUnit: string;
   outcomeRating: OutcomeRating;
+  /**
+   * Decision Drift baseline metadata: the dataset column/value slice this
+   * metric was actually scored against (e.g. dimension="Category",
+   * dimensionValue="Furniture"), captured at outcome-logging time so
+   * lib/drift.ts can compare the SAME slice in a later upload instead of a
+   * whole-dataset aggregate. Undefined/null on both means "whole dataset" --
+   * the only thing outcomes logged before this existed, or logged with no
+   * dataset loaded (cross-session lookup, Decision Inbox), can mean.
+   */
+  metricDimension?: string | null;
+  metricDimensionValue?: string | null;
 }
 
 interface SessionState {
@@ -177,6 +188,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       metricUnit:    outcome.metricUnit,
       outcomeRating: outcome.outcomeRating,
       notes:         outcome.notes,
+      metricDimension:      outcome.metricDimension ?? null,
+      metricDimensionValue: outcome.metricDimensionValue ?? null,
     });
     const next = { ...outcomes, [reportType]: outcome };
     setOutcomes(next);

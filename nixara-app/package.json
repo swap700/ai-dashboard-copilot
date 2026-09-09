@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:security": "node --experimental-strip-types --import ./tests/register.mjs tests/security.test.ts",
     "test:correctness": "node --experimental-strip-types --import ./tests/register.mjs tests/correctness.test.ts",
-    "test": "npm run test:security && npm run test:correctness"
+    "test": "npm run test:security && npm run test:correctness && npm run test:drift",
+    "test:drift": "node --experimental-strip-types --import ./tests/register.mjs tests/drift.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

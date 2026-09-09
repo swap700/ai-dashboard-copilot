@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "@/lib/session-context";
+import { useNixaraStore } from "@/lib/store";
 import { fetchDecisionByPublicId, fetchOutcomeForPublicId, logOutcome, formatDecisionId, type DecisionRow, type OutcomeRow } from "@/lib/decisions";
 import OutcomeForm from "@/components/OutcomeForm";
 import DecisionCard from "@/components/DecisionCard";
@@ -16,6 +17,13 @@ const ACCURACY_BADGE: Record<string, { label: string; bg: string; fg: string }> 
 
 export default function OutcomesPage() {
   const { sessionId, decisions, outcomes, recordOutcome } = useSession();
+  // Decision Drift: the dataset that produced these decisions is guaranteed
+  // to still be the one loaded right now, because handleLoaded() (app/page.tsx)
+  // clears `decisions`/`outcomes` on every new upload -- so it's always safe
+  // to pass it through for auto-fill/slicing. Not used for the cross-session
+  // "find a decision by ID" lookup below, since that decision's dataset may
+  // be a completely different one than whatever is currently loaded.
+  const { dataset } = useNixaraStore();
   const [lookupId, setLookupId] = useState("");
   const [lookupResult, setLookupResult] = useState<DecisionRow | null>(null);
   const [lookupOutcome, setLookupOutcome] = useState<OutcomeRow | null | "none">(null);
@@ -57,6 +65,12 @@ export default function OutcomesPage() {
       metricUnit: outcome.metricUnit,
       outcomeRating: outcome.outcomeRating,
       notes: outcome.notes,
+      // No dataset is passed to this OutcomeForm (see note above the
+      // useNixaraStore call), so these are always null in practice -- wired
+      // through anyway so a future dataset-aware version of this form works
+      // without another round of RPC/type plumbing.
+      metricDimension: outcome.metricDimension ?? null,
+      metricDimensionValue: outcome.metricDimensionValue ?? null,
     });
     setLookupOutcomeLogged(true);
   };
@@ -80,6 +94,7 @@ export default function OutcomesPage() {
               decision={decisions[type]!}
               outcome={outcomes[type]}
               onLogOutcome={(outcome) => recordOutcome(type, outcome)}
+              dataset={dataset ?? undefined}
             />
           ))}
         </div>
@@ -134,7 +149,11 @@ export default function OutcomesPage() {
               // Already has an outcome — show it read-only
               <div className="space-y-2">
                 <div className="bg-success-bg border border-success-border rounded-lg px-4 py-3 text-sm text-text">
-                  <strong>{lookupOutcome.metric_name}</strong>:{" "}
+                  <strong>{lookupOutcome.metric_name}</strong>
+                  {lookupOutcome.metric_dimension && lookupOutcome.metric_dimension_value && (
+                    <span className="text-text-mute"> ({lookupOutcome.metric_dimension_value})</span>
+                  )}
+                  :{" "}
                   {lookupOutcome.metric_before ?? "—"} → {lookupOutcome.metric_after ?? "—"}{" "}
                   {lookupOutcome.metric_unit}
                   {lookupOutcome.metric_before && lookupOutcome.metric_before !== 0 && lookupOutcome.metric_after !== null && (

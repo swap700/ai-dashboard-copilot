@@ -32,6 +32,11 @@ export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged,
       metricUnit: o.metricUnit,
       outcomeRating: o.outcomeRating,
       notes: o.notes,
+      // Decision Inbox lists decisions from any past session/day, so this
+      // form isn't given the currently loaded dataset (see OutcomeForm.tsx) --
+      // these are always null in practice, wired through for consistency.
+      metricDimension: o.metricDimension ?? null,
+      metricDimensionValue: o.metricDimensionValue ?? null,
     });
     onOutcomeLogged(item.publicId, o);
   };

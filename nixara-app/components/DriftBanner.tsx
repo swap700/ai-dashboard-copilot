@@ -12,10 +12,17 @@ export default function DriftBanner({ flags }: { flags: DriftFlag[] }) {
       {flags.map((f) => (
         <div key={f.reportType} className="text-text text-xs leading-relaxed">
           <p>
-            <strong>{f.matchedColumn}</strong> was logged at{" "}
+            <strong>{f.matchedColumn}</strong>
+            {f.dimension && f.dimensionValue && (
+              <>
+                {" "}for <strong>{f.dimensionValue}</strong> ({f.dimension})
+              </>
+            )}{" "}
+            was logged at{" "}
             <strong>{f.priorValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> for your{" "}
             {f.reportType} decision (&quot;{f.decisionQuestion}&quot;). This new data shows{" "}
-            <strong>{f.currentValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong> — a{" "}
+            <strong>{f.currentValue.toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong>
+            {f.dimension && f.dimensionValue ? ` for ${f.dimensionValue} — a` : " — a"}{" "}
             <strong>
               {f.pctChange > 0 ? "+" : ""}
               {f.pctChange.toFixed(1)}%

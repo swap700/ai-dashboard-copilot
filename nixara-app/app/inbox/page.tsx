@@ -59,6 +59,8 @@ function InboxPageInner() {
                     metric_unit: outcome.metricUnit,
                     outcome_rating: outcome.outcomeRating,
                     outcome_notes: outcome.notes ?? "",
+                    metric_dimension: outcome.metricDimension ?? null,
+                    metric_dimension_value: outcome.metricDimensionValue ?? null,
                   },
                 }
               : r
