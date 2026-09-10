@@ -140,11 +140,30 @@ interface GenerateResult {
   truncated: boolean;
 }
 
-async function generate(apiKey: string, prompt: string): Promise<GenerateResult> {
+/**
+ * BUG FIX (2026-09): Risk Report structurally has more to say than the other
+ * two report types — 3 full risk objects (name + Likelihood + Impact +
+ * Signal + Consequence + type tag), plus 3-4 Early Warning Signs, plus one
+ * Mitigation Action per risk, plus a Data Quality paragraph. A single shared
+ * ceiling sized for Executive Summary/Operational Detail leaves Risk Report
+ * the most exposed to truncation, and — because Mitigation Actions and Data
+ * Quality Risks are the LAST sections in its prompt — that's exactly the
+ * content most likely to come back missing when the model runs long
+ * elsewhere in the same response (e.g. verbose Signal/Consequence prose).
+ * Reported symptom before this fix: "sometimes I don't see recommendations
+ * in the Risk Report" with no truncation warning shown — consistent with the
+ * model finishing within 1600 tokens on most datasets but not all.
+ */
+function maxTokensFor(reportType: ReportType): number {
+  return reportType === "Risk Report" ? 2200 : OPENAI_MAX_TOKENS;
+}
+
+async function generate(apiKey: string, prompt: string, reportType: ReportType): Promise<GenerateResult> {
   const client = new OpenAI({ apiKey, timeout: OPENAI_TIMEOUT_MS, maxRetries: 1 });
+  const maxTokens = maxTokensFor(reportType);
   const response = await client.chat.completions.create({
     model:      "gpt-4o",
-    max_tokens: OPENAI_MAX_TOKENS,
+    max_tokens: maxTokens,
     messages:   [{ role: "user", content: prompt }],
   });
 
@@ -156,9 +175,9 @@ async function generate(apiKey: string, prompt: string): Promise<GenerateResult>
 
   if (truncated) {
     console.warn(
-      `[generate-report] Output truncated at max_tokens=${OPENAI_MAX_TOKENS} ` +
+      `[generate-report] Output truncated at max_tokens=${maxTokens} for ${reportType} ` +
         `(completion_tokens=${response.usage?.completion_tokens ?? "unknown"}). ` +
-        "If this recurs, raise the ceiling or tighten the prompt's length rule."
+        "If this recurs, raise the ceiling further or tighten the prompt's length rule."
     );
   }
 
@@ -218,7 +237,7 @@ export async function POST(req: NextRequest) {
   // ── Own key / admin tier: no spend gate, the caller pays ─────────────────
   if (tier !== "free") {
     try {
-      const { text, truncated } = await generate(apiKey, prompt);
+      const { text, truncated } = await generate(apiKey, prompt, reportType);
       void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
       return NextResponse.json({ text, tier, truncated });
     } catch (err) {
@@ -321,7 +340,7 @@ export async function POST(req: NextRequest) {
 
   // ── Cleared to spend ─────────────────────────────────────────────────────
   try {
-    const { text, truncated } = await generate(apiKey, prompt);
+    const { text, truncated } = await generate(apiKey, prompt, reportType);
 
     const updatedSessions = isNewSession && sessionId ? [...sessions, sessionId] : sessions;
     const freeRemaining = Math.max(0, FREE_LIMIT - updatedSessions.length);

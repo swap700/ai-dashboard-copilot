@@ -7,22 +7,43 @@ import type { EvidenceResult } from "@/lib/evidence";
 /**
  * Shared inline number/currency emphasis, used everywhere body text renders.
  *
- * BUG FIX (2026-08): this used to only be applied via the generic "prose"
- * fallback path (unhandled headings like "Performance Breakdown"), which
- * made it look inconsistent — Performance Breakdown got bold numbers "by
- * accident" while Efficiency Gaps, Quick Wins, Mitigation Actions etc. never
- * did, since each of those sections' components rendered raw {text} instead
- * of routing through this. Now used uniformly everywhere a value renders.
+ * BUG FIX (2026-09): two issues, same underlying cause. (1) The number
+ * pattern only recognized $X,XXX.XX and NN.N% — a bare figure like
+ * "13,157.00 hours" was invisible to this function entirely and rendered as
+ * plain, unstyled text, inconsistent with every other cited number in the
+ * same report. (2) A figure Evidence Trail had already flagged as
+ * "unverified" was still bolded identically to a verified one — the badge
+ * sat beside it, but the number itself carried the same visual authority as
+ * a correct figure, which undersells the warning to anyone skimming rather
+ * than reading closely. Both are fixed together: the pattern now matches
+ * bare decimals too, and an optional `evidence` param lets a caller mark the
+ * one figure it already checked so THAT figure — not verified ones, not
+ * other numbers in the same sentence — renders struck through instead of
+ * bolded.
  */
-function emphasizeParts(text: string): React.ReactNode[] {
-  const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%)/g);
-  return parts.map((p, i) =>
-    /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$/.test(p) ? (
-      <b key={i} className="text-accent-dk font-semibold">{p}</b>
-    ) : (
-      <span key={i}>{p}</span>
-    )
-  );
+function emphasizeParts(text: string, evidence?: EvidenceResult): React.ReactNode[] {
+  const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b\d+\.\d{1,2}\b)/g);
+  let flagged = false;
+  return parts.map((p, i) => {
+    const isNumeric = /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$|^\d+\.\d{1,2}$/.test(p);
+    if (!isNumeric) return <span key={i}>{p}</span>;
+    // Evidence Trail only ever examines the first cited figure in a field
+    // (see findEvidence) — mirror that here so only that one figure, not
+    // every number downstream of it, gets the unverified treatment.
+    if (evidence?.status === "unverified" && !flagged) {
+      flagged = true;
+      return (
+        <s
+          key={i}
+          title="Nixara could not verify this figure against your data"
+          className="text-danger font-semibold decoration-danger decoration-2"
+        >
+          {p}
+        </s>
+      );
+    }
+    return <b key={i} className="text-accent-dk font-semibold">{p}</b>;
+  });
 }
 
 function Prose({ text }: { text: string }) {
@@ -191,12 +212,21 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
         {items.map((item, i) => (
           <div key={i} className="bg-success-bg border border-success-border rounded-lg p-3.5">
             {item.stat && (
-              <div className="text-2xl font-extrabold text-success mb-1 flex items-center flex-wrap">
-                {item.stat}
-                <EvidenceTag result={item.evidence} />
-              </div>
+              item.evidence.status === "unverified" ? (
+                <div className="flex items-center flex-wrap gap-1 mb-1">
+                  <s className="text-lg font-semibold text-text-mute decoration-danger decoration-2" title="Nixara could not verify this figure against your data">
+                    {item.stat}
+                  </s>
+                  <EvidenceTag result={item.evidence} />
+                </div>
+              ) : (
+                <div className="text-2xl font-extrabold text-success mb-1 flex items-center flex-wrap">
+                  {item.stat}
+                  <EvidenceTag result={item.evidence} />
+                </div>
+              )
             )}
-            <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body)}</div>
+            <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body, item.evidence)}</div>
           </div>
         ))}
       </div>
@@ -267,13 +297,13 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
             </div>
             {risk.signal && (
               <div className="text-[0.85rem] leading-snug mb-1">
-                <span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal)}
+                <span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal, risk.signalEvidence)}
                 <EvidenceTag result={risk.signalEvidence} />
               </div>
             )}
             {risk.consequence && (
               <div className="text-[0.85rem] leading-snug">
-                <span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence)}
+                <span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence, risk.consequenceEvidence)}
                 <EvidenceTag result={risk.consequenceEvidence} />
               </div>
             )}
