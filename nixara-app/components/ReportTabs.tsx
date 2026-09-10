@@ -147,6 +147,21 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
               </div>
             )}
 
+            {current.corrected && (
+              <div
+                className="rounded-lg border border-success-border bg-success-bg px-4 py-3 mb-4"
+                role="status"
+              >
+                <p className="text-success text-sm font-semibold mb-0.5">
+                  Nixara double-checked this report before showing it to you.
+                </p>
+                <p className="text-text-mute text-sm">
+                  One or more figures in the first draft didn&apos;t match your uploaded data, so
+                  Nixara asked the model to correct itself before this version was returned.
+                </p>
+              </div>
+            )}
+
             <ReportVisualBody sections={buildVisualSections(current.text, active, evidenceFacts, qualityScore)} />
 
             <div className="grid grid-cols-2 gap-3 mt-4">

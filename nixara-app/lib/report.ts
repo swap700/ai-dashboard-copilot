@@ -15,6 +15,8 @@ export const REPORT_TYPES: ReportType[] = [
 export interface GeneratedReport {
   text: string;
   truncated: boolean;
+  /** True if a fabricated figure was caught and an automatic correction pass replaced this text before it was ever shown. */
+  corrected: boolean;
 }
 
 /**

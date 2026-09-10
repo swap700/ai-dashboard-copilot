@@ -163,3 +163,55 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   }
   return { status: "none" };
 }
+
+/**
+ * Whole-report verification for the server-side generate → verify → correct
+ * loop (generate-report/route.ts) — a different job from findEvidence()
+ * above, which only ever examines the first number in one short pre-parsed
+ * field (a single Signal, Consequence, or Quick Win stat) for the on-screen
+ * badge. This scans every line of the full report text and checks EVERY
+ * numeric claim on that line, not just the first — a fabricated second
+ * figure sharing a sentence with a correct first figure would otherwise be
+ * invisible to the per-field check entirely (confirmed gap: Risk #3's
+ * Signal in an earlier real report cited two figures, "12.71" and "12.11",
+ * and only the first was ever examined).
+ *
+ * Returns the full text of every line containing at least one unverified
+ * figure, deduplicated, so a correction prompt has real sentence context —
+ * not an isolated number with no surrounding meaning — to work with.
+ */
+export function findUnverifiedLines(text: string, facts: EvidenceFact[]): string[] {
+  const NUMBER_PATTERN = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b\d+\.\d{1,2}\b/g;
+  const flagged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || seen.has(line)) continue;
+
+    const matches = [...line.matchAll(NUMBER_PATTERN)];
+    if (matches.length === 0) continue;
+
+    const hasUnverified = matches.some((m) => {
+      const token = m[0];
+      let value: number;
+      let isPercent = false;
+      if (token.startsWith("$")) {
+        value = Number(token.slice(1).replace(/,/g, ""));
+      } else if (token.endsWith("%")) {
+        value = Number(token.slice(0, -1));
+        isPercent = true;
+      } else {
+        value = Number(token);
+      }
+      return !facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value));
+    });
+
+    if (hasUnverified) {
+      seen.add(line);
+      flagged.push(line);
+    }
+  }
+
+  return flagged;
+}

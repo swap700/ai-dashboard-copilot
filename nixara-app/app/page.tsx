@@ -14,6 +14,7 @@ import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
 import DriftBanner from "@/components/DriftBanner";
 import { buildDataSummary, dashboardScoreBreakdown, numericColumns } from "@/lib/data-analysis";
+import { buildEvidenceFacts } from "@/lib/evidence";
 import type { Dataset } from "@/lib/data-analysis";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
@@ -100,6 +101,13 @@ export default function DashboardPage() {
     setError(null);
     try {
       const summary = buildDataSummary(dataset);
+      // Computed once per click, reused across all 3 report-type requests -
+      // this is the SAME aggregate-only data (column means/sums/breakdowns,
+      // never raw rows) already used for the on-screen "unverified" badges;
+      // sending it lets the server run the identical check and give the
+      // model one chance to correct a fabricated figure before the report
+      // is ever shown, instead of only flagging it after the fact.
+      const evidenceFacts = buildEvidenceFacts(dataset);
 
       // One UUID per button click - shared across all report-type calls so the
       // server counts this as a single generate SESSION, not 3 separate uses.
@@ -117,6 +125,7 @@ export default function DashboardPage() {
             summary,
             userKey: apiKey,
             sessionId,
+            evidenceFacts,
           }),
         });
         const data = await res.json();
@@ -136,12 +145,12 @@ export default function DashboardPage() {
           err.status = res.status;
           throw err;
         }
-        return { text: data.text as string, truncated: Boolean(data.truncated) };
+        return { text: data.text as string, truncated: Boolean(data.truncated), corrected: Boolean(data.corrected) };
       };
 
       const results: ReportSet = {};
       const failures: ReportFailures = {};
-      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean }>) => {
+      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean; corrected: boolean }>) => {
         if (outcome.status === "fulfilled") results[type] = outcome.value;
         else failures[type] = outcome.reason?.message ?? "Report generation failed.";
       };
