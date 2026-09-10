@@ -17,7 +17,7 @@
  */
 
 import { parseReportLines, type ReportLine, type ReportType } from "./report";
-import { findEvidence, type EvidenceFact } from "./evidence";
+import { findEvidence, type EvidenceFact, type EvidenceResult } from "./evidence";
 
 export type Severity = "low" | "medium" | "high";
 
@@ -39,8 +39,8 @@ export interface ProcessItem {
 export interface QuickWinItem {
   stat: string | null; // e.g. "34%" or "$1,234.56"
   body: string;
-  /** Evidence Trail: where `stat` came from in the uploaded dataset, if a match was found. */
-  evidence: EvidenceFact | null;
+  /** Evidence Trail: whether `stat` traces to something real in the uploaded dataset. */
+  evidence: EvidenceResult;
 }
 
 export interface RiskCard {
@@ -50,9 +50,9 @@ export interface RiskCard {
   signal: string | null;
   consequence: string | null;
   type: "Strategic Risk" | "Operational Risk" | null;
-  /** Evidence Trail: source for the number cited in `signal` / `consequence`, if a match was found. */
-  signalEvidence: EvidenceFact | null;
-  consequenceEvidence: EvidenceFact | null;
+  /** Evidence Trail: whether the number cited in `signal` / `consequence` traces to something real. */
+  signalEvidence: EvidenceResult;
+  consequenceEvidence: EvidenceResult;
 }
 
 export interface MitigationItem {
@@ -241,7 +241,7 @@ function parseSection(
           .filter((t): t is string => t !== null)
           .map((body) => {
             const stat = extractFirstStat(body);
-            return { stat, body, evidence: stat ? findEvidence(stat, evidenceFacts) : null };
+            return { stat, body, evidence: stat ? findEvidence(stat, evidenceFacts) : { status: "none" as const } };
           }),
       };
 
@@ -257,8 +257,8 @@ function parseSection(
           signal: c.signal ?? null,
           consequence: c.consequence ?? null,
           type: c.type ?? null,
-          signalEvidence: c.signal ? findEvidence(c.signal, evidenceFacts) : null,
-          consequenceEvidence: c.consequence ? findEvidence(c.consequence, evidenceFacts) : null,
+          signalEvidence: c.signal ? findEvidence(c.signal, evidenceFacts) : { status: "none" as const },
+          consequenceEvidence: c.consequence ? findEvidence(c.consequence, evidenceFacts) : { status: "none" as const },
         });
       };
 

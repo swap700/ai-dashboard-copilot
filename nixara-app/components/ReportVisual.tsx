@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
-import type { EvidenceFact } from "@/lib/evidence";
+import type { EvidenceResult } from "@/lib/evidence";
 
 /**
  * Shared inline number/currency emphasis, used everywhere body text renders.
@@ -30,13 +30,41 @@ function Prose({ text }: { text: string }) {
 }
 
 /**
- * Evidence Trail's "click a number, see its source" affordance. Only renders
- * when report-visual.ts's evidence matching actually found something — a
- * cited figure with no match renders as an ordinary number via
- * emphasizeParts() above, never as a broken or misleading link.
+ * Evidence Trail's "click a number, see its source" affordance — now with a
+ * third state. "matched" renders the original green source tag. "none"
+ * renders nothing (no specific figure was present to check). "unverified" —
+ * a specific figure WAS cited but nothing in the real data matches it — now
+ * renders its own visible amber warning, instead of silently looking
+ * identical to "none". That silence is exactly what let a fabricated figure
+ * ("average experience of 11.70 years", traced back to no real subgroup in
+ * the dataset) pass through unflagged in an earlier report.
  */
-function EvidenceTag({ fact }: { fact: EvidenceFact }) {
+function EvidenceTag({ result }: { result: EvidenceResult }) {
   const [open, setOpen] = useState(false);
+
+  if (result.status === "none") return null;
+
+  if (result.status === "unverified") {
+    return (
+      <span className="inline-block align-middle ml-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          title="Nixara could not verify this figure against your data"
+          className="text-[0.68rem] font-semibold text-danger border border-danger-border bg-danger-bg rounded-full px-1.5 py-0 hover:bg-danger hover:text-white transition-colors align-middle"
+        >
+          {"\u26A0"} unverified
+        </button>
+        {open && (
+          <span className="block text-[0.78rem] text-text-mute bg-bg border border-border rounded-lg px-2.5 py-1.5 mt-1 max-w-sm">
+            This figure doesn&apos;t match anything Nixara computed from your uploaded data — treat it with caution before acting on it.
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  const fact = result.fact;
   return (
     <span className="inline-block align-middle ml-1.5">
       <button
@@ -165,7 +193,7 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
             {item.stat && (
               <div className="text-2xl font-extrabold text-success mb-1 flex items-center flex-wrap">
                 {item.stat}
-                {item.evidence && <EvidenceTag fact={item.evidence} />}
+                <EvidenceTag result={item.evidence} />
               </div>
             )}
             <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body)}</div>
@@ -240,13 +268,13 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
             {risk.signal && (
               <div className="text-[0.85rem] leading-snug mb-1">
                 <span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal)}
-                {risk.signalEvidence && <EvidenceTag fact={risk.signalEvidence} />}
+                <EvidenceTag result={risk.signalEvidence} />
               </div>
             )}
             {risk.consequence && (
               <div className="text-[0.85rem] leading-snug">
                 <span className="text-text-mute">Consequence:</span> {emphasizeParts(risk.consequence)}
-                {risk.consequenceEvidence && <EvidenceTag fact={risk.consequenceEvidence} />}
+                <EvidenceTag result={risk.consequenceEvidence} />
               </div>
             )}
           </div>

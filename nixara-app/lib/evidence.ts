@@ -12,13 +12,17 @@
  * generated (lib/data-analysis.ts), then matches a cited figure against them
  * by value.
  *
- * This is necessarily best-effort, not a guarantee. A match requires the
- * cited figure to equal (within rounding) something Nixara actually computed
- * — true for the large majority of cited figures, since the prompts instruct
- * the model to cite the provided numbers rather than invent new ones, but not
- * airtight against paraphrased or derived figures. Where no match is found,
- * the caller renders the number as an ordinary, unlinked figure — never an
- * error and never a false claim of traceability.
+ * This is necessarily best-effort, not a guarantee in either direction. A
+ * match requires the cited figure to equal (within rounding) something
+ * Nixara actually computed — true for the large majority of cited figures,
+ * since the prompts instruct the model to cite the provided numbers rather
+ * than invent new ones, but not airtight against paraphrased or derived
+ * figures, which will read as "unverified" even though they may be correct.
+ * Conversely, a numeric match within tolerance doesn't prove the model's
+ * surrounding claim about that number is accurate — only that the number
+ * itself traces back to something real. Treat "matched" as "this figure is
+ * real," "unverified" as "this figure needs a second look," and neither as
+ * a verdict on the sentence around it.
  */
 
 import {
@@ -110,24 +114,52 @@ function closeEnough(a: number, b: number): boolean {
   return Math.abs(a - b) < 0.05;
 }
 
+export type EvidenceResult =
+  | { status: "matched"; fact: EvidenceFact }
+  | { status: "unverified" } // a specific figure was cited, but nothing in the real data matches it
+  | { status: "none" };      // no specific figure was present in this text at all
+
 /**
- * Parses ONE cited figure out of `text` using the same pattern already used
- * throughout report-visual.ts / ReportVisual.tsx ($X,XXX.XX or NN.N%), then
- * looks for a fact whose value matches within rounding tolerance. Callers
- * pass a specific extracted field (a Signal, a Consequence, a Quick Win's
- * stat) rather than a whole paragraph, so taking the first match is
- * unambiguous in practice.
+ * Parses ONE cited figure out of `text` ($X,XXX.XX / NN.N% / a bare decimal
+ * like "11.70") and looks for a fact whose value matches within rounding
+ * tolerance. Callers pass a specific extracted field (a Signal, a
+ * Consequence, a Quick Win's stat) rather than a whole paragraph.
+ *
+ * BUG FIX (2026-09): this used to return EvidenceFact | null, which made "no
+ * specific number was in this text" and "a specific number was cited but
+ * doesn't match anything real" indistinguishable to the caller — both just
+ * rendered as an ordinary, unlinked number. That silently let a fabricated
+ * figure ("average experience of 11.70 years" — not present anywhere in the
+ * actual dataset, confirmed by independently recomputing every real subgroup
+ * mean) through with no visual difference from a correct one. The bare-
+ * decimal pattern also didn't previously match at all — only $-amounts and
+ * percentages were checked, so a plain "11.70 years" wasn't even examined.
+ * The distinct "unverified" status lets the UI flag that case specifically,
+ * instead of only ever showing a link when one exists and staying silent
+ * otherwise.
  */
-export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceFact | null {
+export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResult {
   const dollarM = /\$([\d,]+\.\d{2})/.exec(text);
   if (dollarM) {
     const target = Number(dollarM[1].replace(/,/g, ""));
-    return facts.find((f) => !f.isPercent && closeEnough(f.value, target)) ?? null;
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
+    return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   const pctM = /(\d+(?:\.\d+)?)%/.exec(text);
   if (pctM) {
     const target = Number(pctM[1]);
-    return facts.find((f) => f.isPercent && closeEnough(f.value, target)) ?? null;
+    const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target));
+    return fact ? { status: "matched", fact } : { status: "unverified" };
   }
-  return null;
+  // Bare decimal with no $ or % — e.g. "11.70 years", "3.03", "12.47".
+  // Excludes whole integers (no decimal point) since those are far more
+  // likely to be counts/ranks/years-as-labels than a specific measured
+  // figure worth verifying, and would produce too many false positives.
+  const bareM = /\b(\d+\.\d{1,2})\b(?!%)/.exec(text);
+  if (bareM) {
+    const target = Number(bareM[1]);
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
+    return fact ? { status: "matched", fact } : { status: "unverified" };
+  }
+  return { status: "none" };
 }
