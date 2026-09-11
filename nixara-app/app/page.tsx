@@ -234,6 +234,7 @@ export default function DashboardPage() {
             onApiKeyResolved={setApiKey}
             onGenerate={handleGenerate}
             generating={generating}
+            dataset={dataset}
           />
 
           {error && (

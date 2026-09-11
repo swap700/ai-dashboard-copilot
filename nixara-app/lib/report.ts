@@ -85,8 +85,8 @@ Rules: under 500 words. Operational language. Every point references data. The t
   "Risk Report": `Structure your response EXACTLY as:
 
 Top Risks Identified
-(EXACTLY 3 risks. For EACH risk use this format:
-Risk name
+(EXACTLY 3 risks, numbered 1-3. For EACH risk use this format:
+[Number]. Risk name
 Likelihood: High / Medium / Low
 Impact: High / Medium / Low
 Signal: [the specific metric or number from the data that flags this]
@@ -244,12 +244,26 @@ export type ReportLine =
 /**
  * Sections whose numbered items are the primary decision/action options.
  * Items here appear as-is: "1. [This week] …"
+ *
+ * "Top Risks Identified" is NOT in this set even though its risks are the
+ * Risk Report's primary decision options: unlike the other two report types,
+ * its prompt (see REPORT_CONFIGS above) never required the model to number
+ * the risk name itself -- only structured Likelihood/Impact/Signal/
+ * Consequence fields plus a mandatory closing "_Strategic Risk_" /
+ * "_Operational Risk_" tag. Numbered-line extraction therefore found zero
+ * items for every Risk Report, and the recommendation picker (DecisionPanel)
+ * hid itself entirely whenever recs.length === 0. It gets bespoke handling in
+ * parseRecommendations() below, keyed off those mandatory tag lines instead
+ * of numbering -- which the prompt now also requests as reinforcement, but
+ * the parser does not depend on it.
  */
 const PRIMARY_ACTION_SECTIONS = new Set([
   "Recommended Actions",   // Executive Summary
   "Process Recommendations", // Operational Detail
-  "Top Risks Identified",  // Risk Report
 ]);
+
+/** The section whose risks get bespoke tag-boundary extraction (see above). */
+const RISK_SECTION = "Top Risks Identified";
 
 /**
  * Sections whose numbered items are secondary — displayed with a clear prefix
@@ -273,11 +287,49 @@ export function parseRecommendations(reportText: string): string[] {
   const results: string[] = [];
   let currentSection = "";
 
+  // Top Risks Identified state: each risk block runs from the line after the
+  // previous risk's closing tag (or the section heading) through its own
+  // closing "_Strategic Risk_" / "_Operational Risk_" tag line. The first
+  // non-blank content line in a block is the risk name (numbered or not —
+  // either is accepted, since the prompt's numbering is a request, not a
+  // parsing dependency); a later "Signal: ..." line is appended for context.
+  let riskIndex = 0;
+  let riskName: string | null = null;
+  let riskSignal: string | null = null;
+
+  const flushRisk = () => {
+    if (riskName) {
+      riskIndex += 1;
+      results.push(riskSignal ? `${riskIndex}. ${riskName} — ${riskSignal}` : `${riskIndex}. ${riskName}`);
+    }
+    riskName = null;
+    riskSignal = null;
+  };
+
   for (const line of lines) {
     if (line.kind === "heading") {
+      // Defensive: flush a block left open if the model omitted its tag
+      // before moving on (the prompt requires one, but output isn't 100%
+      // reliable — see cleanAiOutput/normalizeCurrency for the same stance).
+      if (currentSection === RISK_SECTION) flushRisk();
       currentSection = line.text;
       continue;
     }
+
+    if (currentSection === RISK_SECTION) {
+      if (line.kind === "tag") {
+        flushRisk();
+      } else if (line.kind === "text" || line.kind === "numbered") {
+        const content = line.kind === "numbered" ? line.text.replace(/^\d+\.\s*/, "") : line.text;
+        if (riskName === null) {
+          riskName = content;
+        } else if (riskSignal === null && /^Signal:/i.test(content)) {
+          riskSignal = content;
+        }
+      }
+      continue;
+    }
+
     if (line.kind !== "numbered") continue;
 
     if (PRIMARY_ACTION_SECTIONS.has(currentSection)) {
@@ -293,6 +345,9 @@ export function parseRecommendations(reportText: string): string[] {
       // Numbered items in unrecognised sections are skipped
     }
   }
+
+  // Flush a trailing risk block that reached end-of-text without another heading.
+  if (currentSection === RISK_SECTION) flushRisk();
 
   return results.slice(0, 10);
 }

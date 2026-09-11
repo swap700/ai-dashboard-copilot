@@ -6,6 +6,7 @@ import { parseRecommendations } from "@/lib/report";
 import type { DecisionChoice } from "@/lib/decisions";
 import { formatDecisionId } from "@/lib/decisions";
 import type { ReportType } from "@/lib/report";
+import type { Dataset } from "@/lib/data-analysis";
 
 interface Props {
   reportType: ReportType;
@@ -15,6 +16,8 @@ interface Props {
   timeframe: string;
   // Task 13: report text so we can parse numbered recommendations
   reportText: string;
+  /** The loaded dataset, so its column names get persisted alongside this decision (see the schema-overlap sanity check, lib/data-analysis.ts's schemaOverlapRatio). Optional -- decisions can still be recorded with no dataset in scope. */
+  dataset?: Dataset | null;
 }
 
 const BADGE: Record<DecisionChoice, { icon: string; label: string; bg: string; fg: string }> = {
@@ -30,7 +33,7 @@ const POSTPONE_REASONS = [
   "Not a priority now",
 ] as const;
 
-export default function DecisionPanel({ reportType, role, datasetName, question, timeframe, reportText }: Props) {
+export default function DecisionPanel({ reportType, role, datasetName, question, timeframe, reportText, dataset }: Props) {
   const { decisions, recordDecision, updateDecision } = useSession();
 
   // Form state
@@ -81,6 +84,7 @@ export default function DecisionPanel({ reportType, role, datasetName, question,
       recommendation: selectedRec ?? undefined,
       postponeReason: overridePostponeReason,
       dueDate: choice === "approved" ? (dueDate || undefined) : undefined,
+      datasetColumns: dataset?.columns,
     });
     setSaving(null);
     setPendingPostpone(false);

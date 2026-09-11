@@ -1,11 +1,14 @@
+import { businessMetricColumns, humanizeColumnName, matchKeywordsToColumns, type Dataset } from "./data-analysis";
+
 /**
  * Decision Templates — a lookup table, not a modeling system. Each template
  * maps a common decision-type to a ready-to-edit decision question plus the
  * metric-name keywords that kind of decision usually turns on. Selecting one
- * pre-fills the Decision Context field in ReportSetup; the keyword list is
- * reused to bias selectChartColumns' relevance scoring (lib/data-analysis.ts)
- * toward the columns that actually matter for that kind of call, on top of
- * whatever overlap the free-text decision already produces.
+ * pre-fills the Decision Context field in ReportSetup via resolveDecisionText
+ * below, which also uses the keyword list to find and name the columns THIS
+ * dataset actually has (see matchKeywordsToColumns in lib/data-analysis.ts) --
+ * so the inserted question is dataset-aware instead of pure boilerplate. The
+ * keyword list is also shown verbatim as the chip's hover tooltip.
  */
 
 export interface DecisionTemplate {
@@ -54,3 +57,23 @@ export const DECISION_TEMPLATES: DecisionTemplate[] = [
     metricKeywords: ["risk", "compliance", "exposure", "incident"],
   },
 ];
+
+/**
+ * Resolves a template's decision text against the currently loaded dataset.
+ * When the dataset has business-metric columns whose names overlap the
+ * template's metricKeywords, the matched column names (humanized) are named
+ * in the inserted text -- so clicking "Pricing / discounting" on a retail
+ * export mentions "Profit Margin, Discount" while the same click on a
+ * healthcare dataset would name whatever cost/price columns THAT data has,
+ * instead of both getting identical generic boilerplate. Falls back to the
+ * template's plain decisionText when there's no dataset yet, or when nothing
+ * in it overlaps this template's keywords at all.
+ */
+export function resolveDecisionText(template: DecisionTemplate, dataset?: Dataset): string {
+  if (!dataset) return template.decisionText;
+  const metricCols = businessMetricColumns(dataset);
+  if (metricCols.length === 0) return template.decisionText;
+  const matches = matchKeywordsToColumns(metricCols, template.metricKeywords, 2);
+  if (matches.length === 0) return template.decisionText;
+  return `${template.decisionText} (Focus: ${matches.map(humanizeColumnName).join(", ")})`;
+}

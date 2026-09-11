@@ -52,6 +52,13 @@ export interface LogDecisionParams {
   // the tab-lifetime sessionId -- see lib/visitor.ts. Optional so this keeps
   // working if Supabase is unconfigured or the caller has no visitor id yet.
   visitorId?: string;
+  /**
+   * The loaded dataset's column names at the moment this decision was
+   * recorded -- a schema fingerprint used to sanity-check dataset identity
+   * later (see schemaOverlapRatio, lib/data-analysis.ts). Optional: only
+   * ReportTabs (where a dataset is actually in scope) supplies it.
+   */
+  datasetColumns?: string[];
 }
 
 export interface LoggedDecision {
@@ -88,6 +95,7 @@ export async function logDecisionRecord(params: LogDecisionParams): Promise<Logg
     p_postpone_reason: params.postponeReason ?? null,
     p_due_date:        params.dueDate ?? null,
     p_visitor_id:      params.visitorId ?? null,
+    p_dataset_columns: params.datasetColumns && params.datasetColumns.length > 0 ? params.datasetColumns.join("|") : null,
   });
   if (error || !data) return null;
   // RPC returns an array — unwrap the first row.
@@ -277,6 +285,8 @@ export interface DecisionWithOutcome {
   owner: string | null;
   postponeReason: string | null;
   dueDate: string | null;
+  /** The original dataset's column names, "|"-joined -- see schemaOverlapRatio (lib/data-analysis.ts). Null for decisions logged before this existed, or with no dataset in scope. */
+  datasetColumns: string[] | null;
   outcome: OutcomeRow | null;
 }
 
@@ -306,6 +316,7 @@ export async function fetchDecisionsForSession(sessionId: string): Promise<Decis
     owner: row.owner as string | null,
     postponeReason: row.postpone_reason as string | null,
     dueDate: row.due_date as string | null,
+    datasetColumns: row.dataset_columns ? (row.dataset_columns as string).split("|") : null,
     outcome: row.outcome_metric_name
       ? {
           id: 0,
@@ -349,6 +360,7 @@ export async function fetchDecisionsForVisitor(visitorId: string): Promise<Decis
     owner: row.owner as string | null,
     postponeReason: row.postpone_reason as string | null,
     dueDate: row.due_date as string | null,
+    datasetColumns: row.dataset_columns ? (row.dataset_columns as string).split("|") : null,
     outcome: row.outcome_metric_name
       ? {
           id: 0,

@@ -135,6 +135,55 @@ function relevanceScore(questionTokens: Set<string>, columnName: string): number
   return score;
 }
 
+/**
+ * Generic keyword-to-column matcher: scores every candidate column against a
+ * fixed keyword list using the same token-overlap approach as the free-text
+ * relevance scoring above, instead of a user-typed decision question. No
+ * per-dataset or per-domain special-casing -- whatever overlaps, overlaps.
+ * Used by lib/decision-templates.ts so a Common Decision chip can name the
+ * columns THIS dataset actually has, rather than only ever inserting the same
+ * generic boilerplate text regardless of what was uploaded.
+ */
+export function matchKeywordsToColumns(columns: string[], keywords: string[], limit = 2): string[] {
+  const keywordTokens = new Set(keywords.flatMap((k) => tokenize(k)));
+  if (keywordTokens.size === 0) return [];
+  return columns
+    .map((col) => ({ col, score: relevanceScore(keywordTokens, col) }))
+    .filter((s) => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => s.col);
+}
+
+/**
+ * Fraction of `originalColumns` still present in `newColumns` (exact match,
+ * case/whitespace-insensitive). This is a cheap dataset-identity sanity
+ * check, not a lineage guarantee: Nixara currently identifies "the same
+ * dataset" across an upload/session boundary purely by filename, so two
+ * uploads that happen to share a name but hold genuinely different data
+ * (e.g. two different exports both called "monthly_data.csv") could
+ * otherwise be silently treated as one continuous dataset for outcome
+ * auto-fill / Decision Drift baselines. Before trusting a filename match,
+ * callers (see app/inbox/page.tsx) also require the new dataset's schema to
+ * overlap the original's by at least SCHEMA_OVERLAP_THRESHOLD.
+ *
+ * Deliberately simple: it will not catch a dataset that was reshaped but
+ * kept identical column names, and it may reject a legitimately-evolved
+ * export that renamed or dropped several columns. A real fix is a persisted
+ * dataset identity (content hash or an explicit versioned-dataset system);
+ * this narrows the failure window without requiring that larger change.
+ */
+export function schemaOverlapRatio(originalColumns: string[], newColumns: string[]): number {
+  if (originalColumns.length === 0) return 0;
+  const normalize = (c: string) => c.trim().toLowerCase();
+  const newSet = new Set(newColumns.map(normalize));
+  const matched = originalColumns.filter((c) => newSet.has(normalize(c))).length;
+  return matched / originalColumns.length;
+}
+
+/** Minimum schemaOverlapRatio() to treat two same-named uploads as "the same dataset" for auto-fill purposes. */
+export const SCHEMA_OVERLAP_THRESHOLD = 0.8;
+
 export interface ChartColumnSelection {
   category: string | null;
   metrics: string[]; // up to 2, ordered by relevance/priority
@@ -457,7 +506,37 @@ export function aggregateBy(
 export interface ChartSpec {
   type: "bar" | "pie" | "area" | "treemap";
   title: string;
+  /**
+   * Human-readable label for the metric this chart's values represent --
+   * used as the Bar/Area series `name` in Charts.tsx. Recharts falls back to
+   * the literal dataKey ("value") as the tooltip/legend label when no `name`
+   * is given, which is why hovering a bar previously showed "value : 12.95"
+   * instead of e.g. "Years Experience : 12.95".
+   */
+  metricLabel: string;
   data: { key: string; value: number }[];
+}
+
+/**
+ * Turns a raw column name into a human-readable label for DISPLAY ONLY
+ * (chart titles, tooltip/legend names) -- never used for data lookups,
+ * which must keep using the dataset's real column names verbatim.
+ *
+ * Only capitalizes a word's first letter when it's currently lowercase, and
+ * never forces the rest of a word to lowercase -- so "years_experience"
+ * becomes "Years Experience", but an already-clean name like "Profit Margin"
+ * passes through unchanged and an acronym or proper noun inside a name
+ * (e.g. "Customer ID", "State/Province") is never mangled.
+ */
+export function humanizeColumnName(name: string): string {
+  const spaced = name
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2");
+  return spaced
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => (w[0] === w[0].toLowerCase() ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }
 
 /**
@@ -533,7 +612,12 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
   if (dateCol && primaryMetric) {
     const data = bucketByMonth(dataset, dateCol, primaryMetric);
     if (data.length >= 2) {
-      specs.push({ type: "area", title: `${primaryMetric} over time (by ${dateCol})`, data });
+      specs.push({
+        type: "area",
+        title: `${humanizeColumnName(primaryMetric)} over time (by ${humanizeColumnName(dateCol)})`,
+        metricLabel: humanizeColumnName(primaryMetric),
+        data,
+      });
     }
   }
 
@@ -547,7 +631,12 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
     if (cardinality >= 2 && cardinality <= 6 && !hasNegative) type = "pie";
     else if (cardinality > 12 && !hasNegative) type = "treemap";
 
-    specs.push({ type, title: `${metric} by ${category}`, data });
+    specs.push({
+      type,
+      title: `${humanizeColumnName(metric)} by ${humanizeColumnName(category)}`,
+      metricLabel: humanizeColumnName(metric),
+      data,
+    });
   }
 
   return specs.slice(0, maxCharts);

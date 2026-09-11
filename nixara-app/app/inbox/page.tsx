@@ -8,6 +8,7 @@ import { fetchDecisionsForVisitor, type DecisionWithOutcome } from "@/lib/decisi
 import type { RecordedOutcome } from "@/lib/session-context";
 import { buildInbox } from "@/lib/inbox";
 import InboxCard from "@/components/InboxCard";
+import { schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD } from "@/lib/data-analysis";
 
 function InboxPageInner() {
   const { visitorId, sessionId } = useSession();
@@ -17,8 +18,25 @@ function InboxPageInner() {
   // against -- unlike the Outcomes page's "This Session" list, which is
   // always in sync (see app/outcomes/page.tsx). Only hand the dataset to an
   // InboxCard when its stored dataset_name matches what's actually loaded
-  // right now, so auto-fill/slicing never runs against the wrong file.
+  // right now AND enough of its original columns are still present (see
+  // isSameDataset below) -- a filename match alone isn't proof it's the same
+  // data (two uploads can share a name and be completely different exports),
+  // so auto-fill/slicing never runs against a dataset that merely looks right.
   const { dataset, fileName } = useNixaraStore();
+
+  /**
+   * True when `item` is safe to treat as "the currently loaded dataset" for
+   * outcome auto-fill / drift-baseline purposes: same filename, AND (when the
+   * item has a persisted column list to check against -- older decisions,
+   * logged before this existed, won't) the loaded dataset's schema overlaps
+   * it by at least SCHEMA_OVERLAP_THRESHOLD. See schemaOverlapRatio's doc
+   * comment (lib/data-analysis.ts) for what this does and doesn't catch.
+   */
+  const isSameDataset = (item: DecisionWithOutcome): boolean => {
+    if (!dataset || item.datasetName !== fileName) return false;
+    if (!item.datasetColumns || item.datasetColumns.length === 0) return true; // nothing to check against -- fall back to the filename match
+    return schemaOverlapRatio(item.datasetColumns, dataset.columns) >= SCHEMA_OVERLAP_THRESHOLD;
+  };
   const [rows, setRows] = useState<DecisionWithOutcome[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -125,7 +143,7 @@ function InboxPageInner() {
               visitorId={visitorId}
               onOutcomeLogged={handleOutcomeLogged}
               onDueDateChanged={handleDueDateChanged}
-              dataset={item.datasetName === fileName ? (dataset ?? undefined) : undefined}
+              dataset={isSameDataset(item) ? (dataset ?? undefined) : undefined}
             />
           </div>
         ))}

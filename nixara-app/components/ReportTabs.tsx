@@ -188,6 +188,7 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
               question={context.decision}
               timeframe={context.timeframe}
               reportText={current.text}
+              dataset={dataset}
             />
           </>
         )}

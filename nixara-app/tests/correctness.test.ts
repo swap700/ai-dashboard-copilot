@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -221,6 +221,49 @@ check("perfect negative correlation",
     const r = pairwiseCorrelation(rows, "A", "B");
     return r !== null && Math.abs(r.r + 1) < 1e-9;
   })());
+
+// ── humanizeColumnName: chart tooltip/legend labels ─────────────────────────
+//
+// BUG FIX (2026-09): Charts.tsx's Bar/Area series had no explicit Recharts
+// `name`, so hovering a bar showed the literal dataKey -- "value : 12.95" --
+// instead of the actual metric. Column names also went into chart titles
+// verbatim (e.g. "years_experience by industry", rendered upper-cased by CSS
+// as "YEARS_EXPERIENCE BY INDUSTRY"). humanizeColumnName() is what fixes both.
+console.log("humanizeColumnName - display labels for chart titles/tooltips");
+
+check('snake_case: "years_experience" -> "Years Experience"',
+  humanizeColumnName("years_experience") === "Years Experience");
+check('camelCase: "discountRate" -> "Discount Rate"',
+  humanizeColumnName("discountRate") === "Discount Rate");
+check('already-clean names pass through unchanged: "Profit Margin"',
+  humanizeColumnName("Profit Margin") === "Profit Margin");
+check('acronyms/proper nouns are not lowercased: "Customer ID"',
+  humanizeColumnName("Customer ID") === "Customer ID");
+check('internal casing after a non-letter separator is preserved: "State/Province"',
+  humanizeColumnName("State/Province") === "State/Province");
+check('kebab-case: "unit-price" -> "Unit Price"',
+  humanizeColumnName("unit-price") === "Unit Price");
+
+// ── schemaOverlapRatio: dataset-identity sanity check for the Inbox's
+// filename-based dataset matching (see app/inbox/page.tsx's isSameDataset) ──
+console.log("schemaOverlapRatio - dataset schema overlap sanity check");
+
+check("identical column lists -> ratio 1",
+  schemaOverlapRatio(["Category", "Sales", "Profit"], ["Category", "Sales", "Profit"]) === 1);
+check("completely disjoint column lists -> ratio 0",
+  schemaOverlapRatio(["Category", "Sales", "Profit"], ["Patient ID", "Readmission Rate"]) === 0);
+check("partial overlap -> fraction of ORIGINAL columns still present",
+  Math.abs(schemaOverlapRatio(["Category", "Sales", "Profit", "Discount"], ["Category", "Sales"]) - 0.5) < 1e-9);
+check("case/whitespace differences still count as a match",
+  schemaOverlapRatio(["Profit Margin"], [" profit margin "]) === 1);
+check("extra columns in the NEW dataset don't count against the ratio",
+  schemaOverlapRatio(["Category", "Sales"], ["Category", "Sales", "New Column", "Another One"]) === 1);
+check("empty original column list -> ratio 0 (nothing to confirm), not NaN or a throw",
+  schemaOverlapRatio([], ["Category", "Sales"]) === 0);
+check("the 0.8 threshold rejects a barely-over-half-different reshape",
+  schemaOverlapRatio(["A", "B", "C", "D", "E"], ["A", "B", "C"]) < SCHEMA_OVERLAP_THRESHOLD);
+check("the 0.8 threshold accepts a dataset missing only one minor column",
+  schemaOverlapRatio(["A", "B", "C", "D", "E"], ["A", "B", "C", "D"]) >= SCHEMA_OVERLAP_THRESHOLD);
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

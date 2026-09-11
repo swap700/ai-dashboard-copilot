@@ -1517,3 +1517,197 @@ FROM (VALUES
     ('list_decisions_for_session(text)'),
     ('list_decisions_for_visitor(text)')
 ) AS f(fn);
+
+-- ============================================================
+-- 22. Dataset schema-overlap sanity check (2026-09)
+--
+-- Product-quality gap flagged during review: Nixara associates a decision's
+-- outcome/drift auto-fill with a dataset purely by FILENAME (dataset_name +
+-- the currently-loaded file's name), so two uploads that happen to share a
+-- filename but are actually different data (e.g. two different exports both
+-- called "monthly_data.csv") could silently get compared/auto-filled against
+-- each other. A full content-hash/versioned-dataset system is real backlog
+-- work; this is the cheap, additive first tier: persist the ORIGINAL
+-- dataset's column list alongside a decision, so a later candidate dataset
+-- can be checked for schema overlap before being treated as "the same
+-- dataset" for auto-fill purposes (see schemaOverlapRatio, lib/data-analysis.ts,
+-- and its use in app/inbox/page.tsx). This still isn't true lineage tracking
+-- (a dataset that's reshaped but keeps identical column names still slips
+-- through) -- it narrows the failure window, it doesn't close it.
+--
+-- dataset_columns stores the column names as a single "|"-joined string
+-- (matching this schema's existing convention of plain TEXT columns rather
+-- than TEXT[] -- see dataset_name, recommendation, etc.). "|" is vanishingly
+-- unlikely to appear inside a real column header; this is a heuristic sanity
+-- check, not a formally unambiguous encoding.
+-- ============================================================
+
+ALTER TABLE nixara_decisions ADD COLUMN IF NOT EXISTS dataset_columns TEXT;
+
+-- log_decision_record gains one new trailing param (14th). Return type is
+-- unchanged, but the argument list is, so DROP + CREATE (same convention as
+-- every prior signature change in this file).
+DROP FUNCTION IF EXISTS log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE,TEXT);
+
+CREATE OR REPLACE FUNCTION log_decision_record(
+    p_session_id       TEXT,
+    p_report_type      TEXT,
+    p_role             TEXT,
+    p_dataset_name     TEXT,
+    p_decision         TEXT,
+    p_notes            TEXT DEFAULT '',
+    p_timeframe        TEXT DEFAULT '',
+    p_question         TEXT DEFAULT '',
+    p_owner            TEXT DEFAULT NULL,
+    p_recommendation   TEXT DEFAULT NULL,
+    p_postpone_reason  TEXT DEFAULT NULL,
+    p_due_date         DATE DEFAULT NULL,
+    p_visitor_id       TEXT DEFAULT NULL,
+    p_dataset_columns  TEXT DEFAULT NULL
+)
+RETURNS TABLE (id BIGINT, public_id TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_id BIGINT;
+  v_public_id TEXT;
+BEGIN
+  INSERT INTO nixara_decisions (
+    session_id, report_type, role, dataset_name, decision,
+    notes, timeframe, question, owner, recommendation, postpone_reason, due_date, visitor_id,
+    dataset_columns
+  ) VALUES (
+    p_session_id, p_report_type, p_role, p_dataset_name, p_decision,
+    p_notes, p_timeframe, p_question, p_owner, p_recommendation, p_postpone_reason, p_due_date, p_visitor_id,
+    NULLIF(p_dataset_columns, '')
+  ) RETURNING nixara_decisions.id, nixara_decisions.public_id INTO v_id, v_public_id;
+
+  RETURN QUERY SELECT v_id, v_public_id;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE,TEXT,TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION log_decision_record(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,DATE,TEXT,TEXT) TO anon, authenticated;
+
+-- list_decisions_for_session / list_decisions_for_visitor gain dataset_columns
+-- in their projection. Return type change -> DROP + CREATE.
+DROP FUNCTION IF EXISTS list_decisions_for_session(TEXT);
+
+CREATE OR REPLACE FUNCTION list_decisions_for_session(p_session_id TEXT)
+RETURNS TABLE (
+  id                             BIGINT,
+  public_id                      TEXT,
+  created_at                     TIMESTAMPTZ,
+  report_type                    TEXT,
+  role                           TEXT,
+  dataset_name                   TEXT,
+  decision                       TEXT,
+  notes                          TEXT,
+  timeframe                      TEXT,
+  question                       TEXT,
+  recommendation                 TEXT,
+  owner                          TEXT,
+  postpone_reason                TEXT,
+  due_date                       DATE,
+  dataset_columns                TEXT,
+  outcome_metric_name            TEXT,
+  outcome_metric_before          NUMERIC,
+  outcome_metric_after           NUMERIC,
+  outcome_metric_unit            TEXT,
+  outcome_rating                 TEXT,
+  outcome_notes                  TEXT,
+  outcome_metric_dimension       TEXT,
+  outcome_metric_dimension_value TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date, d.dataset_columns,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes,
+    o.metric_dimension, o.metric_dimension_value
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.session_id = p_session_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_session(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_session(TEXT) TO anon, authenticated;
+
+DROP FUNCTION IF EXISTS list_decisions_for_visitor(TEXT);
+
+CREATE OR REPLACE FUNCTION list_decisions_for_visitor(p_visitor_id TEXT)
+RETURNS TABLE (
+  id                             BIGINT,
+  public_id                      TEXT,
+  created_at                     TIMESTAMPTZ,
+  report_type                    TEXT,
+  role                           TEXT,
+  dataset_name                   TEXT,
+  decision                       TEXT,
+  notes                          TEXT,
+  timeframe                      TEXT,
+  question                       TEXT,
+  recommendation                 TEXT,
+  owner                          TEXT,
+  postpone_reason                TEXT,
+  due_date                       DATE,
+  dataset_columns                TEXT,
+  outcome_metric_name            TEXT,
+  outcome_metric_before          NUMERIC,
+  outcome_metric_after           NUMERIC,
+  outcome_metric_unit            TEXT,
+  outcome_rating                 TEXT,
+  outcome_notes                  TEXT,
+  outcome_metric_dimension       TEXT,
+  outcome_metric_dimension_value TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF p_visitor_id IS NULL OR p_visitor_id = '' THEN
+    RETURN;
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    d.id, d.public_id, d.created_at, d.report_type, d.role, d.dataset_name,
+    d.decision, d.notes, d.timeframe, d.question, d.recommendation, d.owner, d.postpone_reason,
+    d.due_date, d.dataset_columns,
+    o.metric_name, o.metric_before, o.metric_after, o.metric_unit, o.outcome_rating, o.outcome_notes,
+    o.metric_dimension, o.metric_dimension_value
+  FROM nixara_decisions d
+  LEFT JOIN nixara_outcomes o ON o.decision_id = d.id
+  WHERE d.visitor_id = p_visitor_id
+  ORDER BY d.created_at DESC
+  LIMIT 200;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION list_decisions_for_visitor(TEXT) TO anon, authenticated;
+
+-- ── Verification — run this and read the output ─────────────────────────────
+-- Every row must show 'f' in the public column and 't' in the other two.
+SELECT
+    f.fn,
+    has_function_privilege('public',        f.fn, 'EXECUTE') AS public_can_execute,
+    has_function_privilege('anon',          f.fn, 'EXECUTE') AS anon_can_execute,
+    has_function_privilege('authenticated', f.fn, 'EXECUTE') AS auth_can_execute
+FROM (VALUES
+    ('log_decision_record(text,text,text,text,text,text,text,text,text,text,text,date,text,text)'),
+    ('list_decisions_for_session(text)'),
+    ('list_decisions_for_visitor(text)')
+) AS f(fn);

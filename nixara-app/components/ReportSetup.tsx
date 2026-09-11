@@ -2,7 +2,8 @@
 
 import { useApiKey } from "@/lib/use-api-key";
 import { FREE_LIMIT, getFreeReportsUsed } from "@/lib/free-tier";
-import { DECISION_TEMPLATES } from "@/lib/decision-templates";
+import { DECISION_TEMPLATES, resolveDecisionText } from "@/lib/decision-templates";
+import type { Dataset } from "@/lib/data-analysis";
 import { useEffect, useState } from "react";
 
 const ROLES = ["COO", "CEO", "CFO", "Sales Lead", "Operations Lead", "Board"];
@@ -21,9 +22,11 @@ interface Props {
   onApiKeyResolved: (key: string) => void;
   onGenerate: () => void;
   generating: boolean;
+  /** The loaded dataset, so Common Decision chips can name its actual columns (see resolveDecisionText). Optional -- chips still work, generically, before anything is uploaded. */
+  dataset?: Dataset;
 }
 
-export default function ReportSetup({ value, onChange, onApiKeyResolved, onGenerate, generating }: Props) {
+export default function ReportSetup({ value, onChange, onApiKeyResolved, onGenerate, generating, dataset }: Props) {
   const { apiKey, setApiKey } = useApiKey();
   const [freeUsed, setFreeUsed] = useState(0);
 
@@ -66,7 +69,7 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
               key={t.id}
               type="button"
               title={`Commonly involves: ${t.metricKeywords.join(", ")}`}
-              onClick={() => onChange({ ...value, decision: t.decisionText })}
+              onClick={() => onChange({ ...value, decision: resolveDecisionText(t, dataset) })}
               className="text-xs font-medium text-text-mute bg-accent-bg-soft border border-accent-border rounded-full px-3 py-1 hover:text-accent hover:border-accent transition-colors"
             >
               {t.label}

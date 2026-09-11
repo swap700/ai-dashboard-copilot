@@ -9,8 +9,10 @@
     "lint": "eslint",
     "test:security": "node --experimental-strip-types --import ./tests/register.mjs tests/security.test.ts",
     "test:correctness": "node --experimental-strip-types --import ./tests/register.mjs tests/correctness.test.ts",
-    "test": "npm run test:security && npm run test:correctness && npm run test:drift",
-    "test:drift": "node --experimental-strip-types --import ./tests/register.mjs tests/drift.test.ts"
+    "test": "npm run test:security && npm run test:correctness && npm run test:drift && npm run test:report && npm run test:decision-templates",
+    "test:drift": "node --experimental-strip-types --import ./tests/register.mjs tests/drift.test.ts",
+    "test:report": "node --experimental-strip-types --import ./tests/register.mjs tests/report.test.ts",
+    "test:decision-templates": "node --experimental-strip-types --import ./tests/register.mjs tests/decision-templates.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

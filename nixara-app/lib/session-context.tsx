@@ -20,6 +20,8 @@ export interface RecordedDecision {
   owner?: string;
   postponeReason?: string;
   dueDate?: string;
+  /** Schema fingerprint of the dataset this decision was recorded against -- see DecisionWithOutcome.datasetColumns (lib/decisions.ts). */
+  datasetColumns?: string[];
 }
 
 export interface RecordedOutcome {
@@ -60,6 +62,7 @@ interface SessionState {
       owner?: string;
       postponeReason?: string;
       dueDate?: string;
+      datasetColumns?: string[];
     }
   ) => Promise<void>;
   recordOutcome: (
@@ -155,6 +158,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       postponeReason: ctx.postponeReason,
       dueDate: ctx.dueDate,
       visitorId,
+      datasetColumns: ctx.datasetColumns,
     });
     const next: typeof decisions = {
       ...decisions,
@@ -170,6 +174,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         owner:      ctx.owner,
         postponeReason: ctx.postponeReason,
         dueDate:    ctx.dueDate,
+        datasetColumns: ctx.datasetColumns,
       },
     };
     setDecisions(next);

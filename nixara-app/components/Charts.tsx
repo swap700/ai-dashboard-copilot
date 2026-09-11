@@ -41,7 +41,16 @@ function ChartFrame({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-export function BarPanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
+export function BarPanel({
+  title,
+  metricLabel,
+  data,
+}: {
+  title: string;
+  /** Series name shown in the tooltip -- see ChartSpec.metricLabel (data-analysis.ts). */
+  metricLabel: string;
+  data: { key: string; value: number }[];
+}) {
   const height = Math.max(220, data.length * 32);
   return (
     <ChartFrame title={title}>
@@ -62,7 +71,7 @@ export function BarPanel({ title, data }: { title: string; data: { key: string; 
             axisLine={{ stroke: "#E2E8F0" }}
           />
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "#FBEEE7" }} formatter={tooltipFmt} />
-          <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+          <Bar dataKey="value" name={metricLabel} radius={[0, 4, 4, 0]}>
             {data.map((d, i) => (
               <Cell key={i} fill={d.value < 0 ? "#DC2626" : "#C2542A"} />
             ))}
@@ -91,7 +100,15 @@ export function PiePanel({ title, data }: { title: string; data: { key: string; 
   );
 }
 
-function AreaPanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
+function AreaPanel({
+  title,
+  metricLabel,
+  data,
+}: {
+  title: string;
+  metricLabel: string;
+  data: { key: string; value: number }[];
+}) {
   return (
     <ChartFrame title={title}>
       <ResponsiveContainer width="100%" height={240}>
@@ -100,7 +117,7 @@ function AreaPanel({ title, data }: { title: string; data: { key: string; value:
           <XAxis dataKey="key" tick={{ fontSize: 10, fill: "#64748B" }} axisLine={{ stroke: "#E2E8F0" }} />
           <YAxis tick={{ fontSize: 11, fill: "#64748B" }} axisLine={{ stroke: "#E2E8F0" }} tickFormatter={tickFmt} />
           <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} />
-          <Area type="monotone" dataKey="value" stroke="#C2542A" fill="#F2D4B8" strokeWidth={2} />
+          <Area type="monotone" dataKey="value" name={metricLabel} stroke="#C2542A" fill="#F2D4B8" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>
     </ChartFrame>
@@ -123,13 +140,15 @@ function TreemapPanel({ title, data }: { title: string; data: { key: string; val
 function ChartPanel({ spec }: { spec: ChartSpec }) {
   switch (spec.type) {
     case "pie":
+      // Pie already labels each slice via nameKey="key" (the category), so
+      // its tooltip already reads e.g. "Furniture : 12.95", not "value : ...".
       return <PiePanel title={spec.title} data={spec.data} />;
     case "area":
-      return <AreaPanel title={spec.title} data={spec.data} />;
+      return <AreaPanel title={spec.title} metricLabel={spec.metricLabel} data={spec.data} />;
     case "treemap":
       return <TreemapPanel title={spec.title} data={spec.data} />;
     default:
-      return <BarPanel title={spec.title} data={spec.data} />;
+      return <BarPanel title={spec.title} metricLabel={spec.metricLabel} data={spec.data} />;
   }
 }
 
