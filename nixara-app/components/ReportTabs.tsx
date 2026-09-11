@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
-import { buildVisualSections } from "@/lib/report-visual";
+import { buildVisualSections, countUnverifiedFigures } from "@/lib/report-visual";
 import { buildEvidenceFacts } from "@/lib/evidence";
 import { dashboardScore, type Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
@@ -78,6 +78,16 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
 
   const current = reports[active];
   const currentError = errors[active];
+
+  // Computed once per report/tab (not re-derived inside the JSX below) so the
+  // same sections feed both the "N figures unverified" summary banner and
+  // ReportVisualBody -- see countUnverifiedFigures' doc comment (report-visual.ts)
+  // for why this replaced a per-figure badge repeated next to every flagged number.
+  const sections = useMemo(
+    () => (current ? buildVisualSections(current.text, active, evidenceFacts, qualityScore) : []),
+    [current, active, evidenceFacts, qualityScore]
+  );
+  const unverifiedCount = useMemo(() => countUnverifiedFigures(sections), [sections]);
 
   return (
     <div className="mb-10">
@@ -162,7 +172,25 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
               </div>
             )}
 
-            <ReportVisualBody sections={buildVisualSections(current.text, active, evidenceFacts, qualityScore)} />
+            {unverifiedCount > 0 && (
+              <div
+                className="rounded-lg border border-danger-border bg-danger-bg px-4 py-3 mb-4"
+                role="status"
+              >
+                <p className="text-danger text-sm font-semibold mb-0.5">
+                  {unverifiedCount === 1
+                    ? "1 figure in this version could not be confirmed against your data."
+                    : `${unverifiedCount} figures in this version could not be confirmed against your data.`}
+                </p>
+                <p className="text-text-mute text-sm">
+                  Look for the struck-through number{unverifiedCount === 1 ? "" : "s"} below and treat
+                  {unverifiedCount === 1 ? " it" : " them"} with caution before acting on{" "}
+                  {unverifiedCount === 1 ? "it" : "them"}.
+                </p>
+              </div>
+            )}
+
+            <ReportVisualBody sections={sections} />
 
             <div className="grid grid-cols-2 gap-3 mt-4">
               <button

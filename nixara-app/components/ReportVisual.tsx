@@ -51,39 +51,22 @@ function Prose({ text }: { text: string }) {
 }
 
 /**
- * Evidence Trail's "click a number, see its source" affordance — now with a
- * third state. "matched" renders the original green source tag. "none"
- * renders nothing (no specific figure was present to check). "unverified" —
- * a specific figure WAS cited but nothing in the real data matches it — now
- * renders its own visible amber warning, instead of silently looking
- * identical to "none". That silence is exactly what let a fabricated figure
- * ("average experience of 11.70 years", traced back to no real subgroup in
- * the dataset) pass through unflagged in an earlier report.
+ * Evidence Trail's "click a number, see its source" affordance. "matched"
+ * renders the green source tag. "none" and "unverified" both render nothing
+ * HERE -- an "unverified" figure is still marked, but at the report level
+ * (see ReportTabs.tsx's "N figures could not be confirmed" banner, driven by
+ * countUnverifiedFigures) and inline via the struck-through number itself
+ * (emphasizeParts below), rather than by repeating an interactive warning
+ * badge next to every single flagged figure. That repetition (2026-09
+ * feedback: "I only want [the report-level notice], not a tag on each one
+ * of them") read as noise once a report had more than one or two unverified
+ * figures, without adding information beyond what the strikethrough and the
+ * banner already say together.
  */
 function EvidenceTag({ result }: { result: EvidenceResult }) {
   const [open, setOpen] = useState(false);
 
-  if (result.status === "none") return null;
-
-  if (result.status === "unverified") {
-    return (
-      <span className="inline-block align-middle ml-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          title="Nixara could not verify this figure against your data"
-          className="text-[0.68rem] font-semibold text-danger border border-danger-border bg-danger-bg rounded-full px-1.5 py-0 hover:bg-danger hover:text-white transition-colors align-middle"
-        >
-          {"\u26A0"} unverified
-        </button>
-        {open && (
-          <span className="block text-[0.78rem] text-text-mute bg-bg border border-border rounded-lg px-2.5 py-1.5 mt-1 max-w-sm">
-            This figure doesn&apos;t match anything Nixara computed from your uploaded data — treat it with caution before acting on it.
-          </span>
-        )}
-      </span>
-    );
-  }
+  if (result.status !== "matched") return null;
 
   const fact = result.fact;
   return (

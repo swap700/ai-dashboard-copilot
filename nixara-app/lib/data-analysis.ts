@@ -86,6 +86,30 @@ export function categoricalColumns(dataset: Dataset): string[] {
   return dataset.columns.filter((col) => !numeric.has(col));
 }
 
+/**
+ * Whether a numeric column's values look like a small bounded count or scale
+ * (e.g. "children", "chronic_diseases", a 1-5 rating) rather than a genuine
+ * continuous business metric -- detected by the SHAPE of its values (all
+ * non-negative integers, few distinct values), the same way smartAgg already
+ * classifies additive vs. per-entity columns by value shape instead of by name.
+ *
+ * This matters for anomaly detection specifically: z-score flags anything
+ * more than 2 std devs from the mean, but on a column that only ever takes
+ * values like 0-5, the top of that range is ALWAYS more than 2 std devs out
+ * once the distribution skews low (most people have 0-1 children/conditions).
+ * That isn't a real outlier, it's just the natural ceiling of a small bounded
+ * count -- flagging it as an "anomalous row" is statistically misleading, even
+ * though the column's NAME doesn't match any of NON_METRIC_PATTERNS above.
+ */
+export function looksLikeBoundedCount(dataset: Dataset, col: string): boolean {
+  const values = dataset.rows
+    .map((r) => r[col])
+    .filter((v): v is number => typeof v === "number");
+  if (values.length === 0) return false;
+  if (!values.every((v) => Number.isInteger(v) && v >= 0)) return false;
+  return new Set(values).size <= 10;
+}
+
 // ── Generic (industry-agnostic) column relevance matching ──────────────────
 //
 // Deliberately contains NO domain vocabulary (no "profit"/"revenue"/etc). It only
@@ -866,8 +890,14 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     }
   }
 
-  // Only run anomaly detection on genuine business metrics, not ID/count columns
-  const metricCols = businessMetricColumns(filtered);
+  // Only run anomaly detection on genuine business metrics, not ID/count
+  // columns -- and not columns that are numeric but still count-like by
+  // SHAPE (see looksLikeBoundedCount), which z-score treats as "anomalous"
+  // purely because their range is small and skewed, not because any row is
+  // actually unusual.
+  const metricCols = businessMetricColumns(filtered).filter(
+    (col) => !looksLikeBoundedCount(filtered, col)
+  );
   const anomalyLines: string[] = [];
   for (const col of metricCols.slice(0, 5)) {
     const anomalies = detectAnomalies(filtered, col);

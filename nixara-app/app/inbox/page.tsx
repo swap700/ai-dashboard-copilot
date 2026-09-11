@@ -8,7 +8,7 @@ import { fetchDecisionsForVisitor, type DecisionWithOutcome } from "@/lib/decisi
 import type { RecordedOutcome } from "@/lib/session-context";
 import { buildInbox } from "@/lib/inbox";
 import InboxCard from "@/components/InboxCard";
-import { schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD } from "@/lib/data-analysis";
+import { schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, type Dataset } from "@/lib/data-analysis";
 
 function InboxPageInner() {
   const { visitorId, sessionId } = useSession();
@@ -25,17 +25,28 @@ function InboxPageInner() {
   const { dataset, fileName } = useNixaraStore();
 
   /**
-   * True when `item` is safe to treat as "the currently loaded dataset" for
-   * outcome auto-fill / drift-baseline purposes: same filename, AND (when the
-   * item has a persisted column list to check against -- older decisions,
+   * Checks whether `item` is safe to treat as "the currently loaded dataset"
+   * for outcome auto-fill / drift-baseline purposes: same filename, AND (when
+   * the item has a persisted column list to check against -- older decisions,
    * logged before this existed, won't) the loaded dataset's schema overlaps
    * it by at least SCHEMA_OVERLAP_THRESHOLD. See schemaOverlapRatio's doc
    * comment (lib/data-analysis.ts) for what this does and doesn't catch.
+   *
+   * Returns the dataset to hand InboxCard (undefined when it isn't safe to)
+   * alongside `matchInfo` -- the actual overlap percentage and pass/fail, so
+   * a near-miss reads as "62% match" rather than auto-fill just silently not
+   * being there. matchInfo is undefined when there was nothing to check
+   * (no dataset loaded, a different filename, or a pre-existing decision with
+   * no persisted column list) -- there's no percentage to show in that case.
    */
-  const isSameDataset = (item: DecisionWithOutcome): boolean => {
-    if (!dataset || item.datasetName !== fileName) return false;
-    if (!item.datasetColumns || item.datasetColumns.length === 0) return true; // nothing to check against -- fall back to the filename match
-    return schemaOverlapRatio(item.datasetColumns, dataset.columns) >= SCHEMA_OVERLAP_THRESHOLD;
+  const resolveDatasetForItem = (
+    item: DecisionWithOutcome
+  ): { dataset?: Dataset; matchInfo?: { overlapPercent: number; passed: boolean } } => {
+    if (!dataset || item.datasetName !== fileName) return {};
+    if (!item.datasetColumns || item.datasetColumns.length === 0) return { dataset }; // nothing to check against -- fall back to the filename match, same as before this existed
+    const overlapPercent = Math.round(schemaOverlapRatio(item.datasetColumns, dataset.columns) * 100);
+    const passed = overlapPercent >= SCHEMA_OVERLAP_THRESHOLD * 100;
+    return { dataset: passed ? dataset : undefined, matchInfo: { overlapPercent, passed } };
   };
   const [rows, setRows] = useState<DecisionWithOutcome[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -127,26 +138,30 @@ function InboxPageInner() {
       )}
 
       {!loading &&
-        inbox.map((item) => (
-          <div
-            key={item.id}
-            ref={item.publicId === highlightId ? highlightedRef : undefined}
-            className={
-              item.publicId === highlightId
-                ? "rounded-xl ring-2 ring-accent ring-offset-2 ring-offset-bg transition-shadow"
-                : undefined
-            }
-          >
-            <InboxCard
-              item={item}
-              sessionId={sessionId}
-              visitorId={visitorId}
-              onOutcomeLogged={handleOutcomeLogged}
-              onDueDateChanged={handleDueDateChanged}
-              dataset={isSameDataset(item) ? (dataset ?? undefined) : undefined}
-            />
-          </div>
-        ))}
+        inbox.map((item) => {
+          const { dataset: itemDataset, matchInfo } = resolveDatasetForItem(item);
+          return (
+            <div
+              key={item.id}
+              ref={item.publicId === highlightId ? highlightedRef : undefined}
+              className={
+                item.publicId === highlightId
+                  ? "rounded-xl ring-2 ring-accent ring-offset-2 ring-offset-bg transition-shadow"
+                  : undefined
+              }
+            >
+              <InboxCard
+                item={item}
+                sessionId={sessionId}
+                visitorId={visitorId}
+                onOutcomeLogged={handleOutcomeLogged}
+                onDueDateChanged={handleDueDateChanged}
+                dataset={itemDataset}
+                datasetMatch={matchInfo}
+              />
+            </div>
+          );
+        })}
     </div>
   );
 }

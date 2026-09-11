@@ -142,6 +142,29 @@ function parseActionVerb(text: string): ActionItem["verb"] {
  * heading it is. Unrecognized headings fall back to plain prose so nothing
  * is ever silently dropped.
  */
+/**
+ * Counts how many figures across a built report were marked "unverified" by
+ * Evidence Trail (Quick Wins' stat, Top Risks' signal/consequence -- the
+ * only section kinds that carry an EvidenceResult). Used to show ONE
+ * report-level summary line instead of repeating an inline badge next to
+ * every single flagged figure (see ReportTabs.tsx) -- a reader who has
+ * already been told "N figures in this report could not be confirmed"
+ * doesn't need that restated on each one; the struck-through number itself
+ * (see emphasizeParts/ReportVisual.tsx) is still what marks WHICH one.
+ */
+export function countUnverifiedFigures(sections: VisualSection[]): number {
+  let count = 0;
+  for (const s of sections) {
+    if (s.kind === "quickWins") {
+      count += s.items.filter((i) => i.evidence.status === "unverified").length;
+    } else if (s.kind === "topRisks") {
+      count += s.risks.filter((r) => r.signalEvidence.status === "unverified").length;
+      count += s.risks.filter((r) => r.consequenceEvidence.status === "unverified").length;
+    }
+  }
+  return count;
+}
+
 export function buildVisualSections(
   reportText: string,
   reportType: ReportType,

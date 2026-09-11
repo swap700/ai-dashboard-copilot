@@ -7,6 +7,20 @@ import type { InboxItem } from "@/lib/inbox";
 import type { Dataset } from "@/lib/data-analysis";
 import OutcomeForm from "./OutcomeForm";
 
+/**
+ * Result of checking the currently loaded dataset against this item's
+ * persisted schema (see schemaOverlapRatio, lib/data-analysis.ts). Undefined
+ * when there was nothing to check -- no dataset loaded, a different
+ * filename, or an older decision logged before dataset_columns existed
+ * (which falls back to the old filename-only match with no percentage to
+ * show). Surfaced so a near-miss ("62% match") reads as a real signal
+ * instead of auto-fill just silently not being there.
+ */
+export interface DatasetMatchInfo {
+  overlapPercent: number;
+  passed: boolean;
+}
+
 interface Props {
   item: InboxItem;
   sessionId: string;
@@ -24,9 +38,11 @@ interface Props {
    * the dataset is still the same one the decision was recorded against.
    */
   dataset?: Dataset;
+  /** See DatasetMatchInfo above. */
+  datasetMatch?: DatasetMatchInfo;
 }
 
-export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged, onDueDateChanged, dataset }: Props) {
+export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged, onDueDateChanged, dataset, datasetMatch }: Props) {
   const [editingDate, setEditingDate] = useState(false);
   const [draftDate, setDraftDate] = useState(item.dueDate ?? "");
   const [saving, setSaving] = useState(false);
@@ -154,6 +170,13 @@ export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged,
         <summary className="text-accent text-sm font-medium cursor-pointer">
           📝 Log outcome for {item.reportType}
         </summary>
+        {datasetMatch && (
+          <p className={`text-xs mt-2 ${datasetMatch.passed ? "text-text-mute" : "text-warn"}`}>
+            {datasetMatch.passed
+              ? `✓ ${datasetMatch.overlapPercent}% of this decision's original columns match your loaded dataset -- auto-fill available.`
+              : `⚠ Auto-fill unavailable: only ${datasetMatch.overlapPercent}% of this decision's original columns match your loaded dataset (needs ≥80%). Enter the metric manually below.`}
+          </p>
+        )}
         <OutcomeForm onSubmit={handleSubmitOutcome} dataset={dataset} />
       </details>
     </div>

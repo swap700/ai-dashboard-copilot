@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -264,6 +264,28 @@ check("the 0.8 threshold rejects a barely-over-half-different reshape",
   schemaOverlapRatio(["A", "B", "C", "D", "E"], ["A", "B", "C"]) < SCHEMA_OVERLAP_THRESHOLD);
 check("the 0.8 threshold accepts a dataset missing only one minor column",
   schemaOverlapRatio(["A", "B", "C", "D", "E"], ["A", "B", "C", "D"]) >= SCHEMA_OVERLAP_THRESHOLD);
+
+// ── looksLikeBoundedCount: keeps z-score anomaly detection off count/scale
+// columns that are numeric but not actually continuous business metrics
+// (see the "Data Quality Risks" root-cause fix in buildDataSummary) ────────
+console.log("looksLikeBoundedCount - discrete count/scale columns vs. continuous metrics");
+
+function datasetOf(col: string, values: number[]): Dataset {
+  return { rows: values.map((v) => ({ [col]: v })), columns: [col] };
+}
+
+check("a 0-5 count column (e.g. children, chronic conditions) is bounded-count",
+  looksLikeBoundedCount(datasetOf("children", [0, 1, 1, 2, 0, 3, 5, 1, 0, 2]), "children"));
+check("a continuous metric with many distinct values is NOT bounded-count",
+  !looksLikeBoundedCount(datasetOf("bmi", [16.0, 18.2, 22.4, 25.7, 28.9, 31.1, 33.6, 40.2, 21.9, 27.3, 45.0]), "bmi"));
+check("a wide-range integer metric (e.g. salary) is NOT bounded-count even though every value is an integer",
+  !looksLikeBoundedCount(datasetOf("salary", [30221, 45892, 61034, 78221, 92455, 110983, 125467, 143290, 160002, 176977, 55000]), "salary"));
+check("negative values disqualify bounded-count (a count/scale is never negative)",
+  !looksLikeBoundedCount(datasetOf("delta", [-2, -1, 0, 1, 2]), "delta"));
+check("fractional values disqualify bounded-count even with few distinct values",
+  !looksLikeBoundedCount(datasetOf("rate", [0.1, 0.2, 0.1, 0.3, 0.2]), "rate"));
+check("an empty column is not bounded-count (nothing to classify)",
+  !looksLikeBoundedCount({ rows: [], columns: ["x"] }, "x"));
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

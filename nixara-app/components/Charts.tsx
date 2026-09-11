@@ -124,13 +124,38 @@ function AreaPanel({
   );
 }
 
+/**
+ * BUG FIX (2026-09): the plain `<Tooltip formatter={tooltipFmt} />` used by
+ * every other chart relies on Recharts resolving a name/value pairing for
+ * the hovered item on its own -- reliable for Bar/Area/Pie, but Treemap's
+ * hover handling is its own code path (each rectangle tracks mouseenter
+ * independently as the squarify layout is computed), and reports of a
+ * tooltip naming a DIFFERENT cell than the one under the cursor point at
+ * that pairing, not at which cell Recharts considers "active" being wrong.
+ * This sidesteps it entirely: it reads name/size straight off
+ * `payload[0].payload`, the exact data object Recharts attaches to whichever
+ * rectangle is currently active, instead of trusting a derived label.
+ */
+function TreemapTooltip({ active, payload }: { active?: boolean; payload?: { payload: { name: string; size: number } }[] }) {
+  if (!active || !payload || payload.length === 0) return null;
+  const node = payload[0].payload;
+  return (
+    <div
+      style={{ ...tooltipStyle, background: "#fff" }}
+      className="border px-2.5 py-1.5 text-xs text-text"
+    >
+      {node.name} : {formatNumber(node.size)}
+    </div>
+  );
+}
+
 function TreemapPanel({ title, data }: { title: string; data: { key: string; value: number }[] }) {
   const treeData = data.map((d) => ({ name: d.key, size: Math.abs(d.value) }));
   return (
     <ChartFrame title={title}>
       <ResponsiveContainer width="100%" height={260}>
         <Treemap data={treeData} dataKey="size" nameKey="name" stroke="#fff" fill="#C2542A">
-          <Tooltip contentStyle={tooltipStyle} formatter={tooltipFmt} />
+          <Tooltip content={<TreemapTooltip />} />
         </Treemap>
       </ResponsiveContainer>
     </ChartFrame>
