@@ -22,10 +22,10 @@ import type { EvidenceResult } from "@/lib/evidence";
  * bolded.
  */
 function emphasizeParts(text: string, evidence?: EvidenceResult): React.ReactNode[] {
-  const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b\d+\.\d{1,2}\b)/g);
+  const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b)/g);
   let flagged = false;
   return parts.map((p, i) => {
-    const isNumeric = /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$|^\d+\.\d{1,2}$/.test(p);
+    const isNumeric = /^\$[\d,]+\.\d{2}$|^\d+(?:\.\d+)?%$|^[\d,]+\.\d{1,2}$/.test(p);
     if (!isNumeric) return <span key={i}>{p}</span>;
     // Evidence Trail only ever examines the first cited figure in a field
     // (see findEvidence) — mirror that here so only that one figure, not
