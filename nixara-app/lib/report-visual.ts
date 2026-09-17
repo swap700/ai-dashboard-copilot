@@ -18,6 +18,7 @@
 
 import { parseReportLines, type ReportLine, type ReportType } from "./report";
 import { findEvidence, type EvidenceFact, type EvidenceResult } from "./evidence";
+import type { ColumnIssue } from "./data-analysis";
 
 export type Severity = "low" | "medium" | "high";
 
@@ -71,7 +72,15 @@ export type VisualSection =
   | { kind: "topRisks"; heading: string; risks: RiskCard[] }
   | { kind: "earlyWarning"; heading: string; items: string[] }
   | { kind: "mitigation"; heading: string; items: MitigationItem[] }
-  | { kind: "dataQuality"; heading: string; text: string; score: number | null };
+  | {
+      kind: "dataQuality";
+      heading: string;
+      text: string;
+      score: number | null;
+      /** Deterministic, never AI-derived — see detectMissingValuesByColumn()/detectMalformedEntries() in data-analysis.ts. Distinct from statistical outliers on purpose: these are genuine data-integrity issues, not business signals that happen to be numerically unusual. */
+      missingValues: ColumnIssue[];
+      malformedEntries: ColumnIssue[];
+    };
 
 const SEVERITY_MAP: Record<string, Severity> = { high: "high", medium: "medium", low: "low" };
 
@@ -179,7 +188,9 @@ export function buildVisualSections(
    * score (parseSection then falls back to whatever the model wrote, if
    * anything, so the section still renders rather than showing nothing).
    */
-  qualityScore: number | null = null
+  qualityScore: number | null = null,
+  missingValues: ColumnIssue[] = [],
+  malformedEntries: ColumnIssue[] = []
 ): VisualSection[] {
   const lines = parseReportLines(reportText);
   const buckets: { heading: string; lines: ReportLine[] }[] = [];
@@ -195,7 +206,9 @@ export function buildVisualSections(
     current.lines.push(line);
   }
 
-  return buckets.map(({ heading, lines }) => parseSection(heading, lines, reportType, evidenceFacts, qualityScore));
+  return buckets.map(({ heading, lines }) =>
+    parseSection(heading, lines, reportType, evidenceFacts, qualityScore, missingValues, malformedEntries)
+  );
 }
 
 function parseSection(
@@ -203,7 +216,9 @@ function parseSection(
   lines: ReportLine[],
   reportType: ReportType,
   evidenceFacts: EvidenceFact[],
-  qualityScore: number | null
+  qualityScore: number | null,
+  missingValues: ColumnIssue[],
+  malformedEntries: ColumnIssue[]
 ): VisualSection {
   switch (heading) {
     case "Recommended Actions":
@@ -350,7 +365,7 @@ function parseSection(
       // shows a second, possibly different number next to the real one.
       const rawText = lines.map(anyLineText).filter((t): t is string => t !== null).join(" ");
       const text = rawText.replace(/\(?\s*score:\s*\[?\d+\]?\s*\/\s*100\s*\)?\.?/gi, "").replace(/\s{2,}/g, " ").trim();
-      return { kind: "dataQuality", heading, text, score: qualityScore };
+      return { kind: "dataQuality", heading, text, score: qualityScore, missingValues, malformedEntries };
     }
 
     default:

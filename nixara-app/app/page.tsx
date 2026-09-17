@@ -210,6 +210,21 @@ export default function DashboardPage() {
   // ReportSetup calls onApiKeyResolved which needs the setter signature
   const handleSetup = (v: ReportSetupValue) => setSetup(v);
 
+  // Bumped by AnomalyWarnings' "N real data issues found" link; ReportTabs
+  // watches this to switch to Risk Report and scroll to Data Quality Risks.
+  // A counter, not a boolean, so clicking the link twice in a row (already
+  // on that tab) still re-scrolls instead of being a no-op the second time.
+  const [dqJumpToken, setDqJumpToken] = useState(0);
+  const hasRiskReport = !!reports?.["Risk Report"];
+
+  const handleJumpToDataQuality = () => setDqJumpToken((t) => t + 1);
+  // No Risk Report exists yet to jump into - scroll to the Generate button
+  // instead, so "see the full breakdown" never points at a report that
+  // doesn't exist.
+  const handleJumpToGenerate = () => {
+    document.getElementById("report-setup-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div>
       {/* Renders even before a dataset is uploaded -- see components/Greeting.tsx. */}
@@ -225,17 +240,24 @@ export default function DashboardPage() {
           <MetricsRow metrics={metrics} qualityBreakdown={qualityBreakdown ?? undefined} />
           <DataPreview dataset={dataset} />
           <Charts dataset={dataset} decisionText={debouncedDecision} />
-          <AnomalyWarnings dataset={dataset} />
-
-          <ReportSetup
-            value={setup}
-            onChange={handleSetup}
-            apiKey={apiKey}
-            onApiKeyResolved={setApiKey}
-            onGenerate={handleGenerate}
-            generating={generating}
+          <AnomalyWarnings
             dataset={dataset}
+            hasRiskReport={hasRiskReport}
+            onJumpToDataQuality={handleJumpToDataQuality}
+            onJumpToGenerate={handleJumpToGenerate}
           />
+
+          <div id="report-setup-section">
+            <ReportSetup
+              value={setup}
+              onChange={handleSetup}
+              apiKey={apiKey}
+              onApiKeyResolved={setApiKey}
+              onGenerate={handleGenerate}
+              generating={generating}
+              dataset={dataset}
+            />
+          </div>
 
           {error && (
             <p className="text-danger text-sm mb-6 text-center" role="alert">
@@ -249,6 +271,7 @@ export default function DashboardPage() {
               errors={reportErrors}
               context={{ ...setup, datasetName: fileName }}
               dataset={dataset}
+              jumpToDataQuality={dqJumpToken}
             />
           )}
         </>

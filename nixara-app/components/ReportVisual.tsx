@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
 import type { EvidenceResult } from "@/lib/evidence";
+import type { ColumnIssue } from "@/lib/data-analysis";
 
 /**
  * Shared inline number/currency emphasis, used everywhere body text renders.
@@ -88,9 +89,9 @@ function EvidenceTag({ result }: { result: EvidenceResult }) {
   );
 }
 
-function Card({ heading, children }: { heading: string; children: React.ReactNode }) {
+function Card({ heading, children, id }: { heading: string; children: React.ReactNode; id?: string }) {
   return (
-    <div className="bg-surface border border-border rounded-xl p-5 md:p-6 mb-3">
+    <div id={id} className="bg-surface border border-border rounded-xl p-5 md:p-6 mb-3">
       <p className="text-accent text-[0.68rem] font-bold uppercase tracking-wider mb-3">{heading}</p>
       {children}
     </div>
@@ -330,9 +331,45 @@ function MitigationSection({ heading, items }: Extract<VisualSection, { kind: "m
   );
 }
 
-function DataQualitySection({ heading, text, score }: Extract<VisualSection, { kind: "dataQuality" }>) {
+function IssueCluster({ label, dotClass, issues }: { label: string; dotClass: string; issues: ColumnIssue[] }) {
+  if (issues.length === 0) return null;
+  const total = issues.reduce((sum, i) => sum + i.count, 0);
   return (
-    <Card heading={heading}>
+    <div className="mt-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
+        <span className="text-[0.85rem] font-bold text-text">{label}</span>
+        <span className="text-[0.72rem] text-text-mute bg-bg border border-border rounded-full px-2 py-0.5">
+          {total.toLocaleString()} {total === 1 ? "entry" : "entries"} across {issues.length} column{issues.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="ml-5 space-y-1.5">
+        {issues.map((issue) => (
+          <div key={issue.column} className="flex items-center justify-between gap-3 bg-bg rounded-lg px-3 py-2 text-[0.8rem]">
+            <span className="font-semibold text-text shrink-0">{issue.column}</span>
+            <span className="text-text-mute text-right">{issue.detail}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * BUG FIX (2026-09): a Statistical Outliers cluster used to live here,
+ * grouped visually with Missing Values as if both were the same kind of
+ * problem. They aren't — a negative Profit Margin or an unusually large
+ * Quantity is a real business fact that happens to be numerically unusual,
+ * not a broken cell, and the Risk Report prompt already says so explicitly
+ * ("detected outliers reflect business patterns — treat as signals, not
+ * data errors"). Missing Values and Malformed Entries are genuine
+ * data-integrity issues; an outlier that's actually risk-worthy earns its
+ * place in Top Risks Identified instead, through the model's own judgment,
+ * exactly as it already could before this change.
+ */
+function DataQualitySection({ heading, text, score, missingValues, malformedEntries }: Extract<VisualSection, { kind: "dataQuality" }>) {
+  return (
+    <Card heading={heading} id="data-quality-risks-section">
       <div className="flex items-center gap-4 bg-success-bg border border-success-border rounded-lg px-4 py-3.5">
         {score !== null && (
           <div
@@ -346,6 +383,9 @@ function DataQualitySection({ heading, text, score }: Extract<VisualSection, { k
         )}
         <div className="text-[0.85rem] leading-snug text-text">{emphasizeParts(text)}</div>
       </div>
+
+      <IssueCluster label="Missing Values" dotClass="bg-warn" issues={missingValues} />
+      <IssueCluster label="Malformed Entries" dotClass="bg-text-dim" issues={malformedEntries} />
     </Card>
   );
 }

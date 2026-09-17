@@ -394,6 +394,91 @@ export function dashboardScore(dataset: Dataset): number {
   return dashboardScoreBreakdown(dataset).score;
 }
 
+/** One column's worth of a specific, genuine data-integrity issue. */
+export interface ColumnIssue {
+  column: string;
+  count: number;
+  detail: string;
+}
+
+/**
+ * Per-column missing-value breakdown — a companion to dashboardScoreBreakdown()'s
+ * missingData reason, which only reports ONE blended percentage across the
+ * whole dataset. This is genuinely additive, not a repeat: "8.2% of cells are
+ * missing" tells you nothing about WHICH column to go fix; this does.
+ */
+export function detectMissingValuesByColumn(dataset: Dataset): ColumnIssue[] {
+  const { rows, columns } = dataset;
+  if (rows.length === 0) return [];
+
+  const issues: ColumnIssue[] = [];
+  for (const col of columns) {
+    let missing = 0;
+    for (const row of rows) {
+      const v = row[col];
+      if (v === null || v === undefined || v === "") missing++;
+    }
+    if (missing === 0) continue;
+    const pct = (missing / rows.length) * 100;
+    issues.push({
+      column: col,
+      count: missing,
+      detail: `${missing.toLocaleString()} blank cell${missing === 1 ? "" : "s"} (${pct.toFixed(1)}% of this column)`,
+    });
+  }
+  return issues.sort((a, b) => b.count - a.count);
+}
+
+const VALID_ID_CHARS = /^[A-Za-z0-9\-_.]+$/;
+
+/**
+ * Flags identifier-shaped columns (reusing NON_METRIC_PATTERNS — the same
+ * "this looks like an ID, not a metric" heuristic already used by
+ * businessMetricColumns()) where a MINORITY of values contain characters an
+ * ID shouldn't (stray punctuation, "#", "N/A" text, etc.).
+ *
+ * Deliberately not a Statistical Outliers detector wearing a different name.
+ * A negative Profit Margin or an unusually large Quantity is a real business
+ * fact that happens to be numerically unusual — not a data-integrity problem,
+ * and the Risk Report prompt already says so explicitly ("detected outliers
+ * reflect business patterns — treat as signals, not data errors"). This
+ * function only ever looks at whether a value is a VALID SHAPE for a column
+ * that is supposed to hold clean identifiers, never at whether a numeric
+ * value is unusually large or small.
+ *
+ * The <50% minority check matters: if most values in a column don't look
+ * like a clean ID, the column probably isn't actually an ID despite its
+ * name, and flagging it would be a false signal, not a real one.
+ */
+export function detectMalformedEntries(dataset: Dataset): ColumnIssue[] {
+  const { rows, columns } = dataset;
+  if (rows.length === 0) return [];
+
+  const idLikeColumns = columns.filter((col) => NON_METRIC_PATTERNS.some((p) => p.test(col)));
+  const issues: ColumnIssue[] = [];
+
+  for (const col of idLikeColumns) {
+    let malformed = 0;
+    let present = 0;
+    for (const row of rows) {
+      const v = row[col];
+      if (v === null || v === undefined || v === "") continue;
+      present++;
+      if (typeof v === "number") continue; // a clean numeric ID is not malformed
+      if (!VALID_ID_CHARS.test(String(v).trim())) malformed++;
+    }
+    if (present === 0 || malformed === 0) continue;
+    if (malformed / present >= 0.5) continue; // looks like free text, not a broken ID column
+
+    issues.push({
+      column: col,
+      count: malformed,
+      detail: `${malformed} ${malformed === 1 ? "row contains" : "rows contain"} unexpected characters instead of a valid value`,
+    });
+  }
+  return issues.sort((a, b) => b.count - a.count);
+}
+
 /**
  * Aggregation vocabulary, stored as TOKENS rather than substrings.
  *

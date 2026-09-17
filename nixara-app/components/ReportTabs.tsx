@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { buildVisualSections, countUnverifiedFigures } from "@/lib/report-visual";
 import { buildEvidenceFacts } from "@/lib/evidence";
-import { dashboardScore, type Dataset } from "@/lib/data-analysis";
+import { dashboardScore, detectMissingValuesByColumn, detectMalformedEntries, type Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
 import ReportVisualBody from "./ReportVisual";
@@ -20,6 +20,15 @@ interface Props {
    * links) in the unlikely case a caller doesn't have the dataset in scope.
    */
   dataset?: Dataset | null;
+  /**
+   * Incrementing counter from a parent (e.g. the upload-screen "N real data
+   * issues found" link in AnomalyWarnings). Any change — not the value
+   * itself — switches to the Risk Report tab and scrolls to the Data
+   * Quality Risks card. A counter rather than a boolean so clicking the
+   * link twice in a row (already on that tab, already scrolled) still
+   * re-triggers the scroll instead of being a no-op on the second click.
+   */
+  jumpToDataQuality?: number;
 }
 
 async function downloadExport(
@@ -49,7 +58,7 @@ async function downloadExport(
   URL.revokeObjectURL(url);
 }
 
-export default function ReportTabs({ reports, errors, context, dataset }: Props) {
+export default function ReportTabs({ reports, errors, context, dataset, jumpToDataQuality }: Props) {
   // Computed once per dataset (not per report/tab render) — buildEvidenceFacts
   // walks every business-metric column plus a few category breakdowns, which
   // is the same order of work buildDataSummary already does at generate time,
@@ -60,6 +69,8 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
   // trusting the model to have restated it correctly in its own prose — see
   // report-visual.ts's dataQuality case.
   const qualityScore = useMemo(() => (dataset ? dashboardScore(dataset) : null), [dataset]);
+  const missingValues = useMemo(() => (dataset ? detectMissingValuesByColumn(dataset) : []), [dataset]);
+  const malformedEntries = useMemo(() => (dataset ? detectMalformedEntries(dataset) : []), [dataset]);
 
   // Open on a tab that actually has a report. With partial results the first
   // report type is not necessarily one of the ones that came back.
@@ -76,6 +87,47 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
     setActive(firstAvailable);
   }
 
+  // Tab switch: a render-time adjustment, same pattern this file already
+  // uses for resetting `active` when `reports` changes (see renderedFor
+  // above) - not an effect, since calling setState synchronously inside a
+  // useEffect body causes an avoidable extra commit-then-rerender pass for
+  // something that can be corrected during the same render instead.
+  const [renderedForJump, setRenderedForJump] = useState(jumpToDataQuality);
+  if (jumpToDataQuality !== undefined && jumpToDataQuality !== renderedForJump && reports["Risk Report"]) {
+    setRenderedForJump(jumpToDataQuality);
+    setActive("Risk Report");
+  }
+
+  // The scroll itself is a genuine side effect (DOM manipulation after
+  // commit) and belongs in a useEffect, unlike the state update above - it
+  // tracks jumpToDataQuality with its own ref rather than reusing
+  // renderedForJump, since that state will already equal the new value by
+  // the time this effect runs (the render-time adjustment above updates it
+  // synchronously, earlier in the same render).
+  const prevScrollJumpRef = useRef(jumpToDataQuality);
+  useEffect(() => {
+    if (jumpToDataQuality === undefined || jumpToDataQuality === prevScrollJumpRef.current) return;
+    prevScrollJumpRef.current = jumpToDataQuality;
+    if (!reports["Risk Report"]) return; // nothing to jump to yet
+
+    // A single requestAnimationFrame isn't guaranteed to run after React has
+    // actually committed the tab switch — the target element may not exist
+    // in the DOM yet on the first attempt if Risk Report wasn't already the
+    // active tab. Retry a few times over a short window rather than trust
+    // exact frame timing; gives up silently (no error, no scroll) past that,
+    // since a failed cosmetic scroll shouldn't be a visible failure mode.
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById("data-quality-risks-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else if (attempts++ < 10) {
+        setTimeout(tryScroll, 30);
+      }
+    };
+    requestAnimationFrame(tryScroll);
+  }, [jumpToDataQuality, reports]);
+
   const current = reports[active];
   const currentError = errors[active];
 
@@ -84,8 +136,8 @@ export default function ReportTabs({ reports, errors, context, dataset }: Props)
   // ReportVisualBody -- see countUnverifiedFigures' doc comment (report-visual.ts)
   // for why this replaced a per-figure badge repeated next to every flagged number.
   const sections = useMemo(
-    () => (current ? buildVisualSections(current.text, active, evidenceFacts, qualityScore) : []),
-    [current, active, evidenceFacts, qualityScore]
+    () => (current ? buildVisualSections(current.text, active, evidenceFacts, qualityScore, missingValues, malformedEntries) : []),
+    [current, active, evidenceFacts, qualityScore, missingValues, malformedEntries]
   );
   const unverifiedCount = useMemo(() => countUnverifiedFigures(sections), [sections]);
 
