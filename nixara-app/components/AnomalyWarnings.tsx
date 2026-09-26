@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import type { Dataset } from "@/lib/data-analysis";
-import { detectAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries } from "@/lib/data-analysis";
+import { describeAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries, humanizeColumnName } from "@/lib/data-analysis";
+import { joinWithOverflow, formatNumber, formatPercent } from "@/lib/format";
 
 interface Props {
   dataset: Dataset;
@@ -37,12 +38,29 @@ export default function AnomalyWarnings({ dataset, hasRiskReport, onJumpToDataQu
   // three detection passes instead of one, so recomputing on every parent
   // re-render (e.g. every keystroke elsewhere on the page) is worth avoiding
   // rather than carrying forward unmemoized.
-  const { statisticalCount, realIssueCount } = useMemo(() => {
-    const statistical = businessMetricColumns(dataset).filter((col) => detectAnomalies(dataset, col).length > 0);
+  // BUG FIX (2026-09): this used to compute the flagged-column list and then
+  // keep only its .length -- the banner said "7 columns" but never said
+  // which 7, and the only other place that names them is the AI-written Top
+  // Risks section, which only mentions ones it judged risk-worthy, not the
+  // full deterministic list. Now the actual names AND each one's most
+  // extreme flagged value are kept and rendered -- describeAnomalies() is
+  // deterministic (no model involved), so "what's actually unusual" is
+  // always available here even before a Risk Report is generated.
+  const { statisticalDescriptions, realIssueCount } = useMemo(() => {
+    const statistical = businessMetricColumns(dataset)
+      .map((col) => describeAnomalies(dataset, col))
+      .filter((d): d is NonNullable<typeof d> => d !== null);
     const missing = detectMissingValuesByColumn(dataset);
     const malformed = detectMalformedEntries(dataset);
-    return { statisticalCount: statistical.length, realIssueCount: missing.length + malformed.length };
+    return { statisticalDescriptions: statistical, realIssueCount: missing.length + malformed.length };
   }, [dataset]);
+  const statisticalCount = statisticalDescriptions.length;
+
+  const statisticalSummaries = statisticalDescriptions.map((d) => {
+    const formatted = d.isProportion ? formatPercent(d.extremeValue) : formatNumber(d.extremeValue);
+    const qualifier = d.direction === "high" ? "up to" : "as low as";
+    return `${humanizeColumnName(d.column)} (${qualifier} ${formatted})`;
+  });
 
   if (statisticalCount === 0 && realIssueCount === 0) return null;
 
@@ -58,7 +76,9 @@ export default function AnomalyWarnings({ dataset, hasRiskReport, onJumpToDataQu
           <span className="text-base leading-none mt-0.5 shrink-0">📊</span>
           <span>
             {statisticalCount} column{statisticalCount === 1 ? "" : "s"} show{statisticalCount === 1 ? "s" : ""}{" "}
-            statistically unusual values — worth a look if any turn out to be a real business risk, not necessarily
+            statistically unusual values{" "}
+            (<span className="font-medium">{joinWithOverflow(statisticalSummaries)}</span>)
+            {" "}— worth a look if any turn out to be a real business risk, not necessarily
             a problem with your data.
           </span>
         </div>

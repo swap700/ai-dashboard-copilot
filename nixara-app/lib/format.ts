@@ -16,6 +16,12 @@ export function formatNumber(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 
+/** Formats a 0-1-scale ratio as a percentage string, e.g. 0.165 -> "16.5%", -2.6 -> "-260%". */
+export function formatPercent(ratio: number): string {
+  if (!Number.isFinite(ratio)) return "—";
+  return `${formatNumber(ratio * 100)}%`;
+}
+
 /**
  * Formats a value that may be a native JS Date (what ExcelJS/date-typed CSV
  * cells produce) into a short, human-readable, timezone-stable string.
@@ -86,4 +92,23 @@ export function monthBucketKey(d: Date): string {
 /** Sort key so month buckets sort chronologically, not alphabetically. */
 export function monthBucketSortKey(d: Date): number {
   return d.getUTCFullYear() * 12 + d.getUTCMonth();
+}
+
+/**
+ * Joins a list of display names into one readable string, capped so a
+ * dataset with many flagged columns doesn't turn a one-line summary banner
+ * into a wall of text: "A, B, C, D, E, F, +3 more" once past `max` names.
+ *
+ * BUG FIX (2026-09): AnomalyWarnings' "N columns show statistically unusual
+ * values" banner computed the actual list of flagged columns and then threw
+ * it away, keeping only the count -- the person reading it had no way to
+ * tell WHICH columns without generating a full Risk Report and hoping the
+ * model happened to mention all of them (it only surfaces ones it judged
+ * risk-worthy, not the full deterministic list). This is what the banner
+ * now renders that list with.
+ */
+export function joinWithOverflow(items: string[], max = 6): string {
+  if (items.length === 0) return "";
+  if (items.length <= max) return items.join(", ");
+  return `${items.slice(0, max).join(", ")}, +${items.length - max} more`;
 }

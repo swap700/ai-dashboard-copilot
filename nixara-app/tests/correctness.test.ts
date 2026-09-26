@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -364,6 +364,34 @@ check("a legitimate category ('Unknown') is never miscounted as missing just bec
 check("dashboardScoreBreakdown's missingRatio agrees with detectMissingValuesByColumn (same isMissingValue rule)",
   Math.abs(dashboardScoreBreakdown(placeholderText).missingRatio - 5 / 8) < 1e-9,
   JSON.stringify(dashboardScoreBreakdown(placeholderText)));
+
+// ── describeAnomalies: names not just how many rows are statistically
+// unusual in a column, but the actual most-extreme value among them --
+// deterministically, so the anomaly banner can show it without needing a
+// generated report ─────────────────────────────────────────────────────────
+console.log("describeAnomalies - the actual extreme value behind a flagged column");
+
+function columnOf(values: number[]): Dataset {
+  return { rows: values.map((v) => ({ x: v })), columns: ["x"] };
+}
+
+check("no anomalies -> null, not an empty/zero placeholder",
+  describeAnomalies(columnOf([10, 11, 9, 10, 12, 10, 11, 9, 10]), "x") === null);
+
+const highOutlier = columnOf([10, 11, 9, 10, 12, 10, 11, 9, 10, 500]);
+const highDesc = describeAnomalies(highOutlier, "x");
+check("an outlier far ABOVE the mean is reported with direction 'high' and its real value",
+  highDesc?.direction === "high" && highDesc.extremeValue === 500, JSON.stringify(highDesc));
+
+const lowOutlier = columnOf([10, 11, 9, 10, 12, 10, 11, 9, 10, -500]);
+const lowDesc = describeAnomalies(lowOutlier, "x");
+check("an outlier far BELOW the mean is reported with direction 'low' and its real value",
+  lowDesc?.direction === "low" && lowDesc.extremeValue === -500, JSON.stringify(lowDesc));
+
+check("a column shaped like a bounded proportion is marked isProportion",
+  describeAnomalies(columnOf([0.1, 0.12, 0.11, 0.5, 0.13, 0.1, 0.11, 0.9, 0.12]), "x")?.isProportion === true);
+check("a column with negative or >1 values (e.g. a margin that can go negative) is NOT forced into isProportion",
+  describeAnomalies(columnOf([0.1, -0.5, 0.11, 2.5, 0.13, 0.1, 0.11, 0.9, 0.12]), "x")?.isProportion === false);
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

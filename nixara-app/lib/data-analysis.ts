@@ -320,6 +320,62 @@ export function detectAnomalies(dataset: Dataset, col: string): Row[] {
     .map((x) => x.row);
 }
 
+export interface AnomalyDescription {
+  column: string;
+  count: number;
+  /** The single most extreme flagged value (largest |z-score|), in the column's own raw scale. */
+  extremeValue: number;
+  /** Whether that extreme sits above or below the column's mean. */
+  direction: "high" | "low";
+  /** Whether extremeValue is a 0-1 ratio (render as a percentage) rather than a plain number. */
+  isProportion: boolean;
+}
+
+/**
+ * Companion to detectAnomalies(): describes WHAT the flagged rows actually
+ * look like, not just how many there are.
+ *
+ * BUG FIX (2026-09): the anomaly banner told the user "N columns show
+ * statistically unusual values" and (after an earlier fix) named the
+ * columns, but never said what value was actually unusual in any of them --
+ * the only way to see a real number was to generate a full Risk Report and
+ * hope the model's prose happened to mention it, which it often didn't
+ * (Early Warning Signs/Top Risks only cover what the model judged
+ * risk-worthy, not every flagged column). This surfaces the single most
+ * extreme flagged value per column directly from the dataset,
+ * deterministically -- no model involved, so it can't be wrong or omitted.
+ *
+ * Deliberately never guesses a currency symbol: there is no reliable way to
+ * know an arbitrary numeric column is denominated in dollars from its name
+ * or shape alone (that is exactly the class of mistake fixed elsewhere in
+ * this file -- see the profitCols/primaryMetric notes above). A column
+ * shaped like a 0-1 ratio (see looksLikeProportion) is unambiguous and
+ * rendered as a percentage; everything else is a plain formatted number.
+ */
+export function describeAnomalies(dataset: Dataset, col: string): AnomalyDescription | null {
+  const rows = detectAnomalies(dataset, col);
+  if (rows.length === 0) return null;
+
+  const allValues = dataset.rows
+    .map((r) => r[col])
+    .filter((v): v is number => typeof v === "number");
+  const stats = numericStats(allValues);
+
+  let extremeValue = rows[0][col] as number;
+  for (const row of rows) {
+    const v = row[col] as number;
+    if (Math.abs(v - stats.mean) > Math.abs(extremeValue - stats.mean)) extremeValue = v;
+  }
+
+  return {
+    column: col,
+    count: rows.length,
+    extremeValue,
+    direction: extremeValue >= stats.mean ? "high" : "low",
+    isProportion: looksLikeProportion(allValues),
+  };
+}
+
 export interface DashboardScoreReason {
   key: "missingData" | "columnCount" | "rowCount";
   penalty: number;
