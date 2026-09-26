@@ -343,6 +343,37 @@ export interface DashboardScoreBreakdown {
  * every caller that only ever wanted the number (buildDataSummary's text
  * block sent to the AI, primarily).
  */
+/**
+ * Placeholder tokens a real-world export commonly writes in place of a true
+ * blank cell -- matched whole-value only (never a substring), case- and
+ * whitespace-insensitive, so a legitimate category that merely CONTAINS one
+ * of these words is never caught by accident.
+ *
+ * Only closes a gap for CATEGORICAL columns. A column cleanDataset() already
+ * treats as numeric catches these for free: "NULL" or "N/A" sitting in an
+ * otherwise-numeric column fails toNumberOrNull() and already becomes a real
+ * `null` before either function below ever runs. The one real gap was the
+ * same placeholder typed into a text/categorical column, which cleanDataset
+ * has no reason to touch -- it survived as the literal string "N/A" and was
+ * invisible to a check that only looked for null/undefined/"".
+ */
+const NULL_PLACEHOLDER_TOKENS = new Set([
+  "na", "n/a", "n.a.", "null", "none", "nan",
+  "#n/a", "#null!", "#value!", "#div/0!", "missing",
+]);
+// Deliberately NOT included: a bare "-" or "--". Both are a common blank
+// convention in some exports, but a value starting with "-" is also a
+// formula-injection trigger character (see sanitizeCell in file-parser.ts),
+// so by the time this runs it may already carry a guard prefix ("'--"),
+// making detection inconsistent depending on parse order. Narrower but
+// reliable beats broader but sometimes-silently-missed.
+
+function isMissingValue(v: unknown): boolean {
+  if (v === null || v === undefined || v === "") return true;
+  if (typeof v === "string") return NULL_PLACEHOLDER_TOKENS.has(v.trim().toLowerCase());
+  return false;
+}
+
 export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdown {
   const { rows, columns } = dataset;
   let score = 100;
@@ -353,8 +384,7 @@ export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdo
     let missing = 0;
     for (const row of rows) {
       for (const col of columns) {
-        const v = row[col];
-        if (v === null || v === undefined || v === "") missing++;
+        if (isMissingValue(row[col])) missing++;
       }
     }
     missingRatio = missing / (rows.length * columns.length);
@@ -415,8 +445,7 @@ export function detectMissingValuesByColumn(dataset: Dataset): ColumnIssue[] {
   for (const col of columns) {
     let missing = 0;
     for (const row of rows) {
-      const v = row[col];
-      if (v === null || v === undefined || v === "") missing++;
+      if (isMissingValue(row[col])) missing++;
     }
     if (missing === 0) continue;
     const pct = (missing / rows.length) * 100;

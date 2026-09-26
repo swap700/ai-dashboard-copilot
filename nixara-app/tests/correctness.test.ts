@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -331,6 +331,39 @@ check("NUMERIC SUMMARY still totals genuine dollar metrics normally (Profit keep
 check("CROSS-BREAKDOWN / TOP-BOTTOM are computed on Profit (the real dollar metric), not Profit Margin",
   summary.includes("(Profit)") && !summary.includes("(Profit Margin)"),
   "(primaryMetric picked the ratio column instead of the dollar column)");
+
+// ── detectMissingValuesByColumn / dashboardScoreBreakdown: a genuinely
+// blank cell is still caught (the fix that removed the file-parser
+// corruption must never make real missing-data detection go quiet), and a
+// common null-placeholder TEXT token in a categorical column ("NULL",
+// "N/A", "#N/A", ...) is now caught too, where it previously passed through
+// undetected entirely ────────────────────────────────────────────────────
+console.log("detectMissingValuesByColumn - real blanks and null-placeholder text tokens");
+
+const genuinelyBlank: Dataset = {
+  rows: [{ Profit: 100 }, { Profit: null }, { Profit: 200 }, { Profit: "" }],
+  columns: ["Profit"],
+};
+check("a genuinely blank/null numeric cell is still flagged as missing (not silently dropped by the corruption fix)",
+  detectMissingValuesByColumn(genuinelyBlank).find((i) => i.column === "Profit")?.count === 2,
+  JSON.stringify(detectMissingValuesByColumn(genuinelyBlank)));
+
+const placeholderText: Dataset = {
+  rows: [
+    { Notes: "ok" }, { Notes: "NULL" }, { Notes: "N/A" }, { Notes: "n/a" },
+    { Notes: "#N/A" }, { Notes: "none" }, { Notes: "fine" }, { Notes: "Unknown" },
+  ],
+  columns: ["Notes"],
+};
+const notesIssue = detectMissingValuesByColumn(placeholderText).find((i) => i.column === "Notes");
+check("common null-placeholder tokens (NULL, N/A, n/a, #N/A, none) are caught in a categorical column",
+  notesIssue?.count === 5, JSON.stringify(notesIssue));
+check("a legitimate category ('Unknown') is never miscounted as missing just because it sounds uncertain",
+  detectMissingValuesByColumn(placeholderText).find((i) => i.column === "Notes")!.count < 6);
+
+check("dashboardScoreBreakdown's missingRatio agrees with detectMissingValuesByColumn (same isMissingValue rule)",
+  Math.abs(dashboardScoreBreakdown(placeholderText).missingRatio - 5 / 8) < 1e-9,
+  JSON.stringify(dashboardScoreBreakdown(placeholderText)));
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
