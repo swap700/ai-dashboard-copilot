@@ -331,9 +331,27 @@ function MitigationSection({ heading, items }: Extract<VisualSection, { kind: "m
   );
 }
 
+/**
+ * BUG FIX (2026-09): rendered every flagged column unconditionally, no cap.
+ * Fine for a handful of columns; unusable on a wide, messy dataset (a real
+ * 50-column CSV produced a Risk Report where this one cluster alone was 50
+ * rows long, longer than the rest of the report combined). issues is already
+ * sorted worst-first (see detectMissingValuesByColumn / detectMalformedEntries),
+ * so showing the first COLLAPSE_AT and collapsing the rest behind a toggle
+ * costs nothing in severity ordering - the columns that matter most are
+ * exactly the ones already visible by default. 6 matches the cutoff
+ * joinWithOverflow() already uses for the upload-screen teaser, rather than
+ * introducing a second, inconsistent threshold.
+ */
+const COLLAPSE_AT = 6;
+
 function IssueCluster({ label, dotClass, issues }: { label: string; dotClass: string; issues: ColumnIssue[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (issues.length === 0) return null;
   const total = issues.reduce((sum, i) => sum + i.count, 0);
+  const visible = expanded ? issues : issues.slice(0, COLLAPSE_AT);
+  const hiddenCount = issues.length - visible.length;
+
   return (
     <div className="mt-4">
       <div className="flex items-center gap-2 mb-2">
@@ -344,13 +362,22 @@ function IssueCluster({ label, dotClass, issues }: { label: string; dotClass: st
         </span>
       </div>
       <div className="ml-5 space-y-1.5">
-        {issues.map((issue) => (
+        {visible.map((issue) => (
           <div key={issue.column} className="flex items-center justify-between gap-3 bg-bg rounded-lg px-3 py-2 text-[0.8rem]">
             <span className="font-semibold text-text shrink-0">{issue.column}</span>
             <span className="text-text-mute text-right">{issue.detail}</span>
           </div>
         ))}
       </div>
+      {issues.length > COLLAPSE_AT && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="ml-5 mt-1.5 text-[0.76rem] font-semibold text-accent-dk hover:underline"
+        >
+          {expanded ? "Show fewer" : `Show all ${issues.length} columns (${hiddenCount} more)`}
+        </button>
+      )}
     </div>
   );
 }
