@@ -1,9 +1,57 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Dataset } from "@/lib/data-analysis";
 import { describeAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries, humanizeColumnName } from "@/lib/data-analysis";
-import { joinWithOverflow, formatNumber, formatPercent } from "@/lib/format";
+import { formatNumber, formatPercent } from "@/lib/format";
+
+/** Matches joinWithOverflow()'s own default - same cutoff as the plain-text version below and as IssueCluster in ReportVisual.tsx, rather than a third, inconsistent threshold. */
+const OVERFLOW_AT = 6;
+
+/**
+ * Interactive counterpart to joinWithOverflow() (lib/format.ts): same
+ * "show the first N, then +K more" shape, but the overflow is a real
+ * toggle instead of static text - clicking it reveals the hidden names
+ * inline rather than leaving them as an opaque count. joinWithOverflow()
+ * itself is left untouched (it's a plain string utility with its own
+ * tests, used here for contexts where a fixed string, not a stateful
+ * component, is what's needed).
+ */
+function ExpandableSummary({ items }: { items: string[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (items.length <= OVERFLOW_AT) {
+    return <span className="font-medium">{items.join(", ")}</span>;
+  }
+  const visible = expanded ? items : items.slice(0, OVERFLOW_AT);
+  const hiddenCount = items.length - visible.length;
+  return (
+    <span className="font-medium">
+      {visible.join(", ")}
+      {!expanded && ", "}
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="font-semibold text-accent-dk underline hover:no-underline"
+        >
+          +{hiddenCount} more
+        </button>
+      )}
+      {expanded && (
+        <>
+          {" "}
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="font-semibold text-accent-dk underline hover:no-underline"
+          >
+            show fewer
+          </button>
+        </>
+      )}
+    </span>
+  );
+}
 
 interface Props {
   dataset: Dataset;
@@ -77,7 +125,7 @@ export default function AnomalyWarnings({ dataset, hasRiskReport, onJumpToDataQu
           <span>
             {statisticalCount} column{statisticalCount === 1 ? "" : "s"} show{statisticalCount === 1 ? "s" : ""}{" "}
             statistically unusual values{" "}
-            (<span className="font-medium">{joinWithOverflow(statisticalSummaries)}</span>)
+            (<ExpandableSummary items={statisticalSummaries} />)
             {" "}— worth a look if any turn out to be a real business risk, not necessarily
             a problem with your data.
           </span>
