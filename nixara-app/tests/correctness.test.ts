@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, type Dataset, type Row } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -286,6 +286,51 @@ check("fractional values disqualify bounded-count even with few distinct values"
   !looksLikeBoundedCount(datasetOf("rate", [0.1, 0.2, 0.1, 0.3, 0.2]), "rate"));
 check("an empty column is not bounded-count (nothing to classify)",
   !looksLikeBoundedCount({ rows: [], columns: ["x"] }, "x"));
+
+// ── buildDataSummary: primaryMetric/profitCols must never pick a ratio
+// column, and an ID/distinct-count column must never be summed as if it
+// were an additive business figure (the East-region Profit + "999 distinct
+// customers as a dollar figure" bugs from a real superstore_data.csv report) ──
+console.log("buildDataSummary - primaryMetric excludes ratio columns; ID/count columns are never summed");
+
+function preAggregatedSuperstoreDataset(): Dataset {
+  // Shaped like the real dataset that surfaced these bugs: one row per
+  // (Region, Category) slice, where "Profit Margin" is a per-slice RATIO
+  // and "Distinct count of Customer ID" is a per-slice COUNT -- neither is
+  // valid to sum across slices, unlike "Profit" and "Sales".
+  const rows: Row[] = [
+    { Region: "East", Category: "Tech", "Profit Margin": 0.19, "Distinct count of Customer ID": 600, Profit: 48441.75, Sales: 255000 },
+    { Region: "East", Category: "Office", "Profit Margin": 0.30, "Distinct count of Customer ID": 399, Profit: 42996.71, Sales: 190000 },
+    { Region: "Central", Category: "Tech", "Profit Margin": 0.15, "Distinct count of Customer ID": 500, Profit: 33697.45, Sales: 200000 },
+  ];
+  return { rows, columns: ["Region", "Category", "Profit Margin", "Distinct count of Customer ID", "Profit", "Sales"] };
+}
+
+const summary = buildDataSummary(preAggregatedSuperstoreDataset());
+
+check("BREAKDOWN BY REGION cites the real Profit sum for East ($94,883.24 shape), never a Profit-Margin-confused figure",
+  summary.includes("Profit by Region: East=91438.46") || /Profit by Region:[^\n]*East=91438\.46/.test(summary),
+  summary.split("\n").find(l => l.includes("Profit by Region")) ?? "(no such line)");
+
+check("BREAKDOWN BY REGION never sums Profit Margin as if it were a dollar total",
+  !/Profit Margin by Region:[^\n]*East=(?!0\.)/.test(summary) , "(a non-ratio-looking Profit Margin total leaked into the breakdown)");
+
+check("Distinct count of Customer ID never appears in a BREAKDOWN section (it is not a valid thing to sum)",
+  !/Distinct count of Customer ID by (Region|Category)/.test(summary),
+  summary.split("\n").find(l => l.includes("Distinct count of Customer ID by")) ?? "(correctly absent)");
+
+check("NUMERIC SUMMARY labels Distinct count of Customer ID as a per-row count, with no fabricated TOTAL",
+  /Distinct count of Customer ID:[^\n]*\[identifier\/count column/.test(summary) &&
+  !/Distinct count of Customer ID:[^\n]*TOTAL=/.test(summary),
+  summary.split("\n").find(l => l.startsWith("  Distinct count of Customer ID:")) ?? "(line not found)");
+
+check("NUMERIC SUMMARY still totals genuine dollar metrics normally (Profit keeps its TOTAL)",
+  /Profit:[^\n]*TOTAL=125135\.91/.test(summary),
+  summary.split("\n").find(l => l.startsWith("  Profit:")) ?? "(line not found)");
+
+check("CROSS-BREAKDOWN / TOP-BOTTOM are computed on Profit (the real dollar metric), not Profit Margin",
+  summary.includes("(Profit)") && !summary.includes("(Profit Margin)"),
+  "(primaryMetric picked the ratio column instead of the dollar column)");
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

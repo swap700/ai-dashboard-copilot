@@ -871,14 +871,39 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   const AMOUNT_TOKENS = new Set(
     ["profit", "revenue", "sales", "income", "earnings"].map(singularize)
   );
-  const profitCols = numericCols.filter((col) =>
-    tokenize(col).some((t) => AMOUNT_TOKENS.has(t))
+  // BUG FIX (2026-09): token matching alone still let "Profit Margin" through
+  // -- it tokenizes to ["profit", "margin"], and "profit" is an AMOUNT_TOKEN,
+  // so `.some()` matched on that one token even though the column as a whole
+  // is a ratio, not a dollar amount. The comment above this block described
+  // margin exclusion as already fixed, but nothing enforced it. Now gated on
+  // the column's own aggregation type: a genuine dollar amount is always
+  // sum-typed (that is what profitCols exists to find), and requiring
+  // aggTypeOf(col) === "sum" excludes "Profit Margin" (mean-typed, because
+  // "margin" is a MEAN_KEYWORD checked before SUM_KEYWORDS in smartAgg)
+  // without needing a second keyword list kept in sync with the first.
+  //
+  // Also now sourced from businessMetricColumns(), not raw numericCols --
+  // an ID/count/distinct column (see NON_METRIC_PATTERNS) can never become
+  // the primary dollar metric even if its name happens to contain an
+  // amount-like token, and can never appear in a BREAKDOWN/CROSS-BREAKDOWN/
+  // TOP-BOTTOM section as if it were an additive business figure. Confirmed
+  // against superstore_data.csv: without this, "Profit Margin" became
+  // primaryMetric ahead of "Profit" itself, and "Distinct count of Customer
+  // ID" -- a per-slice count that is not valid to sum across slices -- was
+  // aggregated exactly like a dollar total and handed to the model as one,
+  // which is how a category's real distinct-customer count (999) ended up
+  // reported as a dollar figure ($3,220.00 for another category).
+  const businessMetrics = businessMetricColumns(filtered);
+  const businessMetricSet = new Set(businessMetrics);
+  const profitCols = businessMetrics.filter(
+    (col) => tokenize(col).some((t) => AMOUNT_TOKENS.has(t)) && aggTypeOf(col) === "sum"
   );
 
-  // Primary dollar metric: first amount-like col, or first sum-type numeric col
+  // Primary dollar metric: first amount-like col, or first sum-type business metric
   const primaryMetric =
     profitCols[0] ??
-    numericCols.find((c) => aggTypeOf(c) === "sum") ??
+    businessMetrics.find((c) => aggTypeOf(c) === "sum") ??
+    businessMetrics[0] ??
     numericCols[0];
 
   if (numericCols.length > 0) {
@@ -886,12 +911,23 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     for (const col of numericCols) {
       const st = columnStats.get(col)!;
       if (st.count === 0) continue;
-      // Show an absolute total only where adding the column up means something.
-      const total = aggTypeOf(col) === "sum" ? st.total : null;
+      // Show an absolute total only where adding the column up means
+      // something. BUG FIX (2026-09): a column matching NON_METRIC_PATTERNS
+      // (an ID, a distinct-count, a rank/index) is never summed here even
+      // when smartAgg's name-based guess called it "sum" (e.g. "Distinct
+      // count of Customer ID" matches the "count" SUM_KEYWORD) -- these
+      // columns hold a pre-aggregated per-row count or identifier, and
+      // summing them across rows produces a number with no real-world
+      // meaning. Labeled explicitly so the model is told this is a per-row
+      // value, not left to guess and then cite the (non-existent) total as
+      // if it were a dollar figure.
+      const isBusinessMetric = businessMetricSet.has(col);
+      const total = isBusinessMetric && aggTypeOf(col) === "sum" ? st.total : null;
+      const note = isBusinessMetric ? "" : " [identifier/count column - per-row value only, never sum or total this]";
       lines.push(
         `  ${col}: count=${st.count} mean=${st.mean.toFixed(2)} std=${st.std.toFixed(2)} ` +
         `min=${st.min.toFixed(2)} max=${st.max.toFixed(2)}` +
-        (total !== null ? ` TOTAL=${total.toFixed(2)}` : "")
+        (total !== null ? ` TOTAL=${total.toFixed(2)}` : "") + note
       );
     }
     lines.push("");
@@ -900,8 +936,8 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // Prioritise amount columns in breakdowns so the model always sees dollar totals
   const breakdownMetrics = [
     ...profitCols,
-    ...numericCols.filter(c => !profitCols.includes(c) && aggTypeOf(c) === "sum"),
-    ...numericCols.filter(c => !profitCols.includes(c) && aggTypeOf(c) !== "sum"),
+    ...businessMetrics.filter(c => !profitCols.includes(c) && aggTypeOf(c) === "sum"),
+    ...businessMetrics.filter(c => !profitCols.includes(c) && aggTypeOf(c) !== "sum"),
   ].slice(0, 4);
 
   // Find the most useful categorical columns: prefer low-cardinality (2–20 unique values)

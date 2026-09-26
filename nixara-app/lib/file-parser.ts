@@ -22,10 +22,36 @@ const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
  */
 const FORMULA_TRIGGER_CHARS = ["=", "+", "-", "@", "\t", "\r"];
 
+/**
+ * BUG FIX (2026-09): a plain negative (or "+"-prefixed) number starts with a
+ * formula-trigger character too, and this function ran on it right along
+ * with real formula text. PapaParse's dynamicTyping converts a numeric cell
+ * to an actual `number` before this ever runs, but only when the string has
+ * no thousands separator -- "-670.58" becomes a number and skips this
+ * function entirely (see the `typeof value !== "string"` guard above), while
+ * "-1,500.87" fails Papa's stricter numeric regex and arrives here as a live
+ * string. Every value like that -- negative and >= 1,000 in magnitude -- was
+ * getting a `'` prepended, corrupting "-1,500.87" into "'-1,500.87": a value
+ * cleanDataset's toNumberOrNull() can no longer parse, so it silently became
+ * `null` ("missing data") and was dropped from every sum. On one real report
+ * this alone accounted for a five-figure swing in a region's reported total
+ * profit and a false "N missing values" data-quality flag on a column that
+ * had zero actual blanks.
+ *
+ * A cell that reads as a clean signed number (optionally with thousands
+ * separators, a decimal, and/or a leading currency symbol) is never a
+ * spreadsheet formula -- formula injection needs actual formula syntax after
+ * the trigger character (a function call, a second operator, a cell
+ * reference), which a plain number never has. So a value is only sanitized
+ * when it starts with a trigger character AND does NOT parse as a plain
+ * number.
+ */
+const PLAIN_NUMBER = /^\$?[+-]?(\d{1,3}(,\d{3})*|\d+)(\.\d+)?$/;
+
 function sanitizeCell<T>(value: T): T {
   if (typeof value !== "string") return value;
   if (value.length === 0) return value;
-  if (FORMULA_TRIGGER_CHARS.includes(value[0])) {
+  if (FORMULA_TRIGGER_CHARS.includes(value[0]) && !PLAIN_NUMBER.test(value.trim())) {
     return ("'" + value) as unknown as T;
   }
   return value;

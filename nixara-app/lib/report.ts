@@ -108,7 +108,7 @@ Early Warning Signs
 (3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them. Each metric must be a direct business measure, described in plain business language — write "number of unique customers" not "distinct count of Customer ID". Never list a correlation coefficient or other statistical output as an early warning sign.)
 
 Mitigation Actions
-(One concrete action per risk. Format: "Role responsible: Action — Start within [timeframe].")
+(One concrete action per risk. Format: "<Role or team name>: <action> — Start within <timeframe>." Example: "Finance Team: Cap discounts above 5% — Start within 2 weeks." Replace <Role or team name> with the actual responsible role or team — never write the literal words "Role responsible". Always use the exact phrase "Start within", never a synonym like "Begin within".)
 
 Data Quality Risks
 (Apply this rule strictly:

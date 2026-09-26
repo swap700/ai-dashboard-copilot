@@ -9,10 +9,12 @@
     "lint": "eslint",
     "test:security": "node --experimental-strip-types --import ./tests/register.mjs tests/security.test.ts",
     "test:correctness": "node --experimental-strip-types --import ./tests/register.mjs tests/correctness.test.ts",
-    "test": "npm run test:security && npm run test:correctness && npm run test:drift && npm run test:report && npm run test:decision-templates",
+    "test": "npm run test:security && npm run test:correctness && npm run test:drift && npm run test:report && npm run test:decision-templates && npm run test:file-parser && npm run test:report-visual",
     "test:drift": "node --experimental-strip-types --import ./tests/register.mjs tests/drift.test.ts",
     "test:report": "node --experimental-strip-types --import ./tests/register.mjs tests/report.test.ts",
-    "test:decision-templates": "node --experimental-strip-types --import ./tests/register.mjs tests/decision-templates.test.ts"
+    "test:decision-templates": "node --experimental-strip-types --import ./tests/register.mjs tests/decision-templates.test.ts",
+    "test:file-parser": "node --experimental-strip-types --import ./tests/register.mjs tests/file-parser.test.ts",
+    "test:report-visual": "node --experimental-strip-types --import ./tests/register.mjs tests/report-visual.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

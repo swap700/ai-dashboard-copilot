@@ -346,7 +346,20 @@ function parseSection(
           .map(anyLineText)
           .filter((t): t is string => t !== null)
           .map((body) => {
-            const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+?)\s*[-–—]\s*Start within\s*(.+?)\.?\s*$/i.exec(body);
+            // BUG FIX (2026-09): the prompt's format string was ambiguous
+            // enough that the model sometimes echoed its literal words
+            // ("Role responsible: Finance Team: ...") instead of substituting
+            // an actual role, and sometimes wrote "Begin within" instead of
+            // "Start within" -- either deviation made this regex miss
+            // entirely, silently falling through to the plain-text case
+            // below, so that one action rendered as a bare bullet with no
+            // role pill while its sibling lines (which happened to match)
+            // got one. Fixed at the prompt too (see report.ts), but handled
+            // defensively here as well so a future model wording drift
+            // degrades to "role stripped, action shown" rather than "role
+            // pill silently missing" again.
+            const cleaned = body.replace(/^role responsible:\s*/i, "");
+            const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+?)\s*[-–—]\s*(?:Start|Begin) within\s*(.+?)\.?\s*$/i.exec(cleaned);
             if (m) return { role: m[1].trim(), action: m[2].trim(), timeframe: m[3].trim() };
             return { role: null, action: body, timeframe: null };
           }),
