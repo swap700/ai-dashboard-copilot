@@ -124,6 +124,8 @@ export interface LogOutcomeParams {
    */
   metricDimension?: string | null;
   metricDimensionValue?: string | null;
+  /** Optional target the person was aiming for. Saved by a separate call so it can never block recording the outcome itself. */
+  metricTarget?: number | null;
 }
 
 export interface LoggedOutcome {
@@ -172,6 +174,24 @@ export async function logOutcome(params: LogOutcomeParams): Promise<LoggedOutcom
   if (error || !data) return null;
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
+
+  // The target is optional and stored by its own small function, deliberately
+  // NOT a new parameter on log_outcome_record: the outcome is the important
+  // write, and a failure here (the migration not applied yet, a network
+  // blip) must never lose it or make saving look like it failed.
+  if (params.metricTarget != null && Number.isFinite(params.metricTarget) && !row.already_existed) {
+    try {
+      const { error: targetError } = await supabase.rpc("set_outcome_target", {
+        p_public_id:  params.publicId,
+        p_session_id: params.sessionId,
+        p_target:     params.metricTarget,
+      });
+      if (targetError) console.warn("[logOutcome] target not saved:", targetError.message);
+    } catch (e) {
+      console.warn("[logOutcome] target not saved:", e);
+    }
+  }
+
   return { id: row.id as number, alreadyExisted: Boolean(row.already_existed) };
 }
 

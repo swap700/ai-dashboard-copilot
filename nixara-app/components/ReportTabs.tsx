@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
-import { buildVisualSections, countUnverifiedFigures } from "@/lib/report-visual";
+import { buildVisualSections, countUnverifiedFigures, listUnverifiedFigures } from "@/lib/report-visual";
 import { buildEvidenceFacts } from "@/lib/evidence";
 import { dashboardScore, detectMissingValuesByColumn, detectMalformedEntries, type Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
@@ -140,6 +140,18 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
     [current, active, evidenceFacts, qualityScore, missingValues, malformedEntries]
   );
   const unverifiedCount = useMemo(() => countUnverifiedFigures(sections), [sections]);
+  const unverifiedFigures = useMemo(() => listUnverifiedFigures(sections), [sections]);
+
+  // Scrolls to the nth rendered occurrence of a flagged figure. Figures are
+  // marked in the DOM with data-unverified-figure (ReportVisual.tsx); matching
+  // by text plus occurrence index keeps this working without threading ids
+  // through every section component.
+  const jumpToFigure = (figure: string, nth: number) => {
+    const matches = Array.from(document.querySelectorAll<HTMLElement>("[data-unverified-figure]")).filter(
+      (el) => el.dataset.unverifiedFigure === figure
+    );
+    (matches[nth] ?? matches[0])?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   return (
     <div className="mb-10">
@@ -209,34 +221,72 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
               </div>
             )}
 
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-bg px-3 py-2 mb-4 text-[0.72rem] text-text-mute">
+              <span className="font-semibold text-text">Reading this report:</span>
+              <span>
+                <span className="font-semibold text-accent">{"\u{1F50D}"} source</span> traced to your data
+              </span>
+              <span>
+                <span className="font-semibold text-accent">{"\u{1F9EE}"} calculated</span> computed by Nixara from your data
+              </span>
+              <span>
+                <span className="font-semibold text-warn border-b-2 border-dotted border-warn">unverified</span> could not be
+                matched, may still be right
+              </span>
+            </div>
+
             {current.corrected && (
-              <div
-                className="rounded-lg border border-success-border bg-success-bg px-4 py-3 mb-4"
-                role="status"
-              >
+              <div className="rounded-lg border border-success-border bg-success-bg px-4 py-3 mb-4" role="status">
                 <p className="text-success text-sm font-semibold mb-0.5">
-                  Nixara double-checked this report before showing it to you.
+                  {current.correctedFigures && current.correctedFigures.length > 0
+                    ? `${current.correctedFigures.length} figure${current.correctedFigures.length === 1 ? "" : "s"} in the first draft could not be matched to your data and ${current.correctedFigures.length === 1 ? "was" : "were"} replaced before you saw this report.`
+                    : "Nixara double-checked this report before showing it to you."}
                 </p>
-                <p className="text-text-mute text-sm">
-                  One or more figures in the first draft didn&apos;t match your uploaded data, so
-                  Nixara asked the model to correct itself before this version was returned.
-                </p>
+                {current.correctedFigures && current.correctedFigures.length > 0 ? (
+                  <>
+                    <p className="text-text text-sm font-medium">{current.correctedFigures.join("  \u00B7  ")}</p>
+                    <p className="text-text-mute text-sm mt-0.5">
+                      The wording around {current.correctedFigures.length === 1 ? "it was" : "them was"} rewritten without the number.
+                      They may have been correct figures Nixara had no way to confirm, so this is a precaution, not a verdict.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-text-mute text-sm">
+                    One or more figures in the first draft could not be matched to your data, so Nixara asked the model to
+                    correct itself before this version was returned.
+                  </p>
+                )}
               </div>
             )}
 
             {unverifiedCount > 0 && (
-              <div
-                className="rounded-lg border border-danger-border bg-danger-bg px-4 py-3 mb-4"
-                role="status"
-              >
-                <p className="text-danger text-sm font-semibold mb-0.5">
+              <div className="rounded-lg border border-warn-border bg-warn-bg px-4 py-3 mb-4" role="status">
+                <p className="text-warn text-sm font-semibold mb-0.5">
                   {unverifiedCount === 1
                     ? "1 figure in this version could not be confirmed against your data."
                     : `${unverifiedCount} figures in this version could not be confirmed against your data.`}
                 </p>
-                <p className="text-text-mute text-sm">
-                  Look for the struck-through number{unverifiedCount === 1 ? "" : "s"} below and treat
-                  {unverifiedCount === 1 ? " it" : " them"} with caution before acting on{" "}
+                {unverifiedFigures.length > 0 && (
+                  <ul className="text-sm mt-1 space-y-0.5">
+                    {unverifiedFigures.map((u, i) => {
+                      const nth = unverifiedFigures.slice(0, i).filter((x) => x.figure === u.figure).length;
+                      return (
+                        <li key={`${u.where}-${i}`}>
+                          <button
+                            type="button"
+                            onClick={() => jumpToFigure(u.figure, nth)}
+                            className="font-semibold text-accent-dk underline hover:no-underline"
+                          >
+                            {u.figure}
+                          </button>{" "}
+                          <span className="text-text-mute">{u.where}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+                <p className="text-text-mute text-sm mt-1">
+                  Click a figure to jump to it. Check {unverifiedCount === 1 ? "it" : "these"} before acting on{" "}
                   {unverifiedCount === 1 ? "it" : "them"}.
                 </p>
               </div>

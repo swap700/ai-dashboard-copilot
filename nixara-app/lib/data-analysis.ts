@@ -11,9 +11,18 @@ export type Row = Record<string, unknown>;
 export interface Dataset {
   rows: Row[];
   columns: string[];
+  /**
+   * Non-fatal notes from reading the file (e.g. rows whose column count did
+   * not match the header). Shown to the user above the dashboard. Optional:
+   * most datasets have none, and every analysis function ignores it.
+   */
+  warnings?: string[];
 }
 
 const NUMERIC_THRESHOLD = 0.5;
+
+/** Leaves headroom under the server's 8,000-char summary cap (route.ts MAX_SUMMARY_CHARS). */
+const DERIVED_SUMMARY_BUDGET = 7500;
 
 function toNumberOrNull(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -47,7 +56,8 @@ export function cleanDataset(dataset: Dataset): Dataset {
     return next;
   });
 
-  return { rows: cleanedRows, columns };
+  // Spread first so optional fields such as `warnings` survive cleaning.
+  return { ...dataset, rows: cleanedRows, columns };
 }
 
 export function numericColumns(dataset: Dataset): string[] {
@@ -304,7 +314,37 @@ export function numericStats(values: number[]): NumericStats {
 }
 
 /** Mirrors detect_anomalies: rows where |z-score| > 2 for the given numeric column. */
+/**
+ * Columns where "far from the column's average" carries no meaning, so
+ * flagging them is noise rather than signal: geographic coordinates, postal
+ * codes, and calendar years. A ride at latitude -48.26 or a ride opened in
+ * 1884 is valid; it is simply not a business risk, and listing it next to
+ * real metrics buries the ones that matter.
+ *
+ * Coordinates and postal codes are matched by NAME. Years are matched by
+ * SHAPE (every value a whole number between 1800 and 2100) rather than by a
+ * "year" name token, because "Years of Experience" is a genuine measure that
+ * must keep being checked. This runs inside detectAnomalies(), so the upload
+ * notice, the Risk Report's anomaly lines and the quality score all agree.
+ */
+const OUTLIER_SKIP_TOKENS = new Set([
+  "latitude", "longitude", "lat", "lon", "lng", "zip", "postal", "postcode", "pincode",
+]);
+
+export function isOutlierMeaninglessColumn(dataset: Dataset, col: string): boolean {
+  if (tokenize(col).some((t) => OUTLIER_SKIP_TOKENS.has(t))) return true;
+  let seen = 0;
+  for (const row of dataset.rows) {
+    const v = row[col];
+    if (typeof v !== "number") continue;
+    if (!Number.isInteger(v) || v < 1800 || v > 2100) return false;
+    seen++;
+  }
+  return seen >= 5;
+}
+
 export function detectAnomalies(dataset: Dataset, col: string): Row[] {
+  if (isOutlierMeaninglessColumn(dataset, col)) return [];
   const present = dataset.rows
     .map((r, i) => ({ row: r, value: r[col], i }))
     .filter((x) => typeof x.value === "number") as { row: Row; value: number; i: number }[];
@@ -374,6 +414,111 @@ export function describeAnomalies(dataset: Dataset, col: string): AnomalyDescrip
     direction: extremeValue >= stats.mean ? "high" : "low",
     isProportion: looksLikeProportion(allValues),
   };
+}
+
+/**
+ * A figure Nixara computes itself from other figures in the data (a ratio of
+ * two totals, a category's share of a total).
+ *
+ * Why this exists: the report prompt used to let the model do its own
+ * arithmetic ("a percentage of two given figures"), while the checker only
+ * accepts figures that literally exist in its fact index. So a correct 12.5%
+ * margin was flagged as unverified, forcing a second model call and the
+ * "double-checked" banner on nearly every report. Now Nixara computes these
+ * figures, hands them to the model to copy, and puts the same figures in the
+ * fact index, so the prompt and the checker agree.
+ */
+export interface DerivedFigure {
+  kind: "ratio" | "share";
+  /** Plain-language name, e.g. "Profit as % of Sales". */
+  label: string;
+  /** Percentage, 0-100 scale, rounded to 2 decimals. */
+  value: number;
+  /** How it was computed, shown to the reader, e.g. "total Profit / total Sales". */
+  formula: string;
+  /** For shares: the group this belongs to, e.g. "Share of total Sales by Category". */
+  set?: string;
+  /** For shares: the category value, e.g. "Technology". */
+  item?: string;
+}
+
+const DERIVED_AMOUNT_TOKENS = new Set(
+  ["profit", "revenue", "sales", "income", "earnings"].map(singularize)
+);
+
+function round2d(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Bounded and general (no per-dataset special cases): at most 6 ratios among
+ * the first 4 sum-type business metrics, and shares of total for the first 2
+ * low-cardinality categories x first 2 sum-type metrics (<= 80 shares).
+ */
+export function computeDerivedFigures(dataset: Dataset): DerivedFigure[] {
+  const out: DerivedFigure[] = [];
+
+  const sumMetrics: { col: string; total: number }[] = [];
+  const candidates = businessMetricColumns(dataset);
+  // Amount-like columns (profit, sales, ...) first, so the figures a finance
+  // reader expects are the ones that make the cut when there are many metrics.
+  const ordered = [
+    ...candidates.filter((c) => tokenize(c).some((t) => DERIVED_AMOUNT_TOKENS.has(t))),
+    ...candidates.filter((c) => !tokenize(c).some((t) => DERIVED_AMOUNT_TOKENS.has(t))),
+  ];
+  for (const col of ordered) {
+    if (sumMetrics.length >= 4) break;
+    const values = dataset.rows.map((r) => r[col]).filter((v): v is number => typeof v === "number");
+    if (values.length === 0 || smartAgg(col, values) !== "sum") continue;
+    sumMetrics.push({ col, total: numericStats(values).total });
+  }
+
+  // Ratios of totals, smaller over larger so each pair appears once (a
+  // reciprocal like "Sales as 802% of Profit" is never useful).
+  for (let i = 0; i < sumMetrics.length; i++) {
+    for (let j = i + 1; j < sumMetrics.length; j++) {
+      const a = sumMetrics[i];
+      const b = sumMetrics[j];
+      if (a.total === 0 || b.total === 0) continue;
+      const [num, den] = Math.abs(a.total) <= Math.abs(b.total) ? [a, b] : [b, a];
+      out.push({
+        kind: "ratio",
+        label: `${num.col} as % of ${den.col}`,
+        value: round2d((num.total / den.total) * 100),
+        formula: `total ${num.col} / total ${den.col}`,
+      });
+    }
+  }
+
+  // Shares of total, only where every group is non-negative: a "share" of a
+  // mixed-sign total (profit with a loss-making category) can exceed 100% and
+  // reads as nonsense.
+  const cats = categoricalColumns(dataset)
+    .filter((c) => {
+      const u = new Set(dataset.rows.map((r) => r[c])).size;
+      return u >= 2 && u <= 20;
+    })
+    .slice(0, 2);
+  for (const cat of cats) {
+    for (const m of sumMetrics.slice(0, 2)) {
+      if (!(m.total > 0)) continue;
+      const groups = aggregateBy(dataset, cat, m.col);
+      if (groups.some((g) => g.value < 0)) continue;
+      const set = `Share of total ${m.col} by ${cat}`;
+      for (const g of groups) {
+        out.push({
+          kind: "share",
+          label: `${g.key} share of total ${m.col}`,
+          value: round2d((g.value / m.total) * 100),
+          formula: `${g.key} ${m.col} / total ${m.col}`,
+          set,
+          item: g.key,
+        });
+      }
+    }
+  }
+
+  return out;
 }
 
 export interface DashboardScoreReason {
@@ -1096,6 +1241,10 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     }
   }
 
+  // Derived figures are spliced in here at the end, once the final length of
+  // everything else is known (see the budget check before the quality score).
+  const derivedInsertAt = lines.length;
+
   // Only run anomaly detection on genuine business metrics, not ID/count
   // columns -- and not columns that are numeric but still count-like by
   // SHAPE (see looksLikeBoundedCount), which z-score treats as "anomalous"
@@ -1136,6 +1285,41 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
         lines.push(`  ${p.a} ~ ${p.b}: ${p.r.toFixed(3)} (n=${p.n})`);
       }
       lines.push("");
+    }
+  }
+
+  // DERIVED FIGURES: figures Nixara computes itself, handed to the model to
+  // copy rather than recompute. Budget-guarded: the server rejects summaries
+  // over 8,000 characters (413), so this only adds as many lines as fit under
+  // DERIVED_SUMMARY_BUDGET and never makes a wide dataset fail to generate.
+  const derived = computeDerivedFigures(filtered);
+  if (derived.length > 0) {
+    const block: string[] = [
+      "DERIVED FIGURES (calculated by Nixara from the data above - copy exactly as written, never recompute or round)",
+    ];
+    for (const r of derived.filter((d) => d.kind === "ratio").slice(0, 3)) {
+      block.push(`  ${r.label}: ${r.value.toFixed(2)}% (${r.formula})`);
+    }
+    const sets = new Map<string, DerivedFigure[]>();
+    for (const d of derived) {
+      if (d.kind !== "share" || !d.set) continue;
+      if (!sets.has(d.set)) sets.set(d.set, []);
+      sets.get(d.set)!.push(d);
+    }
+    for (const [set, items] of sets) {
+      const top = [...items].sort((a, b) => b.value - a.value).slice(0, 6);
+      block.push(`  ${set}: ` + top.map((d) => `${d.item}=${d.value.toFixed(2)}%`).join(", "));
+    }
+    if (block.length > 1) {
+      const current = lines.join("\n").length;
+      const kept: string[] = [block[0]];
+      let used = current + block[0].length + 2;
+      for (const line of block.slice(1)) {
+        if (used + line.length + 1 > DERIVED_SUMMARY_BUDGET) break;
+        kept.push(line);
+        used += line.length + 1;
+      }
+      if (kept.length > 1) lines.splice(derivedInsertAt, 0, ...kept, "");
     }
   }
 

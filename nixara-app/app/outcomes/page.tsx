@@ -71,6 +71,7 @@ export default function OutcomesPage() {
       // without another round of RPC/type plumbing.
       metricDimension: outcome.metricDimension ?? null,
       metricDimensionValue: outcome.metricDimensionValue ?? null,
+      metricTarget: outcome.metricTarget ?? null,
     });
     setLookupOutcomeLogged(true);
   };

@@ -60,5 +60,55 @@ check("a formula starting with '+' is still prefixed with a guard quote",
 check("a formula starting with '-' (not a plain number) is still prefixed with a guard quote",
   notes[2].startsWith("'-"), notes[2]);
 
+
+// ── CSV read checks: an unclosed quote must not silently drop rows ──────────
+console.log("\nCSV read checks - unclosed quotes, column-count mismatches");
+{
+  // 1,000 rows, one value at row 300 opens a quote and never closes it.
+  const lines = ["id,name,amount"];
+  for (let i = 1; i <= 1000; i++) lines.push(i === 300 ? `${i},"Acme,${i * 10}` : `${i},Customer ${i},${i * 10}`);
+  let message = "";
+  try {
+    parseCsvText(lines.join("\n"));
+  } catch (e) {
+    message = e instanceof Error ? e.message : String(e);
+  }
+  check("an unclosed quote at row 300 is refused instead of silently reading 300 of 1,000 rows", message !== "", "no error was thrown");
+  check("the message names the row", message.includes("near row 300"), message);
+  check("the message says how much of the file was readable", message.includes("300 of about 1,000 rows"), message);
+}
+{
+  // A closed quote followed by stray text also makes the parser swallow the rest.
+  const lines = ["id,name,amount"];
+  for (let i = 1; i <= 20; i++) lines.push(i === 4 ? `${i},"Bob"x,${i * 10}` : `${i},Customer ${i},${i * 10}`);
+  let threw = false;
+  try {
+    parseCsvText(lines.join("\n"));
+  } catch {
+    threw = true;
+  }
+  check("a quote followed by stray text (which also swallows the rest of the file) is refused", threw);
+}
+{
+  // Wrong column counts lose no rows: keep them all, but warn.
+  const lines = ["id,name,amount"];
+  for (let i = 1; i <= 20; i++) {
+    lines.push(i === 5 || i === 9 ? `${i},OnlyName` : i === 7 ? `${i},A,B,C,D` : `${i},Customer ${i},${i * 10}`);
+  }
+  const ds = parseCsvText(lines.join("\n"));
+  check("rows with the wrong number of columns are all kept", ds.rows.length === 20, String(ds.rows.length));
+  check("...and one warning says how many", ds.warnings?.length === 1 && ds.warnings[0].includes("3 rows do not have 3 columns"), JSON.stringify(ds.warnings));
+}
+{
+  // The normal case must be untouched: a quoted value containing a comma.
+  const lines = ["id,name,amount"];
+  for (let i = 1; i <= 20; i++) lines.push(`${i},"Smith, J",${i * 10}`);
+  const ds = parseCsvText(lines.join("\n"));
+  check("a correctly quoted value containing a comma reads cleanly", ds.rows.length === 20 && ds.warnings === undefined);
+  check("...and keeps the comma inside the value", ds.rows[0].name === "Smith, J");
+}
+check("cleanDataset keeps the warnings field instead of dropping it",
+  cleanDataset({ rows: [], columns: [], warnings: ["x"] }).warnings?.[0] === "x");
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

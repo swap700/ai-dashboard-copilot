@@ -12,7 +12,7 @@
  * sibling lines that happened to match got one. Confirmed against a real
  * report where exactly this happened on the middle of three action lines.
  */
-import { buildVisualSections } from "../lib/report-visual.ts";
+import { buildVisualSections, listUnverifiedFigures, firstFigure, type VisualSection } from "../lib/report-visual.ts";
 
 let pass = 0;
 let fail = 0;
@@ -52,6 +52,41 @@ if (mitigation && mitigation.kind === "mitigation") {
     deviant?.timeframe === "2 weeks", JSON.stringify(deviant));
 
   check("line 3 (clean format) gets its role pill", mitigation.items[2]?.role === "Marketing and Sales Teams");
+}
+
+
+// ── Banner data: which figures are unverified, and where ────────────────────
+console.log("\nlistUnverifiedFigures - names the figure and where it is");
+{
+  const unv = { status: "unverified" } as const;
+  const none = { status: "none" } as const;
+  const sections: VisualSection[] = [
+    {
+      kind: "quickWins",
+      heading: "Quick Wins",
+      items: [
+        { stat: "$48,300.00", body: "Recover $48,300.00 by trimming discounts.", evidence: unv },
+        { stat: null, body: "Review the 12.50% overlap between regions.", evidence: unv },
+        { stat: "5.0%", body: "Raise prices 5.0%.", evidence: none },
+      ],
+    },
+    {
+      kind: "topRisks",
+      heading: "Top Risks Identified",
+      risks: [
+        { name: "A", likelihood: "medium", impact: "high", type: null, signal: "Margins fell 14.2% last quarter.", consequence: "Loss of $9,000.00", signalEvidence: none, consequenceEvidence: unv },
+        { name: "B", likelihood: "low", impact: "low", type: null, signal: "Returns hit 7.5% of orders.", consequence: "Brand damage", signalEvidence: unv, consequenceEvidence: none },
+      ],
+    },
+  ];
+  const listed = listUnverifiedFigures(sections);
+  check("every unverified figure is listed, none that were matched", listed.length === 4, JSON.stringify(listed));
+  check("a Quick Win with a headline stat uses that stat", listed[0]?.figure === "$48,300.00" && listed[0].where === "Quick Win 1");
+  check("a Quick Win without a stat falls back to the first figure in its text", listed[1]?.figure === "12.50%" && listed[1].where === "Quick Win 2");
+  check("a risk's consequence is labelled as such", listed[2]?.figure === "$9,000.00" && listed[2].where === "Risk 1, consequence", JSON.stringify(listed[2]));
+  check("a risk's signal is labelled as such", listed[3]?.figure === "7.5%" && listed[3].where === "Risk 2, signal", JSON.stringify(listed[3]));
+  check("firstFigure picks the first figure in reading order", firstFigure("Fell 14.2% to $9,000.00") === "14.2%");
+  check("firstFigure returns null when there is no figure", firstFigure("No numbers here") === null && firstFigure(null) === null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

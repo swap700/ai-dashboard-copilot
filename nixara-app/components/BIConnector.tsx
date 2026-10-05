@@ -103,9 +103,7 @@ function UploadTab({ onLoaded }: Props) {
           }}
         />
       </div>
-      {error && (
-        <p className="text-danger text-xs mt-2 text-center" role="alert">{error}</p>
-      )}
+      {error && <ErrorBox title="This file could not be loaded." message={error} />}
     </div>
   );
 }
@@ -206,9 +204,7 @@ function TableauTab({ onLoaded }: Props) {
           />
         </div>
       </div>
-      {error && (
-        <p className="text-danger text-xs mt-1" role="alert">{error}</p>
-      )}
+      {error && <ErrorBox title="Could not connect." message={error} />}
       <button
         type="button"
         disabled={loading}
@@ -332,9 +328,7 @@ function PowerBITab({ onLoaded }: Props) {
           </select>
         </div>
       )}
-      {error && (
-        <p className="text-danger text-xs mt-1" role="alert">{error}</p>
-      )}
+      {error && <ErrorBox title="Could not connect." message={error} />}
       {step === "credentials" ? (
         <button
           type="button"
@@ -370,6 +364,20 @@ function PowerBITab({ onLoaded }: Props) {
 // ═════════════════════════════════════════════════════════════════════════════
 // ROOT COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
+/**
+ * Visible error box. Upload and connection failures used to render as one line
+ * of tiny red text under the drop zone, easy to miss entirely (a too-large file
+ * or an unreadable CSV looked like "nothing happened").
+ */
+function ErrorBox({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="mt-3 rounded-lg border border-danger-border bg-danger-bg px-4 py-3 text-sm" role="alert">
+      <p className="text-danger font-semibold">{title}</p>
+      <p className="text-text-mute mt-0.5">{message}</p>
+    </div>
+  );
+}
+
 export default function BIConnector({ onLoaded }: Props) {
   const [source, setSource] = useState<Source>("upload");
 

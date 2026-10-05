@@ -174,6 +174,50 @@ export function countUnverifiedFigures(sections: VisualSection[]): number {
   return count;
 }
 
+export interface UnverifiedFigure {
+  /** The figure as written in the report, e.g. "14.2%" or "$48,300.00". */
+  figure: string;
+  /** Where it appears, e.g. "Risk 2, consequence" or "Quick Win 1". */
+  where: string;
+}
+
+/** First cited figure in a piece of text: same pattern, same order, as the highlighter in ReportVisual.tsx, so the banner names the figure the reader actually sees underlined. */
+export function firstFigure(text: string | null): string | null {
+  if (!text) return null;
+  const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b/.exec(text);
+  return m ? m[0] : null;
+}
+
+/**
+ * The individual unverified figures, in the order the report renders them,
+ * for the report-level banner (which links to each one). countUnverifiedFigures()
+ * above is the cheap count; this adds which figure and where.
+ */
+export function listUnverifiedFigures(sections: VisualSection[]): UnverifiedFigure[] {
+  const out: UnverifiedFigure[] = [];
+  for (const s of sections) {
+    if (s.kind === "quickWins") {
+      s.items.forEach((item, i) => {
+        if (item.evidence.status !== "unverified") return;
+        const figure = item.stat ?? firstFigure(item.body);
+        if (figure) out.push({ figure, where: `Quick Win ${i + 1}` });
+      });
+    } else if (s.kind === "topRisks") {
+      s.risks.forEach((r, i) => {
+        if (r.signalEvidence.status === "unverified") {
+          const figure = firstFigure(r.signal);
+          if (figure) out.push({ figure, where: `Risk ${i + 1}, signal` });
+        }
+        if (r.consequenceEvidence.status === "unverified") {
+          const figure = firstFigure(r.consequence);
+          if (figure) out.push({ figure, where: `Risk ${i + 1}, consequence` });
+        }
+      });
+    }
+  }
+  return out;
+}
+
 export function buildVisualSections(
   reportText: string,
   reportType: ReportType,

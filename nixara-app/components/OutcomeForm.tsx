@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { RATING_RULE_TEXT, suggestOutcomeRating } from "@/lib/outcome-rating";
 import type { OutcomeRating } from "@/lib/decisions";
 import type { RecordedOutcome } from "@/lib/session-context";
 import { businessMetricColumns, categoricalColumns, numericStats, smartAgg, type Dataset } from "@/lib/data-analysis";
@@ -63,7 +64,10 @@ export default function OutcomeForm({ onSubmit, dataset }: Props) {
   const [manualAfter, setManualAfter] = useState<string | null>(null);
   const [before, setBefore] = useState("");
   const [unit, setUnit] = useState(UNITS[0]);
-  const [rating, setRating] = useState<OutcomeRating>("met");
+  // No default. It used to start on "met", so saving without touching it logged
+  // a success and inflated the accuracy scorecard (see lib/outcome-rating.ts).
+  const [rating, setRating] = useState<OutcomeRating | null>(null);
+  const [target, setTarget] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -102,11 +106,20 @@ export default function OutcomeForm({ onSubmit, dataset }: Props) {
   }, [dataset, effectiveMetricName, dimension, dimensionValue]);
 
   const after = manualAfter ?? computedAfter ?? "";
-  const canSubmit = effectiveMetricName.trim() !== "" && after !== "";
+  const beforeNum = before.trim() === "" ? null : Number(before);
+  const afterNum = after === "" ? null : Number(after);
+  const targetNum = target.trim() === "" ? null : Number(target);
+  const changePct =
+    beforeNum !== null && afterNum !== null && Number.isFinite(beforeNum) && Number.isFinite(afterNum) && beforeNum !== 0
+      ? ((afterNum - beforeNum) / Math.abs(beforeNum)) * 100
+      : null;
+  const { suggestion, reason: noSuggestionReason } = suggestOutcomeRating(beforeNum, afterNum, targetNum);
+
+  const canSubmit = effectiveMetricName.trim() !== "" && after !== "" && rating !== null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || rating === null) return;
     setSubmitting(true);
     await onSubmit({
       metricName: effectiveMetricName,
@@ -114,6 +127,7 @@ export default function OutcomeForm({ onSubmit, dataset }: Props) {
       metricAfter: Number(after),
       metricUnit: unit,
       outcomeRating: rating,
+      metricTarget: targetNum !== null && Number.isFinite(targetNum) ? targetNum : null,
       notes,
       metricDimension: dimension === NO_SLICE ? null : dimension,
       metricDimensionValue: dimension === NO_SLICE ? null : dimensionValue || null,
@@ -254,7 +268,50 @@ export default function OutcomeForm({ onSubmit, dataset }: Props) {
       )}
 
       <div>
-        <label className="block text-xs font-medium text-text-mute mb-1">Outcome rating</label>
+        <label className="block text-xs font-medium text-text-mute mb-1">Target (optional)</label>
+        <input
+          type="number"
+          step="0.01"
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          placeholder="What were you aiming for?"
+          className="w-full sm:w-1/3 rounded-lg border border-border bg-accent-bg-soft px-3 py-2 text-sm text-text"
+        />
+        <p className="text-text-dim text-xs mt-1">Used only to suggest a rating. Nothing is selected for you.</p>
+      </div>
+
+      {changePct !== null && (
+        <p className="text-xs text-text-mute">
+          Change vs Value BEFORE:{" "}
+          <span className="font-semibold text-text">
+            {changePct > 0 ? "+" : ""}
+            {changePct.toFixed(1)}%
+          </span>
+        </p>
+      )}
+
+      {suggestion && (
+        <div className="rounded-lg border border-accent-border bg-accent-bg-soft px-3 py-2 text-xs">
+          <span className="font-semibold text-accent-dk">
+            Suggested: {RATINGS.find((r) => r.value === suggestion.rating)?.label}
+          </span>
+          <button
+            type="button"
+            onClick={() => setRating(suggestion.rating)}
+            className="ml-2 font-semibold text-accent-dk underline hover:no-underline"
+          >
+            Use this
+          </button>
+          <p className="text-text-mute mt-0.5">{suggestion.rule}</p>
+          <p className="text-text-dim mt-0.5">{RATING_RULE_TEXT}</p>
+        </div>
+      )}
+      {!suggestion && noSuggestionReason && <p className="text-xs text-text-dim">{noSuggestionReason}</p>}
+
+      <div>
+        <label className="block text-xs font-medium text-text-mute mb-1">
+          Outcome rating <span className="text-danger">(required)</span>
+        </label>
         <div className="flex gap-4">
           {RATINGS.map((r) => (
             <label key={r.value} className="flex items-center gap-1.5 text-sm text-text">
@@ -285,6 +342,7 @@ export default function OutcomeForm({ onSubmit, dataset }: Props) {
       >
         {submitting ? "Saving…" : "Log Outcome"}
       </button>
+      {rating === null && <span className="ml-3 text-xs text-text-dim">Choose a rating to save.</span>}
     </form>
   );
 }

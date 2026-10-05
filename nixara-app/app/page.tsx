@@ -145,12 +145,15 @@ export default function DashboardPage() {
           err.status = res.status;
           throw err;
         }
-        return { text: data.text as string, truncated: Boolean(data.truncated), corrected: Boolean(data.corrected) };
+        const correctedFigures: string[] = Array.isArray(data.correctedFigures)
+          ? data.correctedFigures.filter((f: unknown): f is string => typeof f === "string").slice(0, 8)
+          : [];
+        return { text: data.text as string, truncated: Boolean(data.truncated), corrected: Boolean(data.corrected), correctedFigures };
       };
 
       const results: ReportSet = {};
       const failures: ReportFailures = {};
-      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean; corrected: boolean }>) => {
+      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean; corrected: boolean; correctedFigures: string[] }>) => {
         if (outcome.status === "fulfilled") results[type] = outcome.value;
         else failures[type] = outcome.reason?.message ?? "Report generation failed.";
       };
@@ -236,6 +239,16 @@ export default function DashboardPage() {
           <p className="text-text-dim text-xs uppercase tracking-wider font-semibold mb-3">
             {fileName} · {dataset.rows.length} rows
           </p>
+          {dataset.warnings && dataset.warnings.length > 0 && (
+            <div className="rounded-lg border border-warn-border bg-warn-bg px-4 py-3 mb-4" role="status">
+              <p className="text-warn text-sm font-semibold mb-0.5">Check how this file was read.</p>
+              <ul className="text-text-mute text-sm list-disc pl-5">
+                {dataset.warnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           <DriftBanner flags={driftFlags} />
           <MetricsRow metrics={metrics} qualityBreakdown={qualityBreakdown ?? undefined} />
           <DataPreview dataset={dataset} />

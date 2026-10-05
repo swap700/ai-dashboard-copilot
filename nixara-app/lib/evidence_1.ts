@@ -29,7 +29,6 @@ import {
   aggregateBy,
   businessMetricColumns,
   categoricalColumns,
-  computeDerivedFigures,
   looksLikeProportion,
   numericStats,
   smartAgg,
@@ -41,12 +40,6 @@ export interface EvidenceFact {
   value: number;
   isPercent: boolean;
   description: string;
-  /**
-   * Set only for figures Nixara computed from other figures (a margin, a
-   * share of total): how it was computed. Its presence is what makes the UI
-   * label the figure "calculated" instead of "source".
-   */
-  formula?: string;
 }
 
 function round2(n: number): number {
@@ -114,13 +107,6 @@ export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
     }
   }
 
-  // Figures Nixara computes itself (see computeDerivedFigures). The same list
-  // is printed in the summary the model reads, so what the model is told to
-  // copy and what the checker accepts can no longer disagree.
-  for (const d of computeDerivedFigures(dataset)) {
-    facts.push({ value: d.value, isPercent: true, description: d.label, formula: d.formula });
-  }
-
   return facts;
 }
 
@@ -165,78 +151,77 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
     const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
-  // Bare decimal with no $ or % — e.g. "11.70 years", "3.03", "12.47".
+  // Bare decimal with no $ or % — e.g. "11.70 years", "3.03", "157,947.96".
   // Excludes whole integers (no decimal point) since those are far more
   // likely to be counts/ranks/years-as-labels than a specific measured
   // figure worth verifying, and would produce too many false positives.
-  const bareM = /\b(\d+\.\d{1,2})\b(?!%)/.exec(text);
+  //
+  // BUG FIX (2026-09): the character class here used to be \d+, not
+  // [\d,]+ — for a number like "157,947.96" that only matched "947.96",
+  // silently dropping the "157," prefix (confirmed in a real report: the
+  // AI wrote a large aggregate sum and only the suffix after the last
+  // comma rendered as bolded/checked). The Number() conversion right below
+  // also needed the same comma-stripping the $ branch above already had,
+  // since Number("157,947.96") is NaN, not 157947.96 — without it, even
+  // matching the full token would have compared against NaN and always
+  // failed to verify a real, correct figure.
+  const bareM = /\b([\d,]+\.\d{1,2})\b(?!%)/.exec(text);
   if (bareM) {
-    const target = Number(bareM[1]);
+    const target = Number(bareM[1].replace(/,/g, ""));
     const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   return { status: "none" };
 }
 
-/** Fresh regex per call (a shared /g regex carries lastIndex between uses). */
-function figurePattern(): RegExp {
-  return /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b/g;
-}
-
-function figureIsVerified(token: string, facts: EvidenceFact[]): boolean {
-  let value: number;
-  let isPercent = false;
-  if (token.startsWith("$")) {
-    value = Number(token.slice(1).replace(/,/g, ""));
-  } else if (token.endsWith("%")) {
-    value = Number(token.slice(0, -1));
-    isPercent = true;
-  } else {
-    value = Number(token.replace(/,/g, ""));
-  }
-  return facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value));
-}
-
 /**
- * Whole-report verification for the server-side generate -> verify -> correct
- * loop (generate-report/route.ts) - a different job from findEvidence()
+ * Whole-report verification for the server-side generate → verify → correct
+ * loop (generate-report/route.ts) — a different job from findEvidence()
  * above, which only ever examines the first number in one short pre-parsed
- * field for the on-screen badge. This scans every line of the full report
- * text and checks EVERY numeric claim on that line, not just the first - a
- * fabricated second figure sharing a sentence with a correct first figure
- * would otherwise be invisible to the per-field check entirely.
+ * field (a single Signal, Consequence, or Quick Win stat) for the on-screen
+ * badge. This scans every line of the full report text and checks EVERY
+ * numeric claim on that line, not just the first — a fabricated second
+ * figure sharing a sentence with a correct first figure would otherwise be
+ * invisible to the per-field check entirely (confirmed gap: Risk #3's
+ * Signal in an earlier real report cited two figures, "12.71" and "12.11",
+ * and only the first was ever examined).
  *
  * Returns the full text of every line containing at least one unverified
- * figure, deduplicated, so a correction prompt has real sentence context.
+ * figure, deduplicated, so a correction prompt has real sentence context —
+ * not an isolated number with no surrounding meaning — to work with.
  */
 export function findUnverifiedLines(text: string, facts: EvidenceFact[]): string[] {
+  const NUMBER_PATTERN = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b/g;
   const flagged: string[] = [];
   const seen = new Set<string>();
+
   for (const rawLine of text.split("\n")) {
     const line = rawLine.trim();
     if (!line || seen.has(line)) continue;
-    const tokens = [...line.matchAll(figurePattern())].map((m) => m[0]);
-    if (tokens.some((t) => !figureIsVerified(t, facts))) {
+
+    const matches = [...line.matchAll(NUMBER_PATTERN)];
+    if (matches.length === 0) continue;
+
+    const hasUnverified = matches.some((m) => {
+      const token = m[0];
+      let value: number;
+      let isPercent = false;
+      if (token.startsWith("$")) {
+        value = Number(token.slice(1).replace(/,/g, ""));
+      } else if (token.endsWith("%")) {
+        value = Number(token.slice(0, -1));
+        isPercent = true;
+      } else {
+        value = Number(token.replace(/,/g, ""));
+      }
+      return !facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value));
+    });
+
+    if (hasUnverified) {
       seen.add(line);
       flagged.push(line);
     }
   }
-  return flagged;
-}
 
-/**
- * The individual figures (not whole lines) that could not be matched, in the
- * order they first appear, deduplicated. Used to tell the reader exactly which
- * first-draft figures were replaced during an automatic correction.
- */
-export function findUnverifiedFigures(text: string, facts: EvidenceFact[]): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const m of text.matchAll(figurePattern())) {
-    const token = m[0];
-    if (seen.has(token)) continue;
-    seen.add(token);
-    if (!figureIsVerified(token, facts)) out.push(token);
-  }
-  return out;
+  return flagged;
 }

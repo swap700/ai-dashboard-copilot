@@ -4,9 +4,37 @@ import { useMemo, useState } from "react";
 import type { Dataset } from "@/lib/data-analysis";
 import { describeAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries, humanizeColumnName } from "@/lib/data-analysis";
 import { formatNumber, formatPercent } from "@/lib/format";
+import Tooltip from "@/components/Tooltip";
 
 /** Matches joinWithOverflow()'s own default - same cutoff as the plain-text version below and as IssueCluster in ReportVisual.tsx, rather than a third, inconsistent threshold. */
 const OVERFLOW_AT = 6;
+
+const NOT_A_QUALITY_PROBLEM =
+  "Why this is not a quality problem: the quality score measures missing or malformed data. These are valid numbers that sit far from the rest of the column, so they may be real business facts.";
+
+/**
+ * Small "i" that explains something in one sentence without adding a line to
+ * the layout. Hover and keyboard focus come from Tooltip; the onClick toggle
+ * is for touch screens, where hover does not exist and iOS Safari does not
+ * focus a tapped button.
+ */
+function InfoTip({ label, content }: { label: string; content: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Tooltip content={content} align="start" open={open} className="mr-1.5 align-middle">
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-accent-border text-[0.65rem] font-bold leading-none text-accent-dk hover:bg-accent hover:text-white focus:bg-accent focus:text-white transition-colors"
+      >
+        i
+      </button>
+    </Tooltip>
+  );
+}
 
 /**
  * Interactive counterpart to joinWithOverflow() (lib/format.ts): same
@@ -123,6 +151,7 @@ export default function AnomalyWarnings({ dataset, hasRiskReport, onJumpToDataQu
         <div className="bg-accent-bg-soft border border-accent-border text-text rounded-lg px-4 py-2.5 text-sm flex items-start gap-2.5">
           <span className="text-base leading-none mt-0.5 shrink-0">📊</span>
           <span>
+            <InfoTip label="Why this is not a quality problem" content={NOT_A_QUALITY_PROBLEM} />
             {statisticalCount} column{statisticalCount === 1 ? "" : "s"} show{statisticalCount === 1 ? "s" : ""}{" "}
             statistically unusual values{" "}
             (<ExpandableSummary items={statisticalSummaries} />)

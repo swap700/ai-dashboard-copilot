@@ -8,7 +8,9 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
+import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
 let pass = 0;
 let fail = 0;
@@ -392,6 +394,104 @@ check("a column shaped like a bounded proportion is marked isProportion",
   describeAnomalies(columnOf([0.1, 0.12, 0.11, 0.5, 0.13, 0.1, 0.11, 0.9, 0.12]), "x")?.isProportion === true);
 check("a column with negative or >1 values (e.g. a margin that can go negative) is NOT forced into isProportion",
   describeAnomalies(columnOf([0.1, -0.5, 0.11, 2.5, 0.13, 0.1, 0.11, 0.9, 0.12]), "x")?.isProportion === false);
+
+
+// ── Outlier check skips columns where "unusual" is meaningless ──────────────
+console.log("\nOutlier exclusion - coordinates, postal codes, calendar years");
+{
+  const oneCol = (name: string, values: number[]): Dataset => ({ columns: [name], rows: values.map((v) => ({ [name]: v })) });
+  const around = (center: number, n = 40): number[] => Array.from({ length: n }, (_, i) => center + (i % 5));
+
+  check("control: an ordinary metric with one extreme value IS flagged",
+    detectAnomalies(oneCol("score", [...around(40), 400]), "score").length >= 1);
+  check("latitude is not flagged, even with an extreme value",
+    detectAnomalies(oneCol("latitude", [...around(38), -48.26]), "latitude").length === 0);
+  check("Longitude (capitalised) is not flagged",
+    detectAnomalies(oneCol("Longitude", [...around(-90), 150]), "Longitude").length === 0);
+  check("Postal Code is not flagged",
+    detectAnomalies(oneCol("Postal Code", [...around(42000), 99999]), "Postal Code").length === 0);
+  check("a year-shaped column is not flagged (year_introduced with a 1884)",
+    detectAnomalies(oneCol("year_introduced", [...around(2000, 60), 1884]), "year_introduced").length === 0);
+  check("...nor one that does not say 'year' in its name (Opening Date holding years)",
+    detectAnomalies(oneCol("Opening Date", [...around(2000, 60), 1895]), "Opening Date").length === 0);
+  check("Years Experience is still checked: a measure, not a calendar year",
+    detectAnomalies(oneCol("Years Experience", [...around(10), 55]), "Years Experience").length >= 1);
+  check("a column that merely contains a year-sized number among decimals is still checked",
+    detectAnomalies(oneCol("amount", [...around(1900, 40).map((v) => v + 0.5), 5000]), "amount").length >= 1);
+}
+
+// ── Derived figures: computed by Nixara, accepted by the checker ────────────
+console.log("\nDerived figures - margins and shares are computed, listed, and verifiable");
+{
+  const cats = ["Technology", "Furniture", "Office Supplies"];
+  const rows: Row[] = Array.from({ length: 90 }, (_, i) => ({
+    Category: cats[i % 3],
+    Sales: 100 + i,
+    Profit: 10 + (i % 7),
+  }));
+  const ds: Dataset = { rows, columns: ["Category", "Sales", "Profit"] };
+  const sum = (k: string) => rows.reduce((s, r) => s + (r[k] as number), 0);
+  const expectedMargin = (sum("Profit") / sum("Sales")) * 100;
+
+  const derived = computeDerivedFigures(ds);
+  const margin = derived.find((d) => d.kind === "ratio" && d.label === "Profit as % of Sales");
+  check("a profit-as-%-of-sales ratio is computed", margin !== undefined);
+  check("...and equals total Profit / total Sales", margin !== undefined && Math.abs(margin.value - expectedMargin) < 0.011, String(margin?.value));
+  const salesShares = derived.filter((d) => d.set === "Share of total Sales by Category");
+  check("shares of total are produced per category", salesShares.length === 3, String(salesShares.length));
+  check("...and add up to 100%", Math.abs(salesShares.reduce((s, d) => s + d.value, 0) - 100) < 0.05);
+
+  const summary = buildDataSummary(ds);
+  check("the summary the model reads lists the derived figures", summary.includes("DERIVED FIGURES"));
+  check("...including the margin to 2 decimals, exactly as the checker will hold it to",
+    summary.includes(`Profit as % of Sales: ${expectedMargin.toFixed(2)}%`), summary);
+
+  // Shares of a total with a loss-making group are misleading: skipped.
+  const negRows: Row[] = rows.map((r, i) => ({ ...r, Profit: i % 3 === 2 ? -(10 + (i % 7)) : 10 + (i % 7) }));
+  const negDerived = computeDerivedFigures({ rows: negRows, columns: ds.columns });
+  check("no 'share of total Profit' when a category's profit is negative",
+    negDerived.filter((d) => d.set?.startsWith("Share of total Profit")).length === 0);
+
+  // The budget guard: a very wide dataset must never get a derived block that
+  // could push the summary past the server's 8,000-char cap.
+  const wideCols = Array.from({ length: 150 }, (_, i) => `m${i}`);
+  const wideRows: Row[] = rows.slice(0, 30).map((r, i) => {
+    const o: Row = { Category: r.Category, Sales: r.Sales, Profit: r.Profit };
+    wideCols.forEach((c, k) => (o[c] = (i * 7 + k) % 50));
+    return o;
+  });
+  const wide = buildDataSummary({ rows: wideRows, columns: ["Category", "Sales", "Profit", ...wideCols] });
+  check("a very wide dataset gets no derived block (budget guard)", !wide.includes("DERIVED FIGURES"));
+
+  // The checker and the prompt now agree: a correct computed margin is NOT flagged.
+  const facts = buildEvidenceFacts(ds);
+  check("the fact index contains the margin, marked as calculated",
+    facts.some((f) => f.isPercent && f.formula !== undefined && Math.abs(f.value - expectedMargin) < 0.011));
+  const good = `Overall, profit is ${expectedMargin.toFixed(2)}% of sales.`;
+  check("a correct derived margin is no longer flagged as unverified", findUnverifiedLines(good, facts).length === 0, JSON.stringify(findUnverifiedLines(good, facts)));
+  const bad = `Overall, profit is ${expectedMargin.toFixed(2)}% of sales, but returns hit 77.77% in one region.`;
+  check("an invented figure on the same line is still flagged", findUnverifiedLines(bad, facts).length === 1);
+  check("findUnverifiedFigures names exactly the unmatched figure, not the matched one",
+    JSON.stringify(findUnverifiedFigures(bad, facts)) === JSON.stringify(["77.77%"]), JSON.stringify(findUnverifiedFigures(bad, facts)));
+}
+
+// ── Suggested outcome rating ────────────────────────────────────────────────
+console.log("\nSuggested outcome rating - visible rule, never a default");
+{
+  const rate = (b: number | null, a: number | null, t: number | null) => suggestOutcomeRating(b, a, t);
+  check("no target -> no suggestion and nothing to explain", rate(1200, 1260, null).suggestion === null && rate(1200, 1260, null).reason === null);
+  check("1,200 -> 1,260 against a 1,300 target is Met (3.1% below)",
+    rate(1200, 1260, 1300).suggestion?.rating === "met" && rate(1200, 1260, 1300).suggestion!.rule.includes("3.1% below"), JSON.stringify(rate(1200, 1260, 1300)));
+  check("past the target in the aimed direction is Exceeded", rate(1200, 1400, 1300).suggestion?.rating === "exceeded");
+  check("more than 5% short is Fell short", rate(1200, 1100, 1300).suggestion?.rating === "missed");
+  check("exactly 5% off the target still counts as Met (no floating-point flip)", rate(1200, 1235, 1300).suggestion?.rating === "met");
+  check("aiming DOWN (churn 10 -> 5): beating the target is Exceeded", rate(10, 4, 5).suggestion?.rating === "exceeded");
+  check("aiming DOWN: ending above the target is Fell short", rate(10, 7, 5).suggestion?.rating === "missed");
+  check("aiming DOWN: within 5% is Met", rate(10, 5.2, 5).suggestion?.rating === "met");
+  check("a target without a Value BEFORE explains why there is no suggestion", rate(null, 1260, 1300).suggestion === null && rate(null, 1260, 1300).reason !== null);
+  check("a target of 0 explains why there is no suggestion", rate(10, 4, 0).reason !== null);
+  check("a target equal to Value BEFORE cannot imply a direction, and says so", rate(1200, 1260, 1200).suggestion === null && rate(1200, 1260, 1200).reason !== null);
+}
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

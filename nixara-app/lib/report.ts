@@ -17,6 +17,8 @@ export interface GeneratedReport {
   truncated: boolean;
   /** True if a fabricated figure was caught and an automatic correction pass replaced this text before it was ever shown. */
   corrected: boolean;
+  /** The first-draft figures that could not be matched to the data and were replaced (at most 8). Empty when nothing was replaced. */
+  correctedFigures?: string[];
 }
 
 /**
@@ -145,7 +147,7 @@ ${instruction}
 
 Currency formatting rule (applies everywhere in this report): write every currency value as "$" followed by the number with exactly two decimal places, e.g. $12,345.67. Never wrap numbers in parentheses or brackets. Write negative values with a minus sign directly before the dollar sign — e.g. -$12,345.67 — never $-12,345.67 or ($12,345.67).
 
-Numeric precision rule (applies everywhere in this report, to every number — not only dollar amounts): every specific figure you write must be copied directly from the Dashboard data provided below, or be a straightforward arithmetic operation on numbers provided there (a sum, an average, a difference, a percentage of two given figures). If you want to describe a subgroup, comparison, or finding for which no specific figure appears in the Dashboard data, describe it in qualitative or directional language instead of inventing a number to attach to it — e.g. "Software Developers report below-average experience" rather than "Software Developers average 11.70 years." A specific-looking figure that cannot be traced back to the provided data is a fabrication, and fabricated precision is worse than an honest qualitative statement — it destroys credibility with any reader who checks it.
+Numeric precision rule (applies everywhere in this report, to every number — not only dollar amounts): every specific figure you write must be copied exactly, digit for digit, from the Dashboard data provided below, including its DERIVED FIGURES section when present (those were calculated by Nixara, not by you). Do not calculate figures of your own: no sums, differences, ratios, percentages or rounding that are not already written there. If you want to describe a subgroup, comparison, or finding for which no specific figure appears in the Dashboard data, describe it in qualitative or directional language instead of inventing a number to attach to it — e.g. "Software Developers report below-average experience" rather than "Software Developers average 11.70 years." A specific-looking figure that cannot be traced back to the provided data is a fabrication, and fabricated precision is worse than an honest qualitative statement — it destroys credibility with any reader who checks it.
 
 Statistical calibration rule (applies everywhere in this report): "no significant difference was detected between groups" and "there is no relationship" / "X is consistent across Y" are not the same claim — the first only reports what a specific comparison found; the second asserts something stronger that the same comparison cannot establish. When the data or a supplied statistical result shows no significant difference, describe only what was tested and found (e.g. "average experience does not differ significantly across the groups compared"). Never restate an absence of detected difference as proof of consistency, uniformity, or "no relationship."
 

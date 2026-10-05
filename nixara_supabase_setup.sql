@@ -1711,3 +1711,60 @@ FROM (VALUES
     ('list_decisions_for_session(text)'),
     ('list_decisions_for_visitor(text)')
 ) AS f(fn);
+
+-- =====================================================================
+-- NOTE ON THIS FILE: it is not a complete rebuild script. The live database
+-- also has nixara_outcomes.metric_dimension / metric_dimension_value and a
+-- log_outcome_record with matching p_metric_dimension* parameters, which were
+-- applied separately and are not defined above. Export the live definitions
+-- (Supabase -> Database -> Functions) before relying on this file to recreate
+-- the schema from scratch.
+-- =====================================================================
+
+-- =====================================================================
+-- Outcome target (optional)
+--
+-- Additive only: one nullable column and one NEW function. It does not
+-- touch log_outcome_record or any other existing function, so it is safe to
+-- run before OR after deploying the app change (the app saves the outcome
+-- first and the target second, and ignores a failure on the second).
+--
+-- Run once in the Supabase SQL editor. Re-running is harmless.
+-- =====================================================================
+
+ALTER TABLE nixara_outcomes ADD COLUMN IF NOT EXISTS metric_target NUMERIC;
+
+CREATE OR REPLACE FUNCTION set_outcome_target(
+    p_public_id  TEXT,
+    p_session_id TEXT,
+    p_target     NUMERIC
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_updated INTEGER;
+BEGIN
+    IF p_target IS NULL OR ABS(p_target) > 1e15 THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Only the session that logged the outcome may set its target, and only
+    -- once: an existing target is never overwritten.
+    UPDATE nixara_outcomes o
+    SET metric_target = p_target
+    FROM nixara_decisions d
+    WHERE d.public_id = p_public_id
+      AND o.decision_id = d.id
+      AND o.session_id = p_session_id
+      AND o.metric_target IS NULL;
+
+    GET DIAGNOSTICS v_updated = ROW_COUNT;
+    RETURN v_updated > 0;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION set_outcome_target(TEXT, TEXT, NUMERIC) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION set_outcome_target(TEXT, TEXT, NUMERIC) TO anon, authenticated;

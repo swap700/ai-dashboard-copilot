@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
 import type { EvidenceResult } from "@/lib/evidence";
 import type { ColumnIssue } from "@/lib/data-analysis";
@@ -22,7 +22,30 @@ import type { ColumnIssue } from "@/lib/data-analysis";
  * other numbers in the same sentence — renders struck through instead of
  * bolded.
  */
-function emphasizeParts(text: string, evidence?: EvidenceResult): React.ReactNode[] {
+const UNVERIFIED_HINT =
+  "Nixara could not match this figure to a value in your data. It may still be right (for example, a figure the model worked out itself). Check it before acting on it.";
+
+/**
+ * Small non-interactive marker beside an unverified figure. Earlier feedback
+ * was that a tag on EVERY flagged figure felt noisy, so this is a single
+ * element: delete the <UnverifiedChip /> uses below to fall back to the
+ * underline + hover text + report-level banner alone.
+ */
+function UnverifiedChip() {
+  return (
+    <span className="ml-1 align-middle text-[0.62rem] font-bold text-warn bg-warn-bg border border-warn-border rounded-full px-1.5">
+      unverified
+    </span>
+  );
+}
+
+/**
+ * `anchor` marks the figure with data-unverified-figure so the report-level
+ * banner can scroll to it. Pass false when the same figure is already
+ * anchored elsewhere in the same card (a Quick Win's headline stat), so each
+ * flagged figure has exactly one anchor.
+ */
+function emphasizeParts(text: string, evidence?: EvidenceResult, anchor = true): React.ReactNode[] {
   const parts = text.split(/(\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b)/g);
   let flagged = false;
   return parts.map((p, i) => {
@@ -34,13 +57,17 @@ function emphasizeParts(text: string, evidence?: EvidenceResult): React.ReactNod
     if (evidence?.status === "unverified" && !flagged) {
       flagged = true;
       return (
-        <s
-          key={i}
-          title="Nixara could not verify this figure against your data"
-          className="text-danger font-semibold decoration-danger decoration-2"
-        >
-          {p}
-        </s>
+        <Fragment key={i}>
+          <span
+            data-unverified-figure={anchor ? p : undefined}
+            title={UNVERIFIED_HINT}
+            className="font-semibold text-text border-b-2 border-dotted border-warn cursor-help"
+          >
+            {p}
+          </span>
+          {/* Chip only on the anchored mark: a Quick Win's headline already carries it, so its sentence is underlined without a second chip. */}
+          {anchor && <UnverifiedChip />}
+        </Fragment>
       );
     }
     return <b key={i} className="text-accent-dk font-semibold">{p}</b>;
@@ -70,19 +97,22 @@ function EvidenceTag({ result }: { result: EvidenceResult }) {
   if (result.status !== "matched") return null;
 
   const fact = result.fact;
+  const calculated = Boolean(fact.formula);
   return (
     <span className="inline-block align-middle ml-1.5">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title="See where this number comes from"
+        title={calculated ? "See how this number was calculated" : "See where this number comes from"}
         className="text-[0.68rem] font-semibold text-accent border border-accent-border bg-accent-bg-soft rounded-full px-1.5 py-0 hover:bg-accent hover:text-white transition-colors align-middle"
       >
-        {"\u{1F50D}"} source
+        {calculated ? "\u{1F9EE} calculated" : "\u{1F50D} source"}
       </button>
       {open && (
         <span className="block text-[0.78rem] text-text-mute bg-bg border border-border rounded-lg px-2.5 py-1.5 mt-1 max-w-sm">
-          From your data: {fact.description}.
+          {calculated
+            ? `Calculated by Nixara: ${fact.formula}. The figures it uses come from your data.`
+            : `From your data: ${fact.description}.`}
         </span>
       )}
     </span>
@@ -198,9 +228,14 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
             {item.stat && (
               item.evidence.status === "unverified" ? (
                 <div className="flex items-center flex-wrap gap-1 mb-1">
-                  <s className="text-lg font-semibold text-text-mute decoration-danger decoration-2" title="Nixara could not verify this figure against your data">
+                  <span
+                    data-unverified-figure={item.stat}
+                    title={UNVERIFIED_HINT}
+                    className="text-lg font-semibold text-text-mute border-b-2 border-dotted border-warn cursor-help"
+                  >
                     {item.stat}
-                  </s>
+                  </span>
+                  <UnverifiedChip />
                   <EvidenceTag result={item.evidence} />
                 </div>
               ) : (
@@ -210,7 +245,7 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
                 </div>
               )
             )}
-            <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body, item.evidence)}</div>
+            <div className="text-[0.83rem] leading-snug text-text">{emphasizeParts(item.body, item.evidence, !item.stat)}</div>
           </div>
         ))}
       </div>

@@ -63,6 +63,7 @@ export default function InboxCard({ item, sessionId, visitorId, onOutcomeLogged,
       // otherwise (no dataset match, or no slice chosen).
       metricDimension: o.metricDimension ?? null,
       metricDimensionValue: o.metricDimensionValue ?? null,
+      metricTarget: o.metricTarget ?? null,
     });
     onOutcomeLogged(item.publicId, o);
   };

@@ -41,6 +41,8 @@ export interface RecordedOutcome {
    */
   metricDimension?: string | null;
   metricDimensionValue?: string | null;
+  /** What the person was aiming for, when they said (optional). Stored via set_outcome_target. */
+  metricTarget?: number | null;
 }
 
 interface SessionState {
@@ -195,6 +197,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       notes:         outcome.notes,
       metricDimension:      outcome.metricDimension ?? null,
       metricDimensionValue: outcome.metricDimensionValue ?? null,
+      metricTarget:         outcome.metricTarget ?? null,
     });
     const next = { ...outcomes, [reportType]: outcome };
     setOutcomes(next);

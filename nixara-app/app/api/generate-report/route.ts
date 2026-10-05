@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { buildPrompt, cleanAiOutput, REPORT_TYPES, type ReportType } from "@/lib/report";
 import { resolveApiKey } from "@/lib/openai-key";
 import { supabase } from "@/lib/supabase";
-import { findUnverifiedLines, type EvidenceFact } from "@/lib/evidence";
+import { findUnverifiedFigures, findUnverifiedLines, type EvidenceFact } from "@/lib/evidence";
 import {
   consumeQuota,
   clientIp,
@@ -164,6 +164,8 @@ interface GenerateResult {
   truncated: boolean;
   /** A fabricated figure was caught and an automatic correction pass replaced this text before it was ever returned. */
   corrected: boolean;
+  /** The first-draft figures that could not be matched and were replaced (at most 8). */
+  correctedFigures: string[];
 }
 
 /**
@@ -259,12 +261,15 @@ async function generateVerified(
   const first = await generate(apiKey, prompt, reportType);
 
   if (first.truncated || !evidenceFacts || evidenceFacts.length === 0) {
-    return { ...first, corrected: false };
+    return { ...first, corrected: false, correctedFigures: [] };
   }
 
   const badLines = findUnverifiedLines(first.text, evidenceFacts);
   if (badLines.length === 0) {
-    return { ...first, corrected: false };
+    // One line per generation, so the correction rate is countable from the
+    // logs: search "corrected=true" vs "corrected=false" per report type.
+    console.info(`[generate-report] report=${reportType} corrected=false unverified=0`);
+    return { ...first, corrected: false, correctedFigures: [] };
   }
 
   console.warn(
@@ -278,13 +283,16 @@ async function generateVerified(
     // still in it — a half-written correction has no coherent fallback of
     // its own. Only adopt the retry if it actually finished.
     if (!retry.truncated) {
-      return { text: retry.text, truncated: false, corrected: true };
+      const replaced = findUnverifiedFigures(first.text, evidenceFacts).slice(0, 8);
+      console.info(`[generate-report] report=${reportType} corrected=true unverified=${badLines.length} figures=${replaced.length}`);
+      return { text: retry.text, truncated: false, corrected: true, correctedFigures: replaced };
     }
   } catch (err) {
     console.warn(`[generate-report] Correction retry failed for ${reportType}, keeping original:`, err);
   }
 
-  return { ...first, corrected: false };
+  console.info(`[generate-report] report=${reportType} corrected=false unverified=${badLines.length} retry=unusable`);
+  return { ...first, corrected: false, correctedFigures: [] };
 }
 
 export async function POST(req: NextRequest) {
@@ -351,9 +359,9 @@ export async function POST(req: NextRequest) {
   // ── Own key / admin tier: no spend gate, the caller pays ─────────────────
   if (tier !== "free") {
     try {
-      const { text, truncated, corrected } = await generateVerified(apiKey, prompt, reportType, evidenceFacts);
+      const { text, truncated, corrected, correctedFigures } = await generateVerified(apiKey, prompt, reportType, evidenceFacts);
       void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
-      return NextResponse.json({ text, tier, truncated, corrected });
+      return NextResponse.json({ text, tier, truncated, corrected, correctedFigures });
     } catch (err) {
       return NextResponse.json({ error: safeOpenAiErrorMessage(err) }, { status: 502 });
     }
@@ -454,14 +462,14 @@ export async function POST(req: NextRequest) {
 
   // ── Cleared to spend ─────────────────────────────────────────────────────
   try {
-    const { text, truncated, corrected } = await generateVerified(apiKey, prompt, reportType, evidenceFacts);
+    const { text, truncated, corrected, correctedFigures } = await generateVerified(apiKey, prompt, reportType, evidenceFacts);
 
     const updatedSessions = isNewSession && sessionId ? [...sessions, sessionId] : sessions;
     const freeRemaining = Math.max(0, FREE_LIMIT - updatedSessions.length);
 
     void logReportGenerate(resolvedSid, who, timeframe, reportType, dataSource, referrer);
 
-    const res = NextResponse.json({ text, tier, freeRemaining, truncated, corrected });
+    const res = NextResponse.json({ text, tier, freeRemaining, truncated, corrected, correctedFigures });
     res.cookies.set(COOKIE_NAME, JSON.stringify(updatedSessions), {
       httpOnly: true,
       secure:   process.env.NODE_ENV === "production",

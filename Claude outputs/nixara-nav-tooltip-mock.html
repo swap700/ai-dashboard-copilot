@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nixara nav tooltip mock</title>
+<style>
+  :root {
+    --bg:        #F8F9FC;
+    --surface:   #FFFFFF;
+    --border:    #E2E8F0;
+    --text:      #1E293B;
+    --text-mute: #64748B;
+    --text-dim:  #94A3B8;
+    --accent:    #C2542A;
+    --accent-dk: #9E3F1F;
+    --accent-bg-soft: #FDF1EA;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    padding: 48px 20px;
+  }
+
+  .shell {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .caption {
+    font-size: 13px;
+    color: var(--text-mute);
+    margin-bottom: 22px;
+    line-height: 1.5;
+  }
+  .caption strong { color: var(--text); }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 28px 40px;
+  }
+
+  /* ── NavTabs, reproduced from components/NavTabs.tsx ── */
+  .navtabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid var(--border);
+    margin-bottom: 32px;
+  }
+
+  .tabwrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: -2px;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    text-decoration: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+    cursor: default;
+    display: inline-block;
+  }
+  .tab:hover {
+    color: var(--accent);
+    background: var(--accent-bg-soft);
+  }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Tooltip, reproduced from components/Tooltip.tsx ── */
+  .tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 8px;
+    z-index: 20;
+    width: max-content;
+    max-width: 220px;
+    background: var(--text);
+    color: var(--bg);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 6px 10px;
+    border-radius: 6px;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+  .tabwrap:hover .tooltip,
+  .tabwrap:focus-within .tooltip {
+    opacity: 1;
+  }
+  /* forced-open state, so the effect is visible at a glance without moving the mouse */
+  .tabwrap.demo-open .tooltip {
+    opacity: 1;
+  }
+
+  .placeholder-line {
+    height: 12px;
+    border-radius: 6px;
+    background: var(--border);
+    opacity: 0.6;
+  }
+  .placeholder-line + .placeholder-line { margin-top: 10px; }
+  .pl-1 { width: 92%; }
+  .pl-2 { width: 68%; }
+  .pl-3 { width: 80%; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <p class="caption">
+      Mock of the nav-tab tooltips just added. <strong>Memory</strong>'s tooltip is forced open below so you can see
+      it without moving your mouse &mdash; hover or tab to any of the others to see theirs.
+    </p>
+
+    <div class="card">
+      <nav class="navtabs">
+        <span class="tabwrap">
+          <a href="#" class="tab active" tabindex="0">Dashboard</a>
+          <span class="tooltip" role="tooltip">Upload a CSV or Excel file, generate a role-calibrated report, and see anomaly and data-quality signals.</span>
+        </span>
+        <span class="tabwrap demo-open">
+          <a href="#" class="tab" tabindex="0">Memory</a>
+          <span class="tooltip" role="tooltip">Every decision from this browser, in one place: what was recommended, who owns it, and whether it worked.</span>
+        </span>
+        <span class="tabwrap">
+          <a href="#" class="tab" tabindex="0">Inbox</a>
+          <span class="tooltip" role="tooltip">Every approved decision that hasn't had its outcome logged yet, soonest due first.</span>
+        </span>
+        <span class="tabwrap">
+          <a href="#" class="tab" tabindex="0">Outcomes</a>
+          <span class="tooltip" role="tooltip">Log what actually happened after a decision, so Nixara can show whether its analysis was accurate.</span>
+        </span>
+        <span class="tabwrap">
+          <a href="#" class="tab" tabindex="0">FAQ</a>
+          <span class="tooltip" role="tooltip">Common questions about how Nixara works, your data, and security.</span>
+        </span>
+      </nav>
+
+      <div class="placeholder-line pl-1"></div>
+      <div class="placeholder-line pl-2"></div>
+      <div class="placeholder-line pl-3"></div>
+    </div>
+  </div>
+</body>
+</html>

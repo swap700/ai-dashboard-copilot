@@ -6,6 +6,83 @@ import type { Dataset, Row } from "./data-analysis";
 const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
 
 /**
+ * CSV READ CHECKS.
+ *
+ * PapaParse does not throw on a malformed file. It returns whatever it could
+ * read and lists the problems in `result.errors`, which this module used to
+ * ignore. The dangerous case is a value that OPENS with a quote and never
+ * closes: the parser keeps waiting for the closing quote and swallows the
+ * entire rest of the file into that one cell, so a 1,000-row file with one bad
+ * quote at row 300 came back as 300 rows, with no warning, and every chart
+ * and report was built on the 300.
+ *
+ *   - Unclosed quote (MissingQuotes): rows are lost, so refuse the file and
+ *     say where.
+ *   - Rows with the wrong number of columns (TooFewFields / TooManyFields):
+ *     every row is kept, so read the file but warn.
+ */
+interface CsvInspection {
+  unclosedQuoteRow: number | null;
+  mismatchedRows: number;
+  strayQuoteValues: number;
+}
+
+function inspectCsvResult(result: Papa.ParseResult<Row>): CsvInspection {
+  let unclosedQuoteRow: number | null = null;
+  let mismatchedRows = 0;
+  let strayQuoteValues = 0;
+  for (const err of result.errors) {
+    if (err.code === "MissingQuotes") {
+      if (unclosedQuoteRow === null) unclosedQuoteRow = err.row ?? result.data.length;
+    } else if (err.code === "TooFewFields" || err.code === "TooManyFields") {
+      mismatchedRows++;
+    } else if (err.code === "InvalidQuotes") {
+      strayQuoteValues++;
+    }
+  }
+  // A swallowed remainder also reports one TooFewFields on the last row it
+  // read; that is a symptom of the unclosed quote, not a separate problem.
+  if (unclosedQuoteRow !== null) mismatchedRows = 0;
+  return { unclosedQuoteRow, mismatchedRows, strayQuoteValues };
+}
+
+/** Approximate number of data lines in raw CSV text (line breaks minus the header). Line breaks inside quoted cells are counted, so this is an estimate. */
+function estimateDataLines(text: string): number {
+  if (!text) return 0;
+  let breaks = 0;
+  for (let i = 0; i < text.length; i++) if (text.charCodeAt(i) === 10) breaks++;
+  const lines = text.endsWith("\n") ? breaks : breaks + 1;
+  return Math.max(0, lines - 1);
+}
+
+function unclosedQuoteMessage(row: number, rowsRead: number, approxLines: number): string {
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  const scale = approxLines > rowsRead ? ` (${fmt(rowsRead)} of about ${fmt(approxLines)} rows were readable)` : "";
+  return (
+    `We could not read this file safely. A quoted value opens near row ${fmt(row)} and never closes, ` +
+    `so everything after it would be read as a single cell${scale}. ` +
+    `Open the file, fix or remove the stray quote near that row, then upload it again.`
+  );
+}
+
+function csvWarnings(insp: CsvInspection, columnCount: number): string[] {
+  const out: string[] = [];
+  const n = insp.mismatchedRows;
+  if (n > 0) {
+    out.push(
+      `${n.toLocaleString("en-US")} row${n === 1 ? " does" : "s do"} not have ${columnCount} columns like the header. ` +
+        `${n === 1 ? "It was" : "They were"} kept, but values in ${n === 1 ? "that row" : "those rows"} may be misaligned, ` +
+        `so figures built on ${n === 1 ? "it" : "them"} could be off.`
+    );
+  }
+  const q = insp.strayQuoteValues;
+  if (q > 0) {
+    out.push(`${q.toLocaleString("en-US")} value${q === 1 ? " contains" : "s contain"} stray quote marks and ${q === 1 ? "was" : "were"} read as written.`);
+  }
+  return out;
+}
+
+/**
  * SECURITY FIX (2026-08): CSV/Excel formula injection.
  *
  * A cell value that starts with =, +, -, @, tab, or CR is interpreted as a
@@ -79,7 +156,14 @@ export function parseCsvText(text: string): Dataset {
     skipEmptyLines: true,
     dynamicTyping: true,
   });
-  return sanitizeDataset({ rows: result.data, columns: result.meta.fields ?? [] });
+  const columns = result.meta.fields ?? [];
+  const insp = inspectCsvResult(result);
+  if (insp.unclosedQuoteRow !== null) {
+    throw new Error(unclosedQuoteMessage(insp.unclosedQuoteRow, result.data.length, estimateDataLines(text)));
+  }
+  const dataset = sanitizeDataset({ rows: result.data, columns });
+  const warnings = csvWarnings(insp, columns.length);
+  return warnings.length > 0 ? { ...dataset, warnings } : dataset;
 }
 
 /** Mirrors load_file: parses CSV or Excel into a row/column dataset. */
@@ -103,7 +187,21 @@ function parseCsv(file: File): Promise<Dataset> {
       dynamicTyping: true,
       complete: (result) => {
         const columns = result.meta.fields ?? [];
-        resolve(sanitizeDataset({ rows: result.data, columns }));
+        const insp = inspectCsvResult(result);
+        if (insp.unclosedQuoteRow !== null) {
+          const row = insp.unclosedQuoteRow;
+          const rowsRead = result.data.length;
+          // Only on this failure path is the file read a second time, to
+          // estimate how many rows were lost. It is already under the size cap.
+          file.text().then(
+            (text) => reject(new Error(unclosedQuoteMessage(row, rowsRead, estimateDataLines(text)))),
+            () => reject(new Error(unclosedQuoteMessage(row, rowsRead, 0)))
+          );
+          return;
+        }
+        const dataset = sanitizeDataset({ rows: result.data, columns });
+        const warnings = csvWarnings(insp, columns.length);
+        resolve(warnings.length > 0 ? { ...dataset, warnings } : dataset);
       },
       error: (err: Error) => reject(err),
     });
