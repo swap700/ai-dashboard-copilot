@@ -30,3 +30,6 @@ utils/
 !README.md
 # Deploy runbook belongs in the repo, not in local scratch
 !nixara-app/DEPLOY_NOTES.md
+
+# Scratch output from AI sessions - never part of the app
+Claude outputs/
