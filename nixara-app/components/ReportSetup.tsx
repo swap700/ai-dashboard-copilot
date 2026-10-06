@@ -34,6 +34,9 @@ export default function ReportSetup({ value, onChange, onApiKeyResolved, onGener
   // finished (generating: true -> false) so the display picks up whatever
   // page.tsx just synced from the server's authoritative freeRemaining.
   useEffect(() => {
+    // Re-reads the localStorage counter on mount and after a generate attempt
+    // finishes; not a cascading render loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!generating) setFreeUsed(getFreeReportsUsed());
   }, [generating]);
 

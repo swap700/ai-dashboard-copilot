@@ -108,6 +108,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const id = loadSessionId();
+    // Client-only hydration: sessionId/visitorId don't exist until this
+    // mounts, so this is a one-time read, not a cascading update loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSessionId(id);
     setVisitorId(getVisitorId());
 

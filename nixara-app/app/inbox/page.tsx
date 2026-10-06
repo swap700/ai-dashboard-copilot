@@ -62,6 +62,8 @@ function InboxPageInner() {
   useEffect(() => {
     if (!visitorId) return;
     let cancelled = false;
+    // Kicks off the fetch-on-mount/visitorId-change; not a cascading render loop.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     fetchDecisionsForVisitor(visitorId).then((data) => {
       if (!cancelled) {

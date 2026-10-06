@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: nixara-app/package-lock.json
+
+      - name: Install dependencies
+        working-directory: nixara-app
+        run: npm ci
+
+      - name: Lint
+        working-directory: nixara-app
+        run: npm run lint
+
+      - name: Test
+        working-directory: nixara-app
+        run: npm run test
+
+      - name: Build
+        working-directory: nixara-app
+        run: npm run build

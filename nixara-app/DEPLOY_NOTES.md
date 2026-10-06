@@ -60,8 +60,13 @@ NIXARA_DAILY_FREE_SESSION_CAP=300
 ```
 
 That is the hard ceiling on free generate-sessions per day across all callers,
-and therefore the bound on your worst-case daily OpenAI bill. At three calls
-per session it is on the order of a few dollars a day. Set it to whatever you
+and therefore the bound on your worst-case daily OpenAI bill. One session is
+three report calls (Executive Summary, Operational Detail, Risk Report), and
+`generateVerified` can retry any one of them once if it cites a figure the
+evidence trail can't verify -- so the real worst case is up to 6 OpenAI calls
+per session, not 3, and the Risk Report's own ceiling is 2200 tokens vs. 1600
+for the other two (see `maxTokensFor` in generate-report/route.ts). Size this
+cap off that, not off the older 3-call estimate. Set it to whatever you
 are willing to lose in a bad 24 hours.
 
 Housekeeping: `select prune_quota(48);` drops expired counter rows. Worth a

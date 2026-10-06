@@ -1713,12 +1713,15 @@ FROM (VALUES
 ) AS f(fn);
 
 -- =====================================================================
--- NOTE ON THIS FILE: it is not a complete rebuild script. The live database
--- also has nixara_outcomes.metric_dimension / metric_dimension_value and a
--- log_outcome_record with matching p_metric_dimension* parameters, which were
--- applied separately and are not defined above. Export the live definitions
--- (Supabase -> Database -> Functions) before relying on this file to recreate
--- the schema from scratch.
+-- NOTE ON THIS FILE: a prior pass flagged this file as not a complete
+-- rebuild script, claiming nixara_outcomes.metric_dimension /
+-- metric_dimension_value and a matching log_outcome_record were applied
+-- separately and "not defined above." That was wrong -- Section 21
+-- ("Decision Drift -- structured metric baseline") above defines both the
+-- columns and the 10-arg log_outcome_record, and this file is current on
+-- that point. Still verify against Supabase -> Database -> Functions before
+-- relying on this file to recreate the schema from scratch -- the point
+-- here is only that this specific prior warning was itself mistaken.
 -- =====================================================================
 
 -- =====================================================================
