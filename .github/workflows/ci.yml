@@ -32,3 +32,16 @@ jobs:
       - name: Build
         working-directory: nixara-app
         run: npm run build
+
+      # Last on purpose. An audit failure is time-dependent: a newly published
+      # advisory fails this with no code change, and that must not mask a real
+      # lint/test/build regression in the same run.
+      #
+      # Scoped to --omit=dev because the dev-only lint-tooling advisories
+      # (braces/micromatch/fast-glob via eslint-config-next) are unfixable
+      # without a major downgrade of eslint-config-next to a version that peers
+      # on ESLint 8, while this project runs ESLint 9. Those never reach shipped
+      # code. This checks what actually ships, and passes at 0 today.
+      - name: Audit production dependencies
+        working-directory: nixara-app
+        run: npm audit --audit-level=high --omit=dev
