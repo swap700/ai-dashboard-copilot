@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
 import { buildVisualSections, countUnverifiedFigures, listUnverifiedFigures } from "@/lib/report-visual";
 import { buildEvidenceFacts } from "@/lib/evidence";
-import { dashboardScore, detectMissingValuesByColumn, detectMalformedEntries, type Dataset } from "@/lib/data-analysis";
+import { dashboardScore, describeUnmeasuredColumns, detectMissingValuesByColumn, detectMalformedEntries, type Dataset } from "@/lib/data-analysis";
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
 import ReportVisualBody from "./ReportVisual";
@@ -71,6 +71,9 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
   const qualityScore = useMemo(() => (dataset ? dashboardScore(dataset) : null), [dataset]);
   const missingValues = useMemo(() => (dataset ? detectMissingValuesByColumn(dataset) : []), [dataset]);
   const malformedEntries = useMemo(() => (dataset ? detectMalformedEntries(dataset) : []), [dataset]);
+  // Columns that held numbers but did not clear the metric bar, with the reason
+  // each one was set aside. Same deterministic source as the two above.
+  const unmeasured = useMemo(() => (dataset ? describeUnmeasuredColumns(dataset) : []), [dataset]);
 
   // Open on a tab that actually has a report. With partial results the first
   // report type is not necessarily one of the ones that came back.
@@ -136,8 +139,8 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
   // ReportVisualBody -- see countUnverifiedFigures' doc comment (report-visual.ts)
   // for why this replaced a per-figure badge repeated next to every flagged number.
   const sections = useMemo(
-    () => (current ? buildVisualSections(current.text, active, evidenceFacts, qualityScore, missingValues, malformedEntries) : []),
-    [current, active, evidenceFacts, qualityScore, missingValues, malformedEntries]
+    () => (current ? buildVisualSections(current.text, active, evidenceFacts, qualityScore, missingValues, malformedEntries, unmeasured) : []),
+    [current, active, evidenceFacts, qualityScore, missingValues, malformedEntries, unmeasured]
   );
   const unverifiedCount = useMemo(() => countUnverifiedFigures(sections), [sections]);
   const unverifiedFigures = useMemo(() => listUnverifiedFigures(sections), [sections]);

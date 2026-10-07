@@ -3,7 +3,8 @@
 import { Fragment, useState } from "react";
 import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
 import type { EvidenceResult } from "@/lib/evidence";
-import type { ColumnIssue } from "@/lib/data-analysis";
+import type { ColumnIssue, UnmeasuredColumn } from "@/lib/data-analysis";
+import { MIN_METRIC_COVERAGE } from "@/lib/data-analysis";
 
 /**
  * Shared inline number/currency emphasis, used everywhere body text renders.
@@ -418,6 +419,89 @@ function IssueCluster({ label, dotClass, issues }: { label: string; dotClass: st
 }
 
 /**
+ * The third cluster: columns Nixara deliberately declined to measure.
+ *
+ * Added 2026-10 with the 80% coverage rule. The other two clusters report
+ * things wrong with the file; this one reports a decision Nixara made about
+ * the file, which is why it gets its own badge wording ("5 columns", not
+ * "N entries") and a footer stating the rule. Without it, a column that
+ * charted last week simply disappears, and the only available reading is
+ * that the product broke.
+ *
+ * The mix bar is the one piece of new UI: three divs showing what the column
+ * actually holds, so "61% text" is visible rather than merely asserted.
+ */
+function MixBar({ mix }: { mix: UnmeasuredColumn["mix"] }) {
+  const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+  return (
+    <span className="inline-flex h-[7px] w-[112px] rounded-full overflow-hidden border border-border align-middle mr-2 shrink-0">
+      <i className="block h-full bg-[#D98F5E]" style={{ width: pct(mix.text) }} />
+      <i className="block h-full bg-accent" style={{ width: pct(mix.numeric) }} />
+      <i className="block h-full bg-border" style={{ width: pct(mix.blank) }} />
+    </span>
+  );
+}
+
+function UnmeasuredCluster({ columns }: { columns: UnmeasuredColumn[] }) {
+  const [expanded, setExpanded] = useState(false);
+  if (columns.length === 0) return null;
+  const visible = expanded ? columns : columns.slice(0, COLLAPSE_AT);
+  const hiddenCount = columns.length - visible.length;
+  const showMix = visible.some((c) => c.reason === "mixed" || c.reason === "sparse");
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="w-2.5 h-2.5 rounded-full bg-accent" />
+        <span className="text-[0.85rem] font-bold text-text">Columns Nixara did not measure</span>
+        <span className="text-[0.72rem] text-text-mute bg-bg border border-border rounded-full px-2 py-0.5">
+          {columns.length} column{columns.length === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div className="ml-5 space-y-1.5">
+        {visible.map((col) => (
+          <div key={col.column} className="flex items-center justify-between gap-3 bg-bg rounded-lg px-3 py-2 text-[0.8rem]">
+            <span className="font-semibold text-text shrink-0">{col.column}</span>
+            <span className="text-text-mute text-right flex items-center justify-end">
+              {(col.reason === "mixed" || col.reason === "sparse") && <MixBar mix={col.mix} />}
+              <span>{col.detail}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+      {showMix && (
+        <div className="ml-5 mt-2 flex gap-3.5 flex-wrap items-center text-[0.72rem] text-text-mute">
+          <span className="inline-flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm inline-block bg-[#D98F5E]" /> text
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm inline-block bg-accent" /> numbers
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="w-2.5 h-2.5 rounded-sm inline-block bg-border" /> blank
+          </span>
+        </div>
+      )}
+      {columns.length > COLLAPSE_AT && (
+        <button
+          type="button"
+          onClick={() => setExpanded((e) => !e)}
+          className="ml-5 mt-1.5 text-[0.76rem] font-semibold text-accent-dk hover:underline"
+        >
+          {expanded ? "Show fewer" : `Show all ${columns.length} columns (${hiddenCount} more)`}
+        </button>
+      )}
+      <p className="ml-5 mt-3 mb-0 text-[0.78rem] leading-snug text-text-mute">
+        A column has to be at least {Math.round(MIN_METRIC_COVERAGE * 100)}% numbers before Nixara
+        will total or average it. Averaging the rest would describe a fraction of your rows as
+        though it described all of them. Dates, calendar years and coordinates are positions
+        rather than amounts, so they are never measured even when complete.
+      </p>
+    </div>
+  );
+}
+
+/**
  * BUG FIX (2026-09): a Statistical Outliers cluster used to live here,
  * grouped visually with Missing Values as if both were the same kind of
  * problem. They aren't — a negative Profit Margin or an unusually large
@@ -429,7 +513,7 @@ function IssueCluster({ label, dotClass, issues }: { label: string; dotClass: st
  * place in Top Risks Identified instead, through the model's own judgment,
  * exactly as it already could before this change.
  */
-function DataQualitySection({ heading, text, score, missingValues, malformedEntries }: Extract<VisualSection, { kind: "dataQuality" }>) {
+function DataQualitySection({ heading, text, score, missingValues, malformedEntries, unmeasured }: Extract<VisualSection, { kind: "dataQuality" }>) {
   return (
     <Card heading={heading} id="data-quality-risks-section">
       <div className="flex items-center gap-4 bg-success-bg border border-success-border rounded-lg px-4 py-3.5">
@@ -448,6 +532,7 @@ function DataQualitySection({ heading, text, score, missingValues, malformedEntr
 
       <IssueCluster label="Missing Values" dotClass="bg-warn" issues={missingValues} />
       <IssueCluster label="Malformed Entries" dotClass="bg-text-dim" issues={malformedEntries} />
+      <UnmeasuredCluster columns={unmeasured} />
     </Card>
   );
 }

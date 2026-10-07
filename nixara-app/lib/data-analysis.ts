@@ -1066,6 +1066,84 @@ function findDateColumn(dataset: Dataset): string | null {
  * each when two relevant metrics are available so the two charts are
  * complementary rather than redundant.
  */
+/**
+ * Every column Nixara declined to use as a metric, and why.
+ *
+ * The decision itself already happens in businessMetricColumns(); this records
+ * the reasoning, which was previously discarded. Without it a column that
+ * charted yesterday simply disappears, and the natural reading is that the app
+ * broke rather than that it declined to average a sixth of the rows.
+ *
+ * Only columns that LOOK like candidates are reported. A pure text column was
+ * never going to be a metric and saying so is noise; this is for columns that
+ * carry at least one number and still did not qualify.
+ */
+export type UnmeasuredReason = "mixed" | "sparse" | "not-a-quantity" | "identifier";
+
+export interface UnmeasuredColumn extends ColumnIssue {
+  reason: UnmeasuredReason;
+  /** Shares of the column, 0 to 1, for the mix bar. */
+  mix: { text: number; numeric: number; blank: number };
+}
+
+export function describeUnmeasuredColumns(dataset: Dataset): UnmeasuredColumn[] {
+  const total = dataset.rows.length;
+  if (total === 0) return [];
+
+  const qualified = new Set(businessMetricColumns(dataset));
+  const out: UnmeasuredColumn[] = [];
+
+  for (const col of dataset.columns) {
+    if (qualified.has(col)) continue;
+
+    let numeric = 0;
+    let blank = 0;
+    for (const row of dataset.rows) {
+      const v = row[col];
+      if (v === null || v === undefined || v === "") blank++;
+      else if (typeof v === "number") numeric++;
+    }
+    // Never a candidate in the first place: not worth a line.
+    if (numeric === 0) continue;
+
+    const text = total - numeric - blank;
+    const density = numeric / total;
+    const pct = (n: number) => Math.round((n / total) * 100);
+
+    let reason: UnmeasuredReason;
+    let detail: string;
+
+    if (NON_METRIC_PATTERNS.some((pattern) => pattern.test(col))) {
+      reason = "identifier";
+      detail = "an identifier or a count, not an amount";
+    } else if (isNonQuantityColumn(dataset, col)) {
+      reason = "not-a-quantity";
+      detail = isDateColumn(dataset.rows, col)
+        ? "dates, which are points in time rather than amounts"
+        : "coordinates or calendar years, which are positions rather than amounts";
+    } else if (text > 0 && numeric > 0 && text >= numeric * 0.25) {
+      reason = "mixed";
+      detail = `${pct(text)}% text, ${pct(numeric)}% numbers, ${pct(blank)}% blank`;
+    } else {
+      reason = "sparse";
+      detail = `only ${pct(numeric)}% of rows carry a number`;
+    }
+
+    out.push({
+      column: col,
+      count: total - numeric,
+      detail,
+      reason,
+      mix: { text: text / total, numeric: density, blank: blank / total },
+    });
+  }
+
+  // Worst first: the most nearly-usable columns are the ones a reader is most
+  // likely to be looking for.
+  const rank: Record<UnmeasuredReason, number> = { mixed: 0, sparse: 1, "not-a-quantity": 2, identifier: 3 };
+  return out.sort((a, b) => rank[a.reason] - rank[b.reason] || b.mix.numeric - a.mix.numeric);
+}
+
 /** "Total" or "Average of", for the front of a chart title. */
 export function aggWord(agg: "mean" | "sum"): string {
   return agg === "sum" ? "Total" : "Average of";

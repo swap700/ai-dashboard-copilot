@@ -18,7 +18,7 @@
 
 import { parseReportLines, type ReportLine, type ReportType } from "./report";
 import { findEvidence, type EvidenceFact, type EvidenceResult } from "./evidence";
-import type { ColumnIssue } from "./data-analysis";
+import type { ColumnIssue, UnmeasuredColumn } from "./data-analysis";
 
 export type Severity = "low" | "medium" | "high";
 
@@ -80,6 +80,8 @@ export type VisualSection =
       /** Deterministic, never AI-derived — see detectMissingValuesByColumn()/detectMalformedEntries() in data-analysis.ts. Distinct from statistical outliers on purpose: these are genuine data-integrity issues, not business signals that happen to be numerically unusual. */
       missingValues: ColumnIssue[];
       malformedEntries: ColumnIssue[];
+      /** Columns that carried numbers but did not qualify as metrics, with the reason. See describeUnmeasuredColumns() in data-analysis.ts. Also deterministic. */
+      unmeasured: UnmeasuredColumn[];
     };
 
 const SEVERITY_MAP: Record<string, Severity> = { high: "high", medium: "medium", low: "low" };
@@ -255,7 +257,8 @@ export function buildVisualSections(
    */
   qualityScore: number | null = null,
   missingValues: ColumnIssue[] = [],
-  malformedEntries: ColumnIssue[] = []
+  malformedEntries: ColumnIssue[] = [],
+  unmeasured: UnmeasuredColumn[] = []
 ): VisualSection[] {
   const lines = parseReportLines(reportText);
   const buckets: { heading: string; lines: ReportLine[] }[] = [];
@@ -272,7 +275,7 @@ export function buildVisualSections(
   }
 
   return buckets.map(({ heading, lines }) =>
-    parseSection(heading, lines, reportType, evidenceFacts, qualityScore, missingValues, malformedEntries)
+    parseSection(heading, lines, reportType, evidenceFacts, qualityScore, missingValues, malformedEntries, unmeasured)
   );
 }
 
@@ -283,7 +286,8 @@ function parseSection(
   evidenceFacts: EvidenceFact[],
   qualityScore: number | null,
   missingValues: ColumnIssue[],
-  malformedEntries: ColumnIssue[]
+  malformedEntries: ColumnIssue[],
+  unmeasured: UnmeasuredColumn[]
 ): VisualSection {
   switch (heading) {
     case "Recommended Actions":
@@ -488,7 +492,7 @@ function parseSection(
       // shows a second, possibly different number next to the real one.
       const rawText = lines.map(anyLineText).filter((t): t is string => t !== null).join(" ");
       const text = rawText.replace(/\(?\s*score:\s*\[?\d+\]?\s*\/\s*100\s*\)?\.?/gi, "").replace(/\s{2,}/g, " ").trim();
-      return { kind: "dataQuality", heading, text, score: qualityScore, missingValues, malformedEntries };
+      return { kind: "dataQuality", heading, text, score: qualityScore, missingValues, malformedEntries, unmeasured };
     }
 
     default:

@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, type Dataset, type Row } from "../lib/data-analysis.ts";
 import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
 import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
@@ -629,6 +629,77 @@ const meanSpec = pickChartSpecs(means, "win rate by region")[0];
 check("an averaged metric is never a pie", meanSpec?.type !== "pie", String(meanSpec?.type));
 check("and its title says Average of", !!meanSpec?.title.startsWith("Average of "), meanSpec?.title ?? "");
 check("aggWord labels both operations", aggWord("sum") === "Total" && aggWord("mean") === "Average of");
+
+// ── Columns Nixara declines to measure are named, not silently dropped ──────
+console.log("unmeasured columns - the refusal is stated, not hidden");
+
+// A plausible SMB export: an id, a category, a date column PapaParse typed
+// per-cell, and a value column only 40% filled. Nothing here clears the bar,
+// which is the case that used to render an empty screen.
+const thinFile: Dataset = {
+  columns: ["Order ID", "Region", "Signed on", "Contract Value"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    "Order ID": 1000 + i,
+    Region: ["North", "South", "East"][i % 3],
+    // 30 cells arrive as numbers (Excel serials), 70 as text dates.
+    "Signed on": i < 30 ? 45000 + i : `2026-0${(i % 9) + 1}-15`,
+    "Contract Value": i < 40 ? 5000 + i * 10 : "",
+  })),
+};
+
+check("a file with no qualifying metric picks no charts", pickChartSpecs(thinFile, "value by region").length === 0);
+
+const unmeasured = describeUnmeasuredColumns(thinFile);
+check("and every numeric-looking column is accounted for",
+  unmeasured.length === 3, `got ${unmeasured.map((u) => u.column).join(", ")}`);
+check("a pure text column is not reported as unmeasured",
+  !unmeasured.some((u) => u.column === "Region"));
+
+const signed = unmeasured.find((u) => u.column === "Signed on");
+check("a per-cell-typed date column is reported as mixed", signed?.reason === "mixed", String(signed?.reason));
+check("and its detail states the actual mix",
+  !!signed?.detail.includes("70% text") && !!signed?.detail.includes("30% numbers"), signed?.detail ?? "");
+
+const value = unmeasured.find((u) => u.column === "Contract Value");
+check("a sparse column is reported as too incomplete", value?.reason === "sparse", String(value?.reason));
+check("and its detail states the real coverage",
+  value?.detail === "only 40% of rows carry a number", value?.detail ?? "");
+check("the sparse detail carries no leftover no-op arithmetic",
+  !!value && !value.detail.includes("NaN") && !value.detail.includes("undefined"), value?.detail ?? "");
+
+const orderId = unmeasured.find((u) => u.column === "Order ID");
+check("an id column is reported as an identifier", orderId?.reason === "identifier", String(orderId?.reason));
+
+check("mix shares sum to the whole column",
+  unmeasured.every((u) => Math.abs(u.mix.text + u.mix.numeric + u.mix.blank - 1) < 1e-9));
+check("mixed columns sort above identifiers",
+  unmeasured.findIndex((u) => u.reason === "mixed") < unmeasured.findIndex((u) => u.reason === "identifier"));
+
+// A column that DOES qualify never appears in the list -- otherwise the panel
+// would contradict the chart sitting above it.
+const goodFile: Dataset = {
+  columns: ["Region", "Revenue"],
+  rows: Array.from({ length: 50 }, (_, i) => ({ Region: ["A", "B"][i % 2], Revenue: 100 + i })),
+};
+check("a qualifying metric is never listed as unmeasured",
+  !describeUnmeasuredColumns(goodFile).some((u) => u.column === "Revenue"));
+check("and that file still charts", pickChartSpecs(goodFile, "revenue by region").length > 0);
+
+// Coordinates and calendar years are complete but still not amounts.
+const positions: Dataset = {
+  columns: ["City", "latitude", "longitude", "year_introduced"],
+  rows: Array.from({ length: 40 }, (_, i) => ({
+    City: `C${i % 4}`, latitude: 40 + i / 100, longitude: -74 + i / 100, year_introduced: 1990 + (i % 30),
+  })),
+};
+const posUnmeasured = describeUnmeasuredColumns(positions);
+check("complete coordinate columns are reported as not-a-quantity",
+  ["latitude", "longitude"].every((c) => posUnmeasured.find((u) => u.column === c)?.reason === "not-a-quantity"),
+  posUnmeasured.map((u) => `${u.column}:${u.reason}`).join(", "));
+
+check("an empty dataset reports nothing", describeUnmeasuredColumns({ columns: ["A"], rows: [] }).length === 0);
+check("the coverage bar the panel quotes is the one the filter uses", MIN_METRIC_COVERAGE === 0.8,
+  String(MIN_METRIC_COVERAGE));
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

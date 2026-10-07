@@ -16,8 +16,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AggregatedPoint, Dataset, ChartSpec } from "@/lib/data-analysis";
-import { pickChartSpecs } from "@/lib/data-analysis";
+import type { AggregatedPoint, Dataset, ChartSpec, UnmeasuredColumn } from "@/lib/data-analysis";
+import { MIN_METRIC_COVERAGE, describeUnmeasuredColumns, pickChartSpecs } from "@/lib/data-analysis";
 import { formatNumber } from "@/lib/format";
 
 const PALETTE = ["#C2542A", "#D98F5E", "#E8B88A", "#8B3A1F", "#A8632F", "#F2D4B8"];
@@ -240,9 +240,71 @@ function ChartPanel({ spec }: { spec: ChartSpec }) {
   }
 }
 
+/**
+ * What the user sees when no column qualifies for a chart.
+ *
+ * Added 2026-10 alongside the 80% coverage rule. Before this, a file whose
+ * numeric columns were all too thin or all positions rather than amounts
+ * rendered nothing at all: no charts, no explanation, and the obvious reading
+ * is that the upload failed. The rule is a deliberate refusal, so it has to be
+ * stated out loud at the point where the charts would have been.
+ */
+function NoChartsPanel({ dataset }: { dataset: Dataset }) {
+  const unmeasured: UnmeasuredColumn[] = describeUnmeasuredColumns(dataset);
+  const threshold = Math.round(MIN_METRIC_COVERAGE * 100);
+
+  return (
+    <div className="bg-surface border border-border rounded-xl p-5 mb-8">
+      <p className="text-text-mute text-xs uppercase tracking-wider font-semibold mb-2">
+        No chart for this file
+      </p>
+      <p className="text-text text-sm font-semibold m-0">
+        Nixara found no column it could total or average safely.
+      </p>
+      <p className="text-text-mute text-xs leading-relaxed mt-2 mb-0">
+        A column has to be at least {threshold}% numbers before Nixara will chart it. Dates,
+        calendar years and coordinates are positions rather than amounts, so they are never
+        charted even when complete. Your file loaded correctly; there is simply nothing here
+        that a bar or a pie would describe honestly.
+      </p>
+
+      {unmeasured.length > 0 && (
+        <div className="mt-4">
+          <p className="text-text text-xs font-semibold mb-2">Columns Nixara looked at and set aside</p>
+          <div className="grid gap-1.5">
+            {unmeasured.slice(0, 6).map((u) => (
+              <div
+                key={u.column}
+                className="bg-bg rounded-lg px-3 py-2 flex items-baseline justify-between gap-3 flex-wrap"
+              >
+                <span className="text-text text-xs font-semibold">{u.column}</span>
+                <span className="text-text-mute text-xs text-right">{u.detail}</span>
+              </div>
+            ))}
+          </div>
+          {unmeasured.length > 6 && (
+            <p className="text-text-dim text-[0.7rem] mt-2 mb-0">
+              and {unmeasured.length - 6} more, listed in full under Data Quality Risks once you
+              generate the report.
+            </p>
+          )}
+        </div>
+      )}
+
+      <p className="text-text-mute text-xs leading-relaxed mt-4 mb-0">
+        The written report still runs. It will describe the categories, counts and gaps in your
+        file instead of charting amounts that are not there.
+      </p>
+    </div>
+  );
+}
+
 export default function Charts({ dataset, decisionText = "" }: { dataset: Dataset; decisionText?: string }) {
   const specs = pickChartSpecs(dataset, decisionText, 2);
-  if (specs.length === 0) return null;
+  if (specs.length === 0) {
+    if (dataset.rows.length === 0) return null;
+    return <NoChartsPanel dataset={dataset} />;
+  }
 
   return (
     <div className="grid md:grid-cols-2 gap-4 mb-8">
