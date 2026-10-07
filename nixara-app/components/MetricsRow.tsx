@@ -64,7 +64,8 @@ function QualityCard({ breakdown }: { breakdown: DashboardScoreBreakdown }) {
       <p className="text-text text-[1.05rem] font-semibold mb-1">{scoreHeadline(score)}</p>
       {reasons.length === 0 ? (
         <p className="text-text-mute text-[0.85rem] leading-relaxed">
-          No issues detected across missing data, column count, or row count.
+          No blank-heavy or mixed-type columns, at least one measurable metric, and a workable
+          number of rows and columns.
         </p>
       ) : (
         <div className="pt-3 mt-1 border-t border-border">

@@ -112,6 +112,32 @@ export function numericColumns(dataset: Dataset): string[] {
  *   - Rank / index helper columns
  * These would produce misleading anomaly signals if included.
  */
+/**
+ * Column name with separators flattened to single spaces and camelCase humps
+ * split, so that NON_METRIC_PATTERNS' word boundaries actually fire.
+ *
+ * BUG FIX (2026-10): the patterns below were tested against the raw column
+ * name, and in JavaScript "_" is a word character. /\bid\b/ therefore does NOT
+ * match "Student_ID", and /\bnumber\b/ does not match "TASK_NUMBER". Every
+ * underscore-separated identifier in a real export escaped the filter, so
+ * Student_ID (ai_student_impact_dataset.csv) and TASK_NUMBER (the Oracle ERP
+ * sample) were both being ranked and totalled as business metrics. Summing a
+ * column of ids produces a number with no real-world meaning, and the report
+ * prompt was being handed exactly that as a headline breakdown.
+ */
+function normalizeColumnName(col: string): string {
+  return col
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim();
+}
+
+/** Whether a column's NAME marks it as an identifier or a pre-aggregated count. */
+export function isNonMetricName(col: string): boolean {
+  const normalized = normalizeColumnName(col);
+  return NON_METRIC_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
 const NON_METRIC_PATTERNS = [
   /\bid\b/i,
   /\bcount\b/i,
@@ -131,7 +157,7 @@ const NON_METRIC_PATTERNS = [
 export function businessMetricColumns(dataset: Dataset): string[] {
   return numericColumns(dataset).filter(
     (col) =>
-      !NON_METRIC_PATTERNS.some((pattern) => pattern.test(col)) &&
+      !isNonMetricName(col) &&
       numericDensity(dataset, col) >= MIN_METRIC_COVERAGE &&
       !isNonQuantityColumn(dataset, col)
   );
@@ -140,6 +166,116 @@ export function businessMetricColumns(dataset: Dataset): string[] {
 export function categoricalColumns(dataset: Dataset): string[] {
   const numeric = new Set(numericColumns(dataset));
   return dataset.columns.filter((col) => !numeric.has(col));
+}
+
+/**
+ * A column may hold up to this share of numbers and still be treated as a
+ * label. Above it, the column is a broken amount column rather than a
+ * category, and grouping by it produces one group per distinct value.
+ */
+const PARTLY_NUMERIC_MAX = 0.2;
+
+/**
+ * A label column may be this blank at most. Above it, grouping by the column
+ * produces one dominant "(blank)" group holding most of the file, which tells
+ * the reader nothing. coaster_db.csv's Website column is 95% empty and was
+ * being handed to the model as a breakdown.
+ */
+const MAX_LABEL_BLANK_SHARE = 0.5;
+
+function blankShare(dataset: Dataset, col: string): number {
+  if (dataset.rows.length === 0) return 0;
+  let blanks = 0;
+  for (const row of dataset.rows) if (isMissingValue(row[col])) blanks++;
+  return blanks / dataset.rows.length;
+}
+
+/**
+ * Columns fit to be the GROUP KEY of a breakdown: genuine labels.
+ *
+ * BUG FIX (2026-10): breakdowns grouped by whatever categoricalColumns()
+ * returned, which is simply "everything numericColumns() rejected". That set
+ * includes date columns and amount columns that failed the numeric threshold,
+ * so real demo files produced "TOP/BOTTOM BY AWARD DATE", "TOP/BOTTOM BY
+ * AWARD AMOUNT USD" and "BREAKDOWN BY EXPENDITURE_ITEM_DATE". A date is a
+ * point in time and an amount is a quantity; neither is a category, and a
+ * breakdown keyed on one tells the model nothing it can reason about.
+ *
+ * Dates are excluded here rather than everywhere: bucketByMonth() still uses
+ * them, which is the correct way to group by time.
+ */
+export function groupingColumns(dataset: Dataset): string[] {
+  return categoricalColumns(dataset).filter(
+    (col) =>
+      !isDateColumn(dataset.rows, col) &&
+      !holdsDateLikeText(dataset.rows, col) &&
+      numericDensity(dataset, col) <= PARTLY_NUMERIC_MAX &&
+      blankShare(dataset, col) <= MAX_LABEL_BLANK_SHARE
+  );
+}
+
+const MONTH_NAME = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec";
+
+/**
+ * A date written as text. Three shapes cover what real exports produce:
+ * all-numeric (2026-01-15, 11/8/2016, 1/17/24, 15.01.2026), Oracle's
+ * day-month-year with a month name (31-MAR-2025), and month-first with a
+ * month name (Mar 31, 2025).
+ */
+const DATE_LIKE_TEXT = [
+  /^\s*\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(\s|T|$)/,
+  new RegExp(`^\\s*\\d{1,2}[-/.\\s](?:${MONTH_NAME})[a-z]*[-/.\\s]\\d{2,4}`, "i"),
+  new RegExp(`^\\s*(?:${MONTH_NAME})[a-z]*\\s+\\d{1,2},?\\s+\\d{2,4}`, "i"),
+];
+
+/**
+ * Whether a column holds dates that the parser left as plain text.
+ *
+ * isDateColumn() only reports true when the parser actually produced Date
+ * objects, and whether it does depends on the file: melb_data.csv's "Date"
+ * column is coerced, nixara_demo_dataset.csv's "Order Date" and "Ship Date"
+ * are not. Those two were therefore being advertised to the model as label
+ * columns safe to group by.
+ *
+ * Detection is by VALUE SHAPE, not by column name. An earlier draft of this
+ * matched names containing "date", "year", "period" and so on, which threw
+ * out Year_of_Study -- a legitimate category of 1st/2nd/3rd year, not a date.
+ * Sampled rather than exhaustive: 200 values settle the question on a
+ * 50,000-row file, and this runs on every column.
+ */
+function holdsDateLikeText(rows: Row[], col: string): boolean {
+  let sampled = 0;
+  let dateLike = 0;
+  for (const row of rows) {
+    const v = row[col];
+    if (typeof v !== "string" || v.trim() === "") continue;
+    sampled++;
+    if (DATE_LIKE_TEXT.some((pattern) => pattern.test(v))) dateLike++;
+    if (sampled >= 200) break;
+  }
+  return sampled > 0 && dateLike / sampled >= 0.7;
+}
+
+/**
+ * Whether a group key leaves enough rows per group to be a breakdown at all.
+ * A column with one distinct value per row is not a category; grouping by it
+ * re-prints the rows in a different order while looking like an aggregate,
+ * and both the model and the reader take it for one.
+ */
+export function hasUsableGroupSize(dataset: Dataset, col: string): boolean {
+  const total = dataset.rows.length;
+  if (total === 0) return false;
+  const unique = new Set(dataset.rows.map((r) => r[col])).size;
+  if (unique < 2 || unique > total) return false;
+  // A short list of labels is a real category even in a small file: a
+  // pre-aggregated export with one row per Region x Category has barely more
+  // rows than groups and is still exactly the right thing to group by.
+  if (unique <= 20) return true;
+  // Past that, require at least 1.5 rows per group on average. This is what
+  // excludes market_trend.csv's "Award Amount USD" -- 39 distinct amounts
+  // across 39 rows, which was reaching the model as "TOP/BOTTOM BY AWARD
+  // AMOUNT USD" as though it summarised anything.
+  return unique * 1.5 <= total;
 }
 
 /**
@@ -585,7 +721,13 @@ export function computeDerivedFigures(dataset: Dataset): DerivedFigure[] {
 }
 
 export interface DashboardScoreReason {
-  key: "missingData" | "columnCount" | "rowCount";
+  key:
+    | "missingData"
+    | "sparseColumn"
+    | "mixedTypeColumn"
+    | "noMeasurableMetric"
+    | "columnCount"
+    | "rowCount";
   penalty: number;
   message: string;
 }
@@ -645,19 +787,109 @@ export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdo
   let missingRatio = 0;
 
   if (rows.length > 0 && columns.length > 0) {
+    // ── Blended blanks across the whole grid ───────────────────────────────
+    // Kept, but no longer the only missing-data signal. The 20% cliff stays
+    // where it was; a second tier catches files that are visibly gappy
+    // without being catastrophic.
     let missing = 0;
-    for (const row of rows) {
-      for (const col of columns) {
-        if (isMissingValue(row[col])) missing++;
+    const blankShare = new Map<string, number>();
+    const mixedShare = new Map<string, number>();
+    for (const col of columns) {
+      let blanks = 0;
+      let numeric = 0;
+      for (const row of rows) {
+        const v = row[col];
+        if (isMissingValue(v)) blanks++;
+        else if (typeof v === "number") numeric++;
       }
+      missing += blanks;
+      blankShare.set(col, blanks / rows.length);
+      // "Mixed" means the column holds a real share of BOTH text and numbers,
+      // so nothing can compute with it and nothing can label with it either.
+      const textShare = (rows.length - blanks - numeric) / rows.length;
+      const numericShare = numeric / rows.length;
+      mixedShare.set(col, Math.min(textShare, numericShare));
     }
     missingRatio = missing / (rows.length * columns.length);
+
     if (missingRatio > 0.2) {
       score -= 20;
       reasons.push({
         key: "missingData",
         penalty: 20,
-        message: `${(missingRatio * 100).toFixed(1)}% of cells are missing or blank`,
+        message: `${(missingRatio * 100).toFixed(1)}% of cells across the whole file are missing or blank`,
+      });
+    } else if (missingRatio > 0.08) {
+      score -= 10;
+      reasons.push({
+        key: "missingData",
+        penalty: 10,
+        message: `${(missingRatio * 100).toFixed(1)}% of cells across the whole file are missing or blank`,
+      });
+    }
+
+    // ── A single badly gapped column ───────────────────────────────────────
+    // BUG FIX (2026-10): the blended ratio above was the ONLY missing-data
+    // check, and it dilutes. A file with one 60%-empty column and three
+    // intact ones averages to 15% and scored a clean 100/100, in the same
+    // view that tells the reader Nixara could not measure that column. The
+    // wider the file, the more completely a broken column disappears: at 20
+    // columns, one entirely empty column is 5% of cells.
+    const gapped = [...blankShare.entries()]
+      .filter(([, share]) => share >= 0.25)
+      .sort((a, b) => b[1] - a[1]);
+    if (gapped.length > 0) {
+      const [worstCol, worstShare] = gapped[0];
+      const tier = worstShare >= 0.8 ? 25 : worstShare >= 0.5 ? 15 : 8;
+      const extra = Math.min(12, (gapped.length - 1) * 4);
+      const penalty = tier + extra;
+      score -= penalty;
+      reasons.push({
+        key: "sparseColumn",
+        penalty,
+        message:
+          `${worstCol} is ${(worstShare * 100).toFixed(0)}% blank` +
+          (worstShare >= 0.8 ? ", which makes it effectively an empty column" : "") +
+          (gapped.length > 1
+            ? `, and ${gapped.length - 1} other column${gapped.length === 2 ? " is" : "s are"} more than a quarter blank`
+            : ""),
+      });
+    }
+
+    // ── Columns that are part text, part number ────────────────────────────
+    // The fault behind the coaster_db chart: PapaParse types cells, not
+    // columns, so one column can arrive as a mixture. Nothing downstream can
+    // use it, and until now nothing said so in the score.
+    const mixed = [...mixedShare.entries()]
+      .filter(([, share]) => share >= 0.1)
+      .sort((a, b) => b[1] - a[1]);
+    if (mixed.length > 0) {
+      const penalty = Math.min(20, 12 + (mixed.length - 1) * 4);
+      score -= penalty;
+      reasons.push({
+        key: "mixedTypeColumn",
+        penalty,
+        message:
+          `${mixed[0][0]} holds both text and numbers in the same column` +
+          (mixed.length > 1 ? `, as do ${mixed.length - 1} other${mixed.length === 2 ? "" : "s"}` : "") +
+          `, so it cannot be totalled or used as a label`,
+      });
+    }
+
+    // ── Nothing left to measure ────────────────────────────────────────────
+    // Only fires when the file HAD numeric candidates and none of them
+    // qualified. A genuinely categorical file (survey text, a list of names)
+    // is not a quality problem and is not penalised here.
+    const candidates = describeUnmeasuredColumns(dataset);
+    if (candidates.length > 0 && businessMetricColumns(dataset).length === 0) {
+      score -= 20;
+      reasons.push({
+        key: "noMeasurableMetric",
+        penalty: 20,
+        message:
+          `No column qualifies as an amount Nixara can total or average: ` +
+          `${candidates.length} column${candidates.length === 1 ? "" : "s"} carry numbers, ` +
+          `none clears the ${Math.round(MIN_METRIC_COVERAGE * 100)}% coverage bar`,
       });
     }
   }
@@ -1113,7 +1345,7 @@ export function describeUnmeasuredColumns(dataset: Dataset): UnmeasuredColumn[] 
     let reason: UnmeasuredReason;
     let detail: string;
 
-    if (NON_METRIC_PATTERNS.some((pattern) => pattern.test(col))) {
+    if (isNonMetricName(col)) {
       reason = "identifier";
       detail = "an identifier or a count, not an amount";
     } else if (isNonQuantityColumn(dataset, col)) {
@@ -1365,7 +1597,18 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   lines.push(`Rows: ${rows.length} | Columns: ${columns.length}`);
   if (filterCol && filterVal) lines.push(`Filtered to: ${filterCol} = ${filterVal}`);
   lines.push(`Numeric columns: [${numericCols.join(", ")}]`);
-  lines.push(`Categorical columns: [${catCols.join(", ")}]`);
+  // Label columns are the subset of non-numeric columns that can legitimately
+  // key a breakdown (see groupingColumns): not dates, not half-numeric. The
+  // rest are listed separately so the model is never left to assume a date or
+  // a malformed amount column is a category it can group by.
+  const labelCols = groupingColumns(filtered).filter((col) => hasUsableGroupSize(filtered, col));
+  const otherCatCols = catCols.filter((col) => !labelCols.includes(col));
+  lines.push(`Label columns (safe to group by): [${labelCols.join(", ")}]`);
+  if (otherCatCols.length > 0) {
+    lines.push(
+      `Other non-numeric columns (dates, free text, near-unique values, or columns mixing text and numbers - do not group by these): [${otherCatCols.join(", ")}]`
+    );
+  }
   lines.push("");
 
   // Each numeric column is walked once, and both its stats and its aggregation
@@ -1390,7 +1633,14 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   const { primaryMetric: rankedPrimary, ranked: rankedMetrics } = rankedBusinessMetrics(filtered);
   const businessMetrics = businessMetricColumns(filtered);
   const businessMetricSet = new Set(businessMetrics);
-  const primaryMetric = rankedPrimary ?? numericCols[0];
+  // BUG FIX (2026-10): this used to fall back to `?? numericCols[0]`. When no
+  // column qualified as a business metric, numericCols[0] was whatever came
+  // first in the file -- typically an id -- and every breakdown below then
+  // totalled it. On a 100-row export with an Order ID, the model was handed
+  // "TOP/BOTTOM BY SIGNED ON (TOTAL Order ID)" as the headline figure. There
+  // is no safe fallback for a metric that does not exist, so there is none:
+  // the metric-based blocks are skipped and row counts are sent instead.
+  const primaryMetric = rankedPrimary;
 
   if (numericCols.length > 0) {
     lines.push("NUMERIC SUMMARY");
@@ -1422,16 +1672,55 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // Prioritise amount columns in breakdowns so the model always sees dollar totals
   const breakdownMetrics = rankedMetrics.slice(0, 4);
 
-  // Find the most useful categorical columns: prefer low-cardinality (2–20 unique values)
-  // Skip ID/date/name columns, scan ALL catCols (not just first 3)
-  const lowCardCats = catCols.filter(col => {
-    const u = new Set(rows.map(r => r[col])).size;
+  // Group keys come from labelCols, so a date or a half-numeric column can
+  // never key a breakdown, and every group holds at least two rows on average
+  // (hasUsableGroupSize). The old version scanned every non-numeric column
+  // and only filtered on cardinality, which is how "TOP/BOTTOM BY AWARD
+  // AMOUNT USD" reached the model on a 39-row file with 39 distinct amounts.
+  const lowCardCats = labelCols.filter((col) => {
+    const u = new Set(rows.map((r) => r[col])).size;
     return u >= 2 && u <= 20;
   });
-  const highCardCats = catCols.filter(col => {
-    const u = new Set(rows.map(r => r[col])).size;
-    return u > 20 && u <= 200; // e.g. State/Province — too many for full table but useful top/bottom
+  const highCardCats = labelCols.filter((col) => {
+    const u = new Set(rows.map((r) => r[col])).size;
+    return u > 20 && u <= 200; // e.g. State/Province -- too many for a full table but useful top/bottom
   });
+
+  // ── No measurable metric: say so, and send row counts instead ────────────
+  // The model cannot be left to fill this gap. Given a summary with no
+  // figures in it, it writes plausible ones. So the absence is stated
+  // explicitly, with the reason per column, and the only quantities supplied
+  // are row counts, which are always true.
+  if (!primaryMetric) {
+    const unmeasured = describeUnmeasuredColumns(filtered);
+    if (unmeasured.length > 0) {
+      lines.push("NO MEASURABLE METRIC");
+      lines.push(
+        `  No column in this file qualifies as an amount that can be totalled or averaged. ` +
+          `A column must be at least ${Math.round(MIN_METRIC_COVERAGE * 100)}% numbers, and must be a quantity ` +
+          `rather than a date, a calendar year, a coordinate or an identifier.`
+      );
+      for (const u of unmeasured.slice(0, 8)) {
+        lines.push(`  ${u.column}: ${u.detail}`);
+      }
+      lines.push(
+        `  Do not report any total, average, growth rate or currency figure for these columns. ` +
+          `Describe counts, categories and the data gaps themselves.`
+      );
+      lines.push("");
+    }
+    for (const cat of lowCardCats.slice(0, 4)) {
+      const counts = new Map<string, number>();
+      for (const row of rows) {
+        const key = String(row[cat] ?? "(blank)");
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
+      lines.push(`ROW COUNT BY ${cat.toUpperCase()}`);
+      lines.push(`  ` + ordered.map(([k, n]) => `${k}=${n}`).join(", "));
+      lines.push("");
+    }
+  }
 
   // Standard breakdowns for low-cardinality categories
   let breakdownCount = 0;

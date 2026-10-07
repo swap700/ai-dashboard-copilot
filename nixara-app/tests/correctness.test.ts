@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, isNonMetricName, groupingColumns, hasUsableGroupSize, dashboardScore, type Dataset, type Row } from "../lib/data-analysis.ts";
 import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
 import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
@@ -700,6 +700,165 @@ check("complete coordinate columns are reported as not-a-quantity",
 check("an empty dataset reports nothing", describeUnmeasuredColumns({ columns: ["A"], rows: [] }).length === 0);
 check("the coverage bar the panel quotes is the one the filter uses", MIN_METRIC_COVERAGE === 0.8,
   String(MIN_METRIC_COVERAGE));
+
+// ── Identifier names survive underscores ────────────────────────────────────
+console.log("isNonMetricName - \\b word boundaries and the underscore problem");
+
+// "_" is a word character in JavaScript regex, so /\bid\b/ never matched
+// "Student_ID" and /\bnumber\b/ never matched "TASK_NUMBER". Both columns
+// were being ranked and totalled as business metrics on real demo files.
+for (const name of ["Student_ID", "TASK_NUMBER", "customer_id", "Row ID", "Order No.",
+                    "PROJECT_NUMBER", "Distinct count of Order ID", "row_index", "sort_key"]) {
+  check(`isNonMetricName("${name}") is true`, isNonMetricName(name));
+}
+for (const name of ["Average_Salary_USD", "Years_Experience", "annual_income_usd", "Profit",
+                    "OPEN_PO_COMMITMENTS_GBP", "Weekly_GenAI_Hours", "Skill_Retention_Score"]) {
+  check(`isNonMetricName("${name}") is false`, !isNonMetricName(name));
+}
+
+const underscoreIds: Dataset = {
+  columns: ["Student_ID", "Major_Category", "Post_Semester_GPA"],
+  rows: Array.from({ length: 40 }, (_, i) => ({
+    Student_ID: 90000 + i, Major_Category: ["Eng", "Bio"][i % 2], Post_Semester_GPA: 2 + (i % 20) / 10,
+  })),
+};
+check("an underscore id column is not a business metric",
+  !businessMetricColumns(underscoreIds).includes("Student_ID"),
+  businessMetricColumns(underscoreIds).join(", "));
+check("and it is reported as an identifier instead",
+  describeUnmeasuredColumns(underscoreIds).find((u) => u.column === "Student_ID")?.reason === "identifier");
+check("an underscore id column is never summed in the summary",
+  !/TOTAL Student_ID|Student_ID by /.test(buildDataSummary(underscoreIds)));
+
+// ── A broken column no longer hides inside a blended average ────────────────
+console.log("dashboardScoreBreakdown - a single bad column cannot average itself away");
+
+function reasonKeys(ds: Dataset): string[] {
+  return dashboardScoreBreakdown(ds).reasons.map((r) => r.key);
+}
+
+// 4 columns, one of them 60% blank. Blended across the grid that is 15%,
+// which is under the old 20% cliff, so this file used to score 100/100 -
+// in the same view that told the reader the column could not be measured.
+const oneGappedColumn: Dataset = {
+  columns: ["Region", "Rep", "Units", "Contract Value"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    Region: ["N", "S"][i % 2], Rep: `R${i % 5}`, Units: 10 + (i % 7),
+    "Contract Value": i < 40 ? 5000 + i : "",
+  })),
+};
+check("a 60%-blank column is penalised even when the blended ratio is low",
+  reasonKeys(oneGappedColumn).includes("sparseColumn"), reasonKeys(oneGappedColumn).join(", "));
+check("so the file no longer scores a clean 100", dashboardScore(oneGappedColumn) < 100,
+  String(dashboardScore(oneGappedColumn)));
+check("and the reason names the actual column",
+  !!dashboardScoreBreakdown(oneGappedColumn).reasons
+    .find((r) => r.key === "sparseColumn")?.message.includes("Contract Value"));
+
+// The dilution gets worse the wider the file: at 20 columns, one entirely
+// empty column is 5% of all cells.
+const wideWithEmptyCol: Dataset = {
+  columns: ["Empty Column", ...Array.from({ length: 19 }, (_, i) => `M${i}`)],
+  rows: Array.from({ length: 60 }, (_, r) => Object.fromEntries([
+    ["Empty Column", ""], ...Array.from({ length: 19 }, (_, i) => [`M${i}`, r + i] as [string, number]),
+  ])) as Row[],
+};
+check("an entirely empty column is caught in a wide file",
+  reasonKeys(wideWithEmptyCol).includes("sparseColumn"), reasonKeys(wideWithEmptyCol).join(", "));
+
+// A column holding both text and numbers: the coaster_db fault.
+const mixedTypes: Dataset = {
+  columns: ["Region", "Sales"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    Region: ["N", "S"][i % 2], Sales: i % 3 === 0 ? "n/a pending" : 1000 + i,
+  })),
+};
+check("a column mixing text and numbers is penalised",
+  reasonKeys(mixedTypes).includes("mixedTypeColumn"), reasonKeys(mixedTypes).join(", "));
+
+// Nothing measurable at all.
+const noMetric: Dataset = {
+  columns: ["Order ID", "Region", "Contract Value"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    "Order ID": 1000 + i, Region: ["N", "S", "E"][i % 3], "Contract Value": i < 40 ? 5000 + i : "",
+  })),
+};
+check("a file with no measurable metric says so in the score",
+  reasonKeys(noMetric).includes("noMeasurableMetric"), reasonKeys(noMetric).join(", "));
+
+// A genuinely categorical file is not a quality problem.
+const allText: Dataset = {
+  columns: ["Respondent", "Answer"],
+  rows: Array.from({ length: 30 }, (_, i) => ({ Respondent: `P${i}`, Answer: ["yes", "no"][i % 2] })),
+};
+check("a purely categorical file is not accused of having no metric",
+  !reasonKeys(allText).includes("noMeasurableMetric"), reasonKeys(allText).join(", "));
+
+// And a cleanMetricFile file is still a cleanMetricFile file.
+const cleanMetricFile: Dataset = {
+  columns: ["Region", "Category", "Sales", "Profit"],
+  rows: Array.from({ length: 200 }, (_, i) => ({
+    Region: ["N", "S", "E", "W"][i % 4], Category: ["A", "B"][i % 2], Sales: 100 + i, Profit: 10 + (i % 30),
+  })),
+};
+check("a cleanMetricFile file still scores 100", dashboardScore(cleanMetricFile) === 100, String(dashboardScore(cleanMetricFile)));
+check("and lists no reasons", reasonKeys(cleanMetricFile).length === 0, reasonKeys(cleanMetricFile).join(", "));
+
+// ── Group keys must be genuine labels ───────────────────────────────────────
+console.log("groupingColumns - dates, near-unique values and empty columns are not categories");
+
+const mixedKeys: Dataset = {
+  columns: ["Region", "Order Date", "Oracle Date", "Award Amount", "Notes", "Year_of_Study", "Sales"],
+  rows: Array.from({ length: 60 }, (_, i) => ({
+    Region: ["N", "S", "E"][i % 3],
+    "Order Date": `${(i % 12) + 1}/${(i % 28) + 1}/2026`,
+    "Oracle Date": `${(i % 28) + 1}-MAR-2025`,
+    "Award Amount": `${700000 + i * 13},00`,   // thousands-separated text: 60 distinct values
+    Notes: i < 5 ? `note ${i}` : "",            // 92% blank
+    Year_of_Study: ["1st Year", "2nd Year", "3rd Year", "4th Year"][i % 4],
+    Sales: 1000 + i,
+  })),
+};
+const groups = groupingColumns(mixedKeys);
+check("a numeric-format text date column is not a label", !groups.includes("Order Date"), groups.join(", "));
+check("an Oracle DD-MON-YYYY date column is not a label", !groups.includes("Oracle Date"), groups.join(", "));
+check("a mostly-blank text column is not a label", !groups.includes("Notes"), groups.join(", "));
+check("a real category is still a label", groups.includes("Region"), groups.join(", "));
+check("Year_of_Study is still a label (the name says year, the values are not dates)",
+  groups.includes("Year_of_Study"), groups.join(", "));
+
+check("a near-unique column has no usable group size", !hasUsableGroupSize(mixedKeys, "Award Amount"));
+check("a 3-value column does", hasUsableGroupSize(mixedKeys, "Region"));
+check("a short label list is usable even when rows barely exceed groups",
+  hasUsableGroupSize({ columns: ["Region"], rows: [{ Region: "E" }, { Region: "C" }, { Region: "E" }] }, "Region"));
+check("a single-value column is never a group key",
+  !hasUsableGroupSize({ columns: ["X"], rows: [{ X: "a" }, { X: "a" }] }, "X"));
+
+const keySummary = buildDataSummary(mixedKeys);
+check("no breakdown is keyed on a date column",
+  !/BY (ORDER DATE|ORACLE DATE)/.test(keySummary),
+  keySummary.split("\n").filter((l) => /^(BREAKDOWN|TOP\/BOTTOM|CROSS)/.test(l)).join(" | "));
+check("no breakdown is keyed on a near-unique amount column", !/BY AWARD AMOUNT/.test(keySummary));
+check("the summary names its label columns explicitly", keySummary.includes("Label columns (safe to group by):"));
+check("and warns the model off the rest", keySummary.includes("do not group by these"));
+
+// ── No metric means row counts, never a totalled id ─────────────────────────
+console.log("buildDataSummary - no measurable metric means no invented one");
+
+const noMetricSummary = buildDataSummary(noMetric);
+check("an id column is never promoted to primary metric when no metric exists",
+  !/TOTAL Order ID|AVERAGE Order ID|\(Order ID\)/.test(noMetricSummary),
+  noMetricSummary.split("\n").filter((l) => l.includes("Order ID")).join(" | "));
+check("the absence of a metric is stated outright", noMetricSummary.includes("NO MEASURABLE METRIC"));
+check("with the reason for each column",
+  noMetricSummary.includes("only 40% of rows carry a number"));
+check("and an explicit instruction not to invent figures",
+  noMetricSummary.includes("Do not report any total, average, growth rate or currency figure"));
+check("row counts are supplied instead, since they are always true",
+  /ROW COUNT BY REGION/.test(noMetricSummary) && /N=34, S=33, E=33|N=34, E=33, S=33/.test(noMetricSummary),
+  noMetricSummary.split("\n").find((l) => l.startsWith("  N=")) ?? "(no row count line)");
+check("a file WITH a metric still gets real breakdowns, not row counts",
+  !buildDataSummary(cleanMetricFile).includes("ROW COUNT BY") && buildDataSummary(cleanMetricFile).includes("BREAKDOWN BY REGION"));
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
