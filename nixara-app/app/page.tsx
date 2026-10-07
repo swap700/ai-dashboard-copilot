@@ -16,7 +16,7 @@ import DriftBanner from "@/components/DriftBanner";
 import { buildDataSummary, dashboardScoreBreakdown, numericColumns } from "@/lib/data-analysis";
 import { buildEvidenceFacts } from "@/lib/evidence";
 import type { Dataset } from "@/lib/data-analysis";
-import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType } from "@/lib/report";
+import { REPORT_TYPES, type ReportFailures, type ReportSet, type ReportType , type CorrectedFigure } from "@/lib/report";
 import { FREE_LIMIT, setFreeReportsUsed } from "@/lib/free-tier";
 import { detectDrift, type DriftFlag } from "@/lib/drift";
 import { getVisitorId } from "@/lib/visitor";
@@ -145,15 +145,18 @@ export default function DashboardPage() {
           err.status = res.status;
           throw err;
         }
-        const correctedFigures: string[] = Array.isArray(data.correctedFigures)
-          ? data.correctedFigures.filter((f: unknown): f is string => typeof f === "string").slice(0, 8)
+        const correctedFigures: CorrectedFigure[] = Array.isArray(data.correctedFigures)
+          ? data.correctedFigures
+              .filter((f: unknown): f is CorrectedFigure =>
+                !!f && typeof f === "object" && typeof (f as CorrectedFigure).figure === "string")
+              .slice(0, 8)
           : [];
         return { text: data.text as string, truncated: Boolean(data.truncated), corrected: Boolean(data.corrected), correctedFigures };
       };
 
       const results: ReportSet = {};
       const failures: ReportFailures = {};
-      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean; corrected: boolean; correctedFigures: string[] }>) => {
+      const record = (type: ReportType, outcome: PromiseSettledResult<{ text: string; truncated: boolean; corrected: boolean; correctedFigures: CorrectedFigure[] }>) => {
         if (outcome.status === "fulfilled") results[type] = outcome.value;
         else failures[type] = outcome.reason?.message ?? "Report generation failed.";
       };

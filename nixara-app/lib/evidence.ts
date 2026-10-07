@@ -112,7 +112,7 @@ export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
     for (const metric of metricCols.slice(0, 4)) {
       const values = colValues.get(metric) ?? [];
       const proportion = looksLikeProportion(values);
-      const breakdown = aggregateBy(dataset, cat, metric);
+      const breakdown = aggregateBy(dataset, cat, metric).points;
       for (const { key, value } of breakdown) {
         const description = `${metric} for ${cat} = ${key}`;
         facts.push({ value: round2(value), isPercent: false, description });

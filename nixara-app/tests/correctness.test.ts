@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, type Dataset, type Row } from "../lib/data-analysis.ts";
 import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
 import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
@@ -137,12 +137,12 @@ const rows = [
 ];
 const dataset: Dataset = { rows, columns: ["Region", "Discount", "Sales"] };
 
-const byDiscount = aggregateBy(dataset, "Region", "Discount");
+const byDiscount = aggregateBy(dataset, "Region", "Discount").points;
 const central = byDiscount.find((d) => d.key === "Central")!;
 check("Discount is averaged, not summed", Math.abs(central.value - 0.3) < 1e-9,
   `Central Discount = ${central.value} (summed would be 0.6)`);
 
-const bySales = aggregateBy(dataset, "Region", "Sales");
+const bySales = aggregateBy(dataset, "Region", "Sales").points;
 check("Sales is still summed",
   bySales.find((d) => d.key === "Central")!.value === 400,
   String(bySales.find((d) => d.key === "Central")!.value));
@@ -535,6 +535,100 @@ console.log("\nSuggested outcome rating - visible rule, never a default");
   check("a target of 0 explains why there is no suggestion", rate(10, 4, 0).reason !== null);
   check("a target equal to Value BEFORE cannot imply a direction, and says so", rate(1200, 1260, 1200).suggestion === null && rate(1200, 1260, 1200).reason !== null);
 }
+
+// ── Metric selection: the coaster_db "Opening date" bug ─────────────────────
+console.log("metric selection - sparse and non-quantity columns");
+
+/**
+ * Reproduces the shape of coaster_db.csv's 'Opening date': one column holding
+ * numbers, text and Dates at once. Papa's dynamicTyping types cells, not
+ * columns, so this is what a messy real-world date column actually looks like
+ * by the time it reaches the analysis layer.
+ */
+const messyRows: Row[] = [
+  ...Array.from({ length: 16 }, (_, i) => ({ Status: "Operating", "Opening date": `December ${1900 + i}` })),
+  ...Array.from({ length: 4 },  (_, i) => ({ Status: "Operating", "Opening date": 1980 + i })),
+  ...Array.from({ length: 10 }, () => ({ Status: "Closed", "Opening date": "March 4, 1971" })),
+];
+const messy: Dataset = { rows: messyRows, columns: ["Status", "Opening date"] };
+
+check("a 20%-numeric column is not a numeric column",
+  !numericColumns(messy).includes("Opening date"),
+  `density = ${(numericDensity(messy, "Opening date") * 100).toFixed(0)}%`);
+check("and is never offered as a business metric",
+  !businessMetricColumns(messy).includes("Opening date"));
+check("so nothing charts it",
+  !pickChartSpecs(messy, "opening date by status").some((s) => s.title.includes("Opening Date")));
+
+// A fully-numeric year column is still a coordinate, not an amount.
+const years: Dataset = {
+  columns: ["Region", "year_introduced"],
+  rows: Array.from({ length: 20 }, (_, i) => ({ Region: i % 2 ? "A" : "B", year_introduced: 1990 + i })),
+};
+check("a complete year column is excluded as a metric",
+  !businessMetricColumns(years).includes("year_introduced"));
+check("isNonQuantityColumn agrees", isNonQuantityColumn(years, "year_introduced"));
+
+// A real metric at full coverage is untouched.
+const clean: Dataset = {
+  columns: ["Region", "Profit"],
+  rows: Array.from({ length: 20 }, (_, i) => ({ Region: i % 2 ? "A" : "B", Profit: 100 + i })),
+};
+check("a complete numeric metric still qualifies", businessMetricColumns(clean).includes("Profit"));
+
+// Coverage threshold: 85% in, 60% out.
+const mk = (numeric: number, text: number): Dataset => ({
+  columns: ["Region", "Amount"],
+  rows: [
+    ...Array.from({ length: numeric }, (_, i) => ({ Region: "A", Amount: 10 + i })),
+    ...Array.from({ length: text }, () => ({ Region: "A", Amount: "n/a" })),
+  ],
+});
+check("85% numeric clears MIN_METRIC_COVERAGE", businessMetricColumns(mk(17, 3)).includes("Amount"));
+check("60% numeric does not", !businessMetricColumns(mk(12, 8)).includes("Amount"));
+
+// ── Coverage reporting ──────────────────────────────────────────────────────
+console.log("aggregateBy - coverage and aggregation are reported");
+
+const partial: Dataset = {
+  columns: ["Status", "Score"],
+  rows: [
+    ...Array.from({ length: 3 }, () => ({ Status: "Operating", Score: 10 })),
+    ...Array.from({ length: 7 }, () => ({ Status: "Operating", Score: "unknown" })),
+    ...Array.from({ length: 5 }, () => ({ Status: "Closed", Score: 20 })),
+  ],
+};
+const res = aggregateBy(partial, "Status", "Score");
+const op = res.points.find((p) => p.key === "Operating")!;
+check("a group reports rows used vs rows present", op.used === 3 && op.total === 10,
+  `used=${op.used} total=${op.total}`);
+check("a complete group reports full coverage",
+  (() => { const c = res.points.find((p) => p.key === "Closed")!; return c.used === 5 && c.total === 5; })());
+check("the whole aggregation reports coverage", res.used === 8 && res.total === 15,
+  `used=${res.used} total=${res.total}`);
+check("the aggregation used is reported", res.agg === "mean" || res.agg === "sum");
+
+// ── Pie charts are only for totals ──────────────────────────────────────────
+console.log("chart shape - pie means parts of a whole");
+
+const sums: Dataset = {
+  columns: ["Region", "Sales"],
+  rows: ["A", "B", "C", "D"].flatMap((r) =>
+    Array.from({ length: 5 }, (_, i) => ({ Region: r, Sales: 100 + i }))),
+};
+const sumSpec = pickChartSpecs(sums, "sales by region")[0];
+check("a summed metric with few categories may be a pie", sumSpec?.type === "pie", String(sumSpec?.type));
+check("and its title says Total", !!sumSpec?.title.startsWith("Total "), sumSpec?.title ?? "");
+
+const means: Dataset = {
+  columns: ["Region", "Win Rate"],
+  rows: ["A", "B", "C", "D"].flatMap((r) =>
+    Array.from({ length: 5 }, (_, i) => ({ Region: r, "Win Rate": 0.4 + i / 100 }))),
+};
+const meanSpec = pickChartSpecs(means, "win rate by region")[0];
+check("an averaged metric is never a pie", meanSpec?.type !== "pie", String(meanSpec?.type));
+check("and its title says Average of", !!meanSpec?.title.startsWith("Average of "), meanSpec?.title ?? "");
+check("aggWord labels both operations", aggWord("sum") === "Total" && aggWord("mean") === "Average of");
 
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -235,27 +235,73 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
               </span>
             </div>
 
-            {current.corrected && (
-              <div className="rounded-lg border border-success-border bg-success-bg px-4 py-3 mb-4" role="status">
-                <p className="text-success text-sm font-semibold mb-0.5">
-                  {current.correctedFigures && current.correctedFigures.length > 0
-                    ? `${current.correctedFigures.length} figure${current.correctedFigures.length === 1 ? "" : "s"} in the first draft could not be matched to your data and ${current.correctedFigures.length === 1 ? "was" : "were"} replaced before you saw this report.`
-                    : "Nixara double-checked this report before showing it to you."}
+            {current.corrected && current.correctedFigures && current.correctedFigures.length > 0 && (
+              /*
+                Amber, not green. Green reads as "all good"; this banner exists
+                to say part of the first draft was weaker than it looked.
+
+                Only figures the rewrite actually RESOLVED appear here. Anything
+                still unmatched survives into the text below and is marked amber
+                inline, so no figure is ever reported twice.
+              */
+              <div className="rounded-lg border border-warn-border bg-warn-bg px-4 py-3 mb-4" role="status">
+                <p className="text-warn text-sm font-semibold mb-1">
+                  Nixara checked this report against your file and changed{" "}
+                  {current.correctedFigures.length === 1
+                    ? "1 number"
+                    : `${current.correctedFigures.length} numbers`}
                 </p>
-                {current.correctedFigures && current.correctedFigures.length > 0 ? (
-                  <>
-                    <p className="text-text text-sm font-medium">{current.correctedFigures.join("  \u00B7  ")}</p>
-                    <p className="text-text-mute text-sm mt-0.5">
-                      The wording around {current.correctedFigures.length === 1 ? "it was" : "them was"} rewritten without the number.
-                      They may have been correct figures Nixara had no way to confirm, so this is a precaution, not a verdict.
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-text-mute text-sm">
-                    One or more figures in the first draft could not be matched to your data, so Nixara asked the model to
-                    correct itself before this version was returned.
-                  </p>
-                )}
+                <p className="text-text-mute text-sm">
+                  A first draft cited{" "}
+                  {current.correctedFigures.length === 1 ? "a figure that matched" : "figures that matched"}{" "}
+                  nothing in your data. Nixara asked for a rewrite, and this is the result.
+                </p>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs mt-2.5 mb-2">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="font-semibold text-text-mute uppercase tracking-wider text-[0.66rem] pr-3 pb-1.5 border-b border-warn-border whitespace-nowrap">
+                          First draft said
+                        </th>
+                        <th className="font-semibold text-text-mute uppercase tracking-wider text-[0.66rem] pr-3 pb-1.5 border-b border-warn-border whitespace-nowrap">
+                          Where
+                        </th>
+                        <th className="font-semibold text-text-mute uppercase tracking-wider text-[0.66rem] pb-1.5 border-b border-warn-border whitespace-nowrap">
+                          Outcome
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {current.correctedFigures.map((f, i) => (
+                        <tr key={`${f.figure}-${i}`} className="align-top">
+                          <td className="pr-3 py-1.5 font-bold text-text whitespace-nowrap tabular-nums">
+                            {f.figure}
+                          </td>
+                          <td className="pr-3 py-1.5 text-text-mute">
+                            {f.section ?? "elsewhere in the report"}
+                          </td>
+                          <td className="py-1.5">
+                            {f.outcome === "corrected" ? (
+                              <span className="text-success font-semibold whitespace-nowrap">
+                                replaced with a figure from your data
+                              </span>
+                            ) : (
+                              <span className="text-accent-text-dk font-semibold whitespace-nowrap">
+                                number removed, wording kept
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <p className="text-text-mute text-sm">
+                  Being unmatched does not make a figure wrong. It means Nixara could not prove it
+                  from your data, so it chose not to stand behind it.
+                </p>
               </div>
             )}
 

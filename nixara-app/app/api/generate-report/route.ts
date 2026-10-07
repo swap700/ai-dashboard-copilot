@@ -158,6 +158,18 @@ interface Body {
   evidenceFacts?: EvidenceFact[];
 }
 
+/** One figure the correction pass resolved, and how. */
+export interface CorrectedFigure {
+  /** The figure as the first draft wrote it, e.g. "$500.00". */
+  figure: string;
+  /** Report heading it appeared under, when one could be identified. */
+  section: string | null;
+  /** "corrected" = a real number took its place. "dropped" = no number now. */
+  outcome: "corrected" | "dropped";
+  /** The draft sentence it came from, trimmed. */
+  context: string | null;
+}
+
 interface GenerateResult {
   text: string;
   /** The model hit the token ceiling and the report is cut off mid-thought. */
@@ -165,7 +177,7 @@ interface GenerateResult {
   /** A fabricated figure was caught and an automatic correction pass replaced this text before it was ever returned. */
   corrected: boolean;
   /** The first-draft figures that could not be matched and were replaced (at most 8). */
-  correctedFigures: string[];
+  correctedFigures: CorrectedFigure[];
 }
 
 /**
@@ -252,6 +264,69 @@ Write the full report again from scratch. For each statement listed above, eithe
  * that don't provide it (e.g. an older client, or a BI-connector path that
  * hasn't been updated) get exactly today's behavior, unverified.
  */
+/**
+ * Works out what the correction pass actually did to each figure.
+ *
+ * The correction prompt gives the model two options: swap the number for a
+ * real one from the data, or rewrite the sentence with no number at all. The
+ * banner used to report both as "replaced", and listed bare figures with no
+ * context, which is why "$500.00 · 5%" told the reader nothing.
+ *
+ * It also used to list figures the retry had NOT fixed. Those survive into the
+ * delivered report, where the browser flags them again with an amber
+ * underline, so the same number appeared twice under two contradictory
+ * descriptions. Anything still unmatched is left out here and belongs to the
+ * amber marks alone.
+ */
+function resolveCorrections(
+  draft: string,
+  final: string,
+  facts: EvidenceFact[]
+): CorrectedFigure[] {
+  const before = findUnverifiedFigures(draft, facts);
+  const stillUnverified = new Set(findUnverifiedFigures(final, facts));
+
+  const out: CorrectedFigure[] = [];
+  for (const figure of before) {
+    // Survived the rewrite unchanged: the amber marks own this one.
+    if (stillUnverified.has(figure)) continue;
+
+    const draftLine = lineContaining(draft, figure);
+    const gone = !final.includes(figure);
+    out.push({
+      figure,
+      section: sectionOf(draft, figure),
+      outcome: gone ? "dropped" : "corrected",
+      context: draftLine ? truncate(draftLine, 160) : null,
+    });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/** The heading a figure sits under, for "where it appeared". */
+function sectionOf(text: string, figure: string): string | null {
+  let heading: string | null = null;
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line.startsWith("### ")) heading = line.slice(4).trim();
+    else if (line.includes(figure)) return heading;
+  }
+  return null;
+}
+
+function lineContaining(text: string, figure: string): string | null {
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line && !line.startsWith("### ") && line.includes(figure)) return line;
+  }
+  return null;
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : s.slice(0, max - 1).trimEnd() + "…";
+}
+
 async function generateVerified(
   apiKey: string,
   prompt: string,
@@ -283,9 +358,18 @@ async function generateVerified(
     // still in it — a half-written correction has no coherent fallback of
     // its own. Only adopt the retry if it actually finished.
     if (!retry.truncated) {
-      const replaced = findUnverifiedFigures(first.text, evidenceFacts).slice(0, 8);
-      console.info(`[generate-report] report=${reportType} corrected=true unverified=${badLines.length} figures=${replaced.length}`);
-      return { text: retry.text, truncated: false, corrected: true, correctedFigures: replaced };
+      const resolved = resolveCorrections(first.text, retry.text, evidenceFacts);
+      console.info(
+        `[generate-report] report=${reportType} corrected=${resolved.length > 0} ` +
+          `unverified=${badLines.length} resolved=${resolved.length} ` +
+          `survived=${badLines.length - resolved.length}`
+      );
+      return {
+        text: retry.text,
+        truncated: false,
+        corrected: resolved.length > 0,
+        correctedFigures: resolved,
+      };
     }
   } catch (err) {
     console.warn(`[generate-report] Correction retry failed for ${reportType}, keeping original:`, err);

@@ -60,9 +60,47 @@ export function cleanDataset(dataset: Dataset): Dataset {
   return { ...dataset, rows: cleanedRows, columns };
 }
 
+/**
+ * Share of a column's rows that hold an actual number, 0 to 1.
+ */
+export function numericDensity(dataset: Dataset, col: string): number {
+  if (dataset.rows.length === 0) return 0;
+  let n = 0;
+  for (const row of dataset.rows) if (typeof row[col] === "number") n++;
+  return n / dataset.rows.length;
+}
+
+/**
+ * A column has to clear MIN_METRIC_COVERAGE before Nixara will chart it,
+ * average it or hand it to the model as a metric.
+ *
+ * Why a second, stricter bar than NUMERIC_THRESHOLD: a column can be numeric
+ * enough to be worth typing as a number and still be too sparse to average
+ * honestly. 0.8 says four out of five rows must carry a real value. Below
+ * that, any single figure quietly describes a minority of the data.
+ */
+export const MIN_METRIC_COVERAGE = 0.8;
+
+/**
+ * BUG FIX (2026-10): this used `.some()` - one numeric cell anywhere made the
+ * whole column "numeric". cleanDataset() meanwhile refuses to coerce a column
+ * unless more than NUMERIC_THRESHOLD of it parses, so the two functions
+ * answered the same question differently and the weaker one won downstream.
+ *
+ * Found on coaster_db.csv: across 1087 rows 'Opening date' holds 659 text
+ * values ("December 1912", "3 July 1920"), 178 numbers (bare years Papa typed
+ * because dynamicTyping types cells individually rather than columns), and
+ * 250 blanks. 16.4% numeric. cleanDataset correctly declined it at 16% numeric.
+ * numericColumns then promoted it anyway, and the app charted "Opening Date by
+ * Status", averaging 104 of 668 Operating rows into a tooltip reading 1,979.85
+ * with nothing on screen saying it came from a sixth of the data.
+ *
+ * Both functions now use the same threshold, so a column the cleaner rejected
+ * can no longer be treated as a number by anything further down.
+ */
 export function numericColumns(dataset: Dataset): string[] {
-  return dataset.columns.filter((col) =>
-    dataset.rows.some((r) => typeof r[col] === "number")
+  return dataset.columns.filter(
+    (col) => numericDensity(dataset, col) > NUMERIC_THRESHOLD
   );
 }
 
@@ -85,9 +123,17 @@ const NON_METRIC_PATTERNS = [
   /\bno\b\.?$/i,    // "Order No.", "Row No."
 ];
 
+/**
+ * The columns Nixara is willing to treat as a business metric: numeric by
+ * name and by density, not an ID or a count, and an amount rather than a
+ * coordinate.
+ */
 export function businessMetricColumns(dataset: Dataset): string[] {
   return numericColumns(dataset).filter(
-    (col) => !NON_METRIC_PATTERNS.some((pattern) => pattern.test(col))
+    (col) =>
+      !NON_METRIC_PATTERNS.some((pattern) => pattern.test(col)) &&
+      numericDensity(dataset, col) >= MIN_METRIC_COVERAGE &&
+      !isNonQuantityColumn(dataset, col)
   );
 }
 
@@ -331,6 +377,23 @@ const OUTLIER_SKIP_TOKENS = new Set([
   "latitude", "longitude", "lat", "lon", "lng", "zip", "postal", "postcode", "pincode",
 ]);
 
+/**
+ * True when a column holds coordinates rather than quantities: dates, years,
+ * latitudes, longitudes, postal codes.
+ *
+ * These are positions on a scale, not amounts. You cannot meaningfully add or
+ * average a postcode, and the average of a set of opening dates answers no
+ * business question. The codebase already knew this for anomaly detection and
+ * nowhere else, so metric selection happily charted them. One rule now serves
+ * both, which is why isOutlierMeaninglessColumn is kept as the name the
+ * anomaly path already uses.
+ */
+export function isNonQuantityColumn(dataset: Dataset, col: string): boolean {
+  // Mostly Date objects: a date column, whatever it is called.
+  if (isDateColumn(dataset.rows, col)) return true;
+  return isOutlierMeaninglessColumn(dataset, col);
+}
+
 export function isOutlierMeaninglessColumn(dataset: Dataset, col: string): boolean {
   if (tokenize(col).some((t) => OUTLIER_SKIP_TOKENS.has(t))) return true;
   let seen = 0;
@@ -502,7 +565,7 @@ export function computeDerivedFigures(dataset: Dataset): DerivedFigure[] {
   for (const cat of cats) {
     for (const m of sumMetrics.slice(0, 2)) {
       if (!(m.total > 0)) continue;
-      const groups = aggregateBy(dataset, cat, m.col);
+      const { points: groups } = aggregateBy(dataset, cat, m.col);
       if (groups.some((g) => g.value < 0)) continue;
       const set = `Share of total ${m.col} by ${cat}`;
       for (const g of groups) {
@@ -812,34 +875,78 @@ export function smartAgg(colName: string, values?: number[]): "mean" | "sum" {
   return "mean";
 }
 
+export interface AggregatedPoint {
+  key: string;
+  value: number;
+  /** Rows in this group that carried a usable number. */
+  used: number;
+  /** Rows in this group altogether. */
+  total: number;
+}
+
+export interface AggregateResult {
+  agg: "mean" | "sum";
+  points: AggregatedPoint[];
+  /** Rows across every group that contributed to a value. */
+  used: number;
+  /** Rows across every group, whether they contributed or not. */
+  total: number;
+}
+
+/**
+ * BUG FIX (2026-10): this returned only {key, value} and silently dropped
+ * every row whose value was not a number. A mean over 104 of 668 rows was
+ * indistinguishable from a mean over all 668, on the chart, in the tooltip
+ * and in the summary handed to the model.
+ *
+ * It now counts what it skipped and reports it, so a thin figure can be shown
+ * as thin instead of being presented as the whole group. The aggregation it
+ * chose is returned too: it was already decided here and then thrown away,
+ * which is why chart titles could not say whether they showed a total or an
+ * average.
+ */
 export function aggregateBy(
   dataset: Dataset,
   groupCol: string,
   valueCol: string
-): { key: string; value: number }[] {
-  const groups = new Map<string, number[]>();
+): AggregateResult {
+  const groups = new Map<string, { values: number[]; total: number }>();
   // Collected in the pass we already make, so passing the value shape to
   // smartAgg costs nothing extra.
   const allValues: number[] = [];
+  let total = 0;
 
   for (const row of dataset.rows) {
     const raw = row[groupCol];
     const key = raw instanceof Date ? formatDateSafe(raw) : String(raw ?? "—");
+    let bucket = groups.get(key);
+    if (!bucket) {
+      bucket = { values: [], total: 0 };
+      groups.set(key, bucket);
+    }
+    // Counted whether or not the value is usable: that is the whole point.
+    bucket.total++;
+    total++;
+
     const v = row[valueCol];
     if (typeof v !== "number") continue;
     allValues.push(v);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(v);
+    bucket.values.push(v);
   }
 
   const agg = smartAgg(valueCol, allValues);
 
-  return Array.from(groups.entries())
-    .map(([key, values]) => ({
+  const points = Array.from(groups.entries())
+    .filter(([, b]) => b.values.length > 0)
+    .map(([key, b]) => ({
       key,
-      value: agg === "mean" ? mean(values) : values.reduce((a, b) => a + b, 0),
+      value: agg === "mean" ? mean(b.values) : b.values.reduce((a, c) => a + c, 0),
+      used: b.values.length,
+      total: b.total,
     }))
     .sort((a, b) => b.value - a.value);
+
+  return { agg, points, used: allValues.length, total };
 }
 
 export interface ChartSpec {
@@ -853,7 +960,11 @@ export interface ChartSpec {
    * instead of e.g. "Years Experience : 12.95".
    */
   metricLabel: string;
-  data: { key: string; value: number }[];
+  /** Which operation produced these values. Shown in the title and tooltip. */
+  agg: "mean" | "sum";
+  /** Rows that contributed across the whole chart, and rows considered. */
+  coverage: { used: number; total: number };
+  data: AggregatedPoint[];
 }
 
 /**
@@ -884,30 +995,43 @@ export function humanizeColumnName(name: string): string {
  * column can have tens of thousands of distinct raw values — far too many
  * to chart directly, but perfectly readable once bucketed to month).
  */
-export function bucketByMonth(dataset: Dataset, dateCol: string, valueCol: string): { key: string; value: number }[] {
-  const groups = new Map<string, number[]>();
+export function bucketByMonth(
+  dataset: Dataset,
+  dateCol: string,
+  valueCol: string
+): AggregatedPoint[] {
+  const groups = new Map<string, { values: number[]; total: number }>();
   const sortKeys = new Map<string, number>();
   const allValues: number[] = [];
 
   for (const row of dataset.rows) {
     const d = row[dateCol];
-    const v = row[valueCol];
-    if (!(d instanceof Date) || typeof v !== "number") continue;
-    allValues.push(v);
+    if (!(d instanceof Date)) continue;
     const key = monthBucketKey(d);
-    if (!groups.has(key)) {
-      groups.set(key, []);
+    let bucket = groups.get(key);
+    if (!bucket) {
+      bucket = { values: [], total: 0 };
+      groups.set(key, bucket);
       sortKeys.set(key, monthBucketSortKey(d));
     }
-    groups.get(key)!.push(v);
+    // Counted even when the value is unusable, so the month's coverage is real.
+    bucket.total++;
+
+    const v = row[valueCol];
+    if (typeof v !== "number") continue;
+    allValues.push(v);
+    bucket.values.push(v);
   }
 
   const agg = smartAgg(valueCol, allValues);
 
   return Array.from(groups.entries())
-    .map(([key, values]) => ({
+    .filter(([, b]) => b.values.length > 0)
+    .map(([key, b]) => ({
       key,
-      value: agg === "mean" ? mean(values) : values.reduce((a, b) => a + b, 0),
+      value: agg === "mean" ? mean(b.values) : b.values.reduce((a, c) => a + c, 0),
+      used: b.values.length,
+      total: b.total,
     }))
     .sort((a, b) => sortKeys.get(a.key)! - sortKeys.get(b.key)!);
 }
@@ -942,6 +1066,11 @@ function findDateColumn(dataset: Dataset): string | null {
  * each when two relevant metrics are available so the two charts are
  * complementary rather than redundant.
  */
+/** "Total" or "Average of", for the front of a chart title. */
+export function aggWord(agg: "mean" | "sum"): string {
+  return agg === "sum" ? "Total" : "Average of";
+}
+
 export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts = 2): ChartSpec[] {
   const { category, metrics } = selectChartColumns(dataset, decisionText);
   const specs: ChartSpec[] = [];
@@ -949,12 +1078,18 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
 
   const dateCol = findDateColumn(dataset);
   if (dateCol && primaryMetric) {
-    const data = bucketByMonth(dataset, dateCol, primaryMetric);
-    if (data.length >= 2) {
+    const bucketed = bucketByMonth(dataset, dateCol, primaryMetric);
+    if (bucketed.length >= 2) {
+      const how = smartAgg(primaryMetric, bucketed.map((d) => d.value));
+      const data = bucketed;
+      const used = data.reduce((n, d) => n + d.used, 0);
+      const total = data.reduce((n, d) => n + d.total, 0);
       specs.push({
         type: "area",
-        title: `${humanizeColumnName(primaryMetric)} over time (by ${humanizeColumnName(dateCol)})`,
+        title: `${aggWord(how)} ${humanizeColumnName(primaryMetric)} over time, by ${humanizeColumnName(dateCol)}`,
         metricLabel: humanizeColumnName(primaryMetric),
+        agg: how,
+        coverage: { used, total },
         data,
       });
     }
@@ -962,18 +1097,29 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
 
   if (category && primaryMetric && specs.length < maxCharts) {
     const metric = specs.length > 0 && metrics[1] ? metrics[1] : primaryMetric;
-    const data = aggregateBy(dataset, category, metric);
+    const { agg: how, points: data, used, total } = aggregateBy(dataset, category, metric);
     const cardinality = data.length;
     const hasNegative = data.some((d) => d.value < 0);
 
+    /**
+     * BUG FIX (2026-10): shape was chosen from cardinality alone, so an
+     * average could land in a pie. A pie says its slices are parts of one
+     * whole; averages are not parts of anything, and the coaster chart's six
+     * slices summed to 11,837.79, a number that means nothing. Pie and
+     * treemap are now reachable only when the values are totals.
+     */
     let type: ChartSpec["type"] = "bar";
-    if (cardinality >= 2 && cardinality <= 6 && !hasNegative) type = "pie";
-    else if (cardinality > 12 && !hasNegative) type = "treemap";
+    if (how === "sum" && !hasNegative) {
+      if (cardinality >= 2 && cardinality <= 6) type = "pie";
+      else if (cardinality > 12) type = "treemap";
+    }
 
     specs.push({
       type,
-      title: `${humanizeColumnName(metric)} by ${humanizeColumnName(category)}`,
+      title: `${aggWord(how)} ${humanizeColumnName(metric)} by ${humanizeColumnName(category)}`,
       metricLabel: humanizeColumnName(metric),
+      agg: how,
+      coverage: { used, total },
       data,
     });
   }
@@ -1215,9 +1361,12 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     if (breakdownCount >= 4) break;
     const breakdownLines: string[] = [];
     for (const nc of breakdownMetrics) {
-      const agg = aggregateBy(filtered, cat, nc);
+      const { agg: how, points } = aggregateBy(filtered, cat, nc);
+      // The model is told which operation produced these, so it cannot
+      // describe an average as a total in the report text.
       breakdownLines.push(
-        `  ${nc} by ${cat}: ` + agg.map((a) => `${a.key}=${a.value.toFixed(2)}`).join(", ")
+        `  ${how === "sum" ? "TOTAL" : "AVERAGE"} ${nc} by ${cat}: ` +
+          points.map((a) => `${a.key}=${a.value.toFixed(2)}`).join(", ")
       );
     }
     if (breakdownLines.length > 0) {
@@ -1231,11 +1380,13 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // Top/bottom breakdown for high-cardinality columns (e.g. State) — surfaces loss-makers
   if (primaryMetric) {
     for (const cat of highCardCats.slice(0, 2)) {
-      const agg = aggregateBy(filtered, cat, primaryMetric);
-      if (agg.length < 3) continue;
-      const top5    = agg.slice(0, 5);
-      const bottom5 = agg.slice(-5).reverse();
-      lines.push(`TOP/BOTTOM BY ${cat.toUpperCase()} (${primaryMetric})`);
+      const { agg: how, points } = aggregateBy(filtered, cat, primaryMetric);
+      if (points.length < 3) continue;
+      const top5    = points.slice(0, 5);
+      const bottom5 = points.slice(-5).reverse();
+      lines.push(
+        `TOP/BOTTOM BY ${cat.toUpperCase()} (${how === "sum" ? "TOTAL" : "AVERAGE"} ${primaryMetric})`
+      );
       lines.push(`  Top 5:    ` + top5.map(a => `${a.key}=${a.value.toFixed(2)}`).join(", "));
       lines.push(`  Bottom 5: ` + bottom5.map(a => `${a.key}=${a.value.toFixed(2)}`).join(", "));
       lines.push("");

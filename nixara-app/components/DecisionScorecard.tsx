@@ -6,11 +6,15 @@ import type { ScorecardStats } from "@/lib/scorecard";
 export default function DecisionScorecard({ stats }: { stats: ScorecardStats }) {
   if (stats.totalDecisions === 0) return null;
 
+  // These are counts of decisions, so every row is accounted for: used and
+  // total are the same, and the tooltip says "all N" rather than warning.
   const ratingData = [
     { key: "Exceeded", value: stats.byRating.exceeded },
     { key: "Met", value: stats.byRating.met },
     { key: "Fell Short", value: stats.byRating.missed },
-  ].filter((d) => d.value > 0);
+  ]
+    .filter((d) => d.value > 0)
+    .map((d) => ({ ...d, used: d.value, total: d.value }));
 
   return (
     <div className="mb-8">
@@ -29,7 +33,7 @@ export default function DecisionScorecard({ stats }: { stats: ScorecardStats }) 
 
       {ratingData.length > 0 && (
         <div className="max-w-md">
-          <PiePanel title="Outcome ratings" data={ratingData} />
+          <PiePanel title="Total Outcomes by Rating" agg="sum" data={ratingData} />
         </div>
       )}
     </div>

@@ -37,7 +37,17 @@ export default function Header() {
           <span className="inline-block w-[2px] h-[0.8em] bg-accent ml-1 animate-pulse align-middle" />
         </p>
       </a>
-      <p className="text-sm text-text-dim uppercase tracking-[0.08em] font-medium mt-1 mb-2">
+      {/*
+        States what kind of tool this is before the reader meets their first
+        recommendation. Same size as body copy, weight does the work.
+      */}
+      <p className="text-base font-bold text-text mt-3.5 mb-0 leading-snug">
+        A recommendation tool. Nixara suggests the decision; you make it.
+      </p>
+      <p className="text-sm italic text-text-mute mt-2.5 mb-0 leading-snug">
+        Every figure is worth checking before you act on it.
+      </p>
+      <p className="text-sm text-text-dim uppercase tracking-[0.08em] font-medium mt-5 mb-2">
         nik·sa·ra /nɪkˈsɑːrə/ ·{" "}
         <em className="italic normal-case tracking-normal text-[0.95em]">
           from <strong className="text-accent">nix</strong> (clarity, light) +{" "}

@@ -33,3 +33,6 @@ utils/
 
 # Scratch output from AI sessions - never part of the app
 Claude outputs/
+
+# build tarballs used for out-of-sandbox verification
+*.tgz

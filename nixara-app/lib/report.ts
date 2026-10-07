@@ -11,6 +11,14 @@ export const REPORT_TYPES: ReportType[] = [
   "Risk Report",
 ];
 
+/** One figure the server's correction pass resolved, and how it resolved it. */
+export interface CorrectedFigure {
+  figure: string;
+  section: string | null;
+  outcome: "corrected" | "dropped";
+  context: string | null;
+}
+
 /** One generated report, plus whether the model was cut off producing it. */
 export interface GeneratedReport {
   text: string;
@@ -18,7 +26,7 @@ export interface GeneratedReport {
   /** True if a fabricated figure was caught and an automatic correction pass replaced this text before it was ever shown. */
   corrected: boolean;
   /** The first-draft figures that could not be matched to the data and were replaced (at most 8). Empty when nothing was replaced. */
-  correctedFigures?: string[];
+  correctedFigures?: CorrectedFigure[];
 }
 
 /**
