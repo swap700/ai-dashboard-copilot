@@ -89,5 +89,87 @@ console.log("\nlistUnverifiedFigures - names the figure and where it is");
   check("firstFigure returns null when there is no figure", firstFigure("No numbers here") === null && firstFigure(null) === null);
 }
 
+// ── Mitigation Actions: markdown-emphasis-wrapped role names ────────────────
+// BUG: the model has been seen wrapping the role name in markdown emphasis
+// ("_Finance Team_: Assess...") despite nothing asking it to. That starts
+// with "_", not an uppercase letter, so the role regex missed it entirely
+// and the raw underscores rendered straight to the reader. Confirmed against
+// a real generated report where all three Mitigation Actions lines were
+// wrapped this way.
+console.log("\nMitigation Actions - a markdown-emphasis-wrapped role name still gets its pill, with the markers stripped");
+{
+  const reportText = `### Mitigation Actions
+_Finance Team_: Assess and diversify contract terms with smaller insurance providers — Start within 2 weeks.
+**Accounting Team**: Investigate negative Billing Amount transactions for resolution — Start within 1 week.
+`;
+  const sections = buildVisualSections(reportText, "Risk Report");
+  const mitigation = sections.find((s) => s.kind === "mitigation");
+  check("a Mitigation Actions section was found", !!mitigation);
+  if (mitigation && mitigation.kind === "mitigation") {
+    check("an underscore-wrapped role loses the underscores and still gets its pill",
+      mitigation.items[0]?.role === "Finance Team", JSON.stringify(mitigation.items[0]));
+    check("the action text carries no leftover underscores",
+      !!mitigation.items[0] && !mitigation.items[0].action.includes("_"), JSON.stringify(mitigation.items[0]));
+    check("an asterisk-wrapped (bold) role is handled the same way",
+      mitigation.items[1]?.role === "Accounting Team", JSON.stringify(mitigation.items[1]));
+  }
+}
+
+// ── Process Recommendations: stray bracket colon + trailing "Responsible
+// Role:" echo ────────────────────────────────────────────────────────────
+// BUG: the prompt only said "State the role responsible" with no worked
+// example (unlike Mitigation Actions), so the model has been seen doing two
+// different things with it in the same real report: writing "[This week]: "
+// (treating the bracket itself as the label, leaving a bare leading ": "
+// once the bracket is stripped), and echoing "Responsible Role: X." onto the
+// END of the sentence instead of leading with "X: ". Both left Nixara's own
+// scaffolding in the text the reader saw, with no role pill either.
+console.log("\nProcess Recommendations - a stray bracket colon and a trailing 'Responsible Role:' echo both resolve to a clean role pill");
+{
+  const reportText = `### Process Recommendations
+1. [This week] : Dispatch an audit on billing practices for Diabetes cases to identify cost-saving opportunities. Responsible Role: Billing Manager.
+2. [This quarter] Operations Director: Develop and implement a streamlined billing review process.
+`;
+  const sections = buildVisualSections(reportText, "Operational Detail");
+  const processRec = sections.find((s) => s.kind === "processRec");
+  check("a Process Recommendations section was found", !!processRec);
+  if (processRec && processRec.kind === "processRec") {
+    const first = processRec.items[0];
+    check("a trailing 'Responsible Role:' echo is recovered into the role field",
+      first?.role === "Billing Manager", JSON.stringify(first));
+    check("the stray leading colon from '[This week]: ' is gone from the body",
+      !!first && !first.body.startsWith(":"), JSON.stringify(first));
+    check("the body still ends as a clean sentence",
+      first?.body === "Dispatch an audit on billing practices for Diabetes cases to identify cost-saving opportunities.",
+      JSON.stringify(first));
+    check("a normally-formatted leading role (the already-correct case) is unaffected",
+      processRec.items[1]?.role === "Operations Director", JSON.stringify(processRec.items[1]));
+  }
+}
+
+// ── Efficiency Gaps: a mid-sentence "Inferred:" still gets its badge ────────
+// BUG: the prompt only said to "prefix" an inference with "Inferred:", not
+// to put it on its own line, so a direct finding and an inference have been
+// seen landing in the same run-on sentence. The badge detection only ever
+// matched "Inferred:" at the very start of a line, so the literal word
+// rendered as plain prose instead of a badge. Confirmed against a real
+// report.
+console.log("\nEfficiency Gaps - a mid-sentence 'Inferred:' is split into its own badged line");
+{
+  const reportText = `### Efficiency Gaps
+Efficiency gaps appear in medical conditions where the Billing Amount for Obesity and Diabetes is relatively high. Inferred: reviewing billing efficiencies in these categories could uncover potential cost-saving opportunities.
+`;
+  const sections = buildVisualSections(reportText, "Operational Detail");
+  const gaps = sections.find((s) => s.kind === "efficiencyGaps");
+  check("an Efficiency Gaps section was found", !!gaps);
+  if (gaps && gaps.kind === "efficiencyGaps") {
+    check("the run-on sentence became two separate lines", gaps.lines.length === 2, JSON.stringify(gaps.lines));
+    check("the direct finding is not marked inferred",
+      gaps.lines[0]?.inferred === false && !gaps.lines[0].text.includes("Inferred"), JSON.stringify(gaps.lines[0]));
+    check("the inferred half is marked inferred, with the label stripped from the text",
+      gaps.lines[1]?.inferred === true && !gaps.lines[1].text.includes("Inferred"), JSON.stringify(gaps.lines[1]));
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

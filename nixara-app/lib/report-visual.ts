@@ -131,6 +131,27 @@ function extractLeadingRole(text: string): { role: string | null; rest: string }
   return { role: null, rest: text.trim() };
 }
 
+/**
+ * Strips a markdown emphasis wrapper (*word*, _word_, **word**, __word__)
+ * around a short leading label, for when the model decorates a role/
+ * category name despite nothing asking it to.
+ *
+ * BUG FIX (2026-10): seen wrapping the role in Mitigation Actions in plain
+ * underscores -- "_Finance Team_: Assess and diversify..." -- which starts
+ * with "_", not an uppercase letter, so extractLeadingRole's and Mitigation
+ * Actions' own role regex both missed it outright and the raw underscores
+ * were rendered to the reader. Only matches when the SAME marker opens and
+ * closes immediately before a colon, so a genuine mid-sentence underscore
+ * or asterisk is never touched, and it leaves the dedicated whole-line
+ * "_Strategic Risk_"/"_Operational Risk_" tag convention alone -- that is
+ * matched as its own "tag" line kind in parseReportLines (lib/report.ts)
+ * before any text reaches this module.
+ */
+function stripEmphasisMarkers(text: string): string {
+  const m = /^(\*{1,2}|_{1,2})([^*_]+?)\1(?=:)/.exec(text);
+  return m ? text.replace(m[0], m[2]) : text;
+}
+
 function extractFirstStat(text: string): string | null {
   const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%/.exec(text);
   return m ? m[0] : null;
@@ -290,11 +311,29 @@ function parseSection(
       return {
         kind: "efficiencyGaps",
         heading,
+        // BUG FIX (2026-10): the prompt now asks for an inference on its own
+        // line (see report.ts), but a model that still folds a direct
+        // finding and an inference into one run-on sentence -- "Efficiency
+        // gaps appear in... Inferred: reviewing billing..." -- used to leak
+        // the literal word "Inferred:" into the reader's prose, because the
+        // badge detection below only ever matched it at the very start of a
+        // line. flatMap so one input line can become the direct-finding
+        // line plus a separately badged inferred line when that happens,
+        // instead of silently failing to badge it at all.
         lines: lines
           .filter((l): l is Extract<ReportLine, { kind: "text" }> => l.kind === "text")
-          .map((l) => {
-            const inferred = /^Inferred:\s*/i.test(l.text);
-            return { text: l.text.replace(/^Inferred:\s*/i, ""), inferred };
+          .flatMap((l) => {
+            if (/^Inferred:\s*/i.test(l.text)) {
+              return [{ text: l.text.replace(/^Inferred:\s*/i, ""), inferred: true }];
+            }
+            const mid = /^(.*?[.!?])\s+Inferred:\s*(.+)$/i.exec(l.text);
+            if (mid) {
+              return [
+                { text: mid[1].trim(), inferred: false },
+                { text: mid[2].trim(), inferred: true },
+              ];
+            }
+            return [{ text: l.text, inferred: false }];
           }),
       };
 
@@ -308,8 +347,35 @@ function parseSection(
             const body = stripNumberPrefix(l.text);
             const bracketMatch = /^\[([^\]]+)\]\s*(.*)$/.exec(body);
             const timeframe = bracketMatch ? bracketMatch[1].trim() : null;
-            const rest = bracketMatch ? bracketMatch[2] : body;
-            const { role, rest: cleanBody } = extractLeadingRole(rest);
+            // BUG FIX (2026-10): the prompt's own template for this section --
+            // "1. [This week] — one action... State the role responsible." --
+            // only describes WHAT to include, unlike Mitigation Actions' now-
+            // explicit worked example (see report.ts), so the model has been
+            // seen doing two different things with it: treating the bracket
+            // itself as a label by writing "[This week]: ...", which once the
+            // bracket above is stripped leaves a bare leading ": " with
+            // nothing in front of it; and echoing "State the role
+            // responsible" back as a literal trailing "Responsible Role: X."
+            // label instead of a leading "X: ". Both rendered straight to the
+            // reader -- a stray leading colon, and the role never reaching
+            // the role pill at all. Handled the same way Mitigation Actions
+            // already handles its own "Role responsible:" echo: strip the
+            // stray colon, recover a trailing "Responsible Role:" into the
+            // real role field, and strip emphasis markers before the normal
+            // leading-role extraction runs.
+            const rest = (bracketMatch ? bracketMatch[2] : body).replace(/^:\s*/, "").trim();
+            const trailingRoleMatch = /\.?\s*Responsible Role:\s*([A-Za-z/&\- ]{2,40})\.?\s*$/i.exec(rest);
+            let role: string | null;
+            let cleanBody: string;
+            if (trailingRoleMatch) {
+              role = trailingRoleMatch[1].trim();
+              cleanBody = rest.slice(0, trailingRoleMatch.index).trim();
+              if (cleanBody && !/[.!?]$/.test(cleanBody)) cleanBody += ".";
+            } else {
+              const leading = extractLeadingRole(stripEmphasisMarkers(rest));
+              role = leading.role;
+              cleanBody = leading.rest;
+            }
             return { timeframe, role, body: cleanBody };
           }),
       };
@@ -402,7 +468,7 @@ function parseSection(
             // defensively here as well so a future model wording drift
             // degrades to "role stripped, action shown" rather than "role
             // pill silently missing" again.
-            const cleaned = body.replace(/^role responsible:\s*/i, "");
+            const cleaned = stripEmphasisMarkers(body).replace(/^role responsible:\s*/i, "");
             const m = /^([A-Z][A-Za-z/&\- ]{2,40}):\s*(.+?)\s*[-–—]\s*(?:Start|Begin) within\s*(.+?)\.?\s*$/i.exec(cleaned);
             if (m) return { role: m[1].trim(), action: m[2].trim(), timeframe: m[3].trim() };
             return { role: null, action: body, timeframe: null };

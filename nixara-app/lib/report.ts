@@ -65,16 +65,16 @@ Performance Breakdown
 (By the main dimensions in the data — categories, regions, segments, product lines. Reference specific numbers for every claim.)
 
 Efficiency Gaps
-(Where effort or cost is not matching return.
-CRITICAL RULE: Only make claims that are DIRECTLY SUPPORTED by the data provided. If a recommendation is a logical inference rather than a direct finding, you MUST prefix it with "Inferred:" so the reader knows the evidence basis.
+(Where effort or cost is not matching return. Write in normal sentence case throughout - no words in all capital letters.
+Only make claims that are directly supported by the data provided. If a recommendation is a logical inference rather than a direct finding, put it on its own line, starting with "Inferred:" (so the reader knows the evidence basis) - never fold it into the same sentence as a direct finding.
 Do not present inferences as facts.)
 
 Process Recommendations
 (EXACTLY 3 numbered recommendations — no more, no fewer. Forced priority ranking:
-1. [This week] — one action completable in 7 days. State the role responsible.
-2. [This week] — one action completable in 7 days. State the role responsible.
-3. [This quarter] — one strategic change for the quarter. State the role responsible.
-Label each item with its timeframe in brackets.)
+1. [This week] <Role or team name>: <action completable in 7 days>.
+2. [This week] <Role or team name>: <a second action completable in 7 days>.
+3. [This quarter] <Role or team name>: <one strategic change for the quarter>.
+Format exactly like this worked example, with no other punctuation between the bracket and the role: "1. [This week] Billing Manager: Audit disputed claims from the last 30 days." Replace <Role or team name> with the actual responsible role or team, written in plain text with no markdown emphasis (no asterisks or underscores around it) — never write the literal words "the role responsible" or "Responsible Role" anywhere in the line, before or after the action.)
 
 Quick Wins
 (EXACTLY 2 items doable in the next 2 weeks with zero new budget. Each must cite a specific number from the data as the justification. The cited number must be a direct business metric — revenue, profit, margin %, discount %, units, or a customer/order count. NEVER cite a correlation coefficient, statistical test value, or any other analytical/data-science output as if it were an actionable business figure.)
