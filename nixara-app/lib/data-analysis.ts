@@ -1049,6 +1049,75 @@ export function pairwiseCorrelation(
   return { r: num / denom, n };
 }
 
+/**
+ * Dollar-amount-shaped column names: profit/revenue/sales/income/earnings.
+ * A column must ALSO be sum-typed (aggTypeOf === "sum") to count as a real
+ * amount column -- see rankedBusinessMetrics() below for why ("Profit
+ * Margin" tokenizes to include "profit" but is mean-typed, a ratio).
+ */
+const AMOUNT_TOKENS = new Set(
+  ["profit", "revenue", "sales", "income", "earnings"].map(singularize)
+);
+
+/**
+ * The business-metric columns of a dataset (see businessMetricColumns),
+ * ranked so dollar-amount columns (profit/revenue/income/...) come first,
+ * then other additive (sum-type) columns, then everything else (mean-type).
+ *
+ * This is the SINGLE ranking both buildDataSummary() below (which metrics
+ * the model sees first, and in what order, in BREAKDOWN/CROSS-BREAKDOWN/
+ * TOP-BOTTOM sections) and buildEvidenceFacts() in lib/evidence.ts (which
+ * metrics it builds category-crossed verification facts for) use.
+ *
+ * BUG FIX (2026-10): those two call sites used to rank independently --
+ * buildDataSummary put profit-like columns first, but buildEvidenceFacts
+ * just took businessMetricColumns() in raw left-to-right column order and
+ * capped at 4. On a dataset where the metric that actually matters (e.g. a
+ * cost or revenue column) isn't one of the first few columns as authored,
+ * buildDataSummary would still rank it to the front and put it in front of
+ * the model; the model would then correctly cite a real breakdown figure for
+ * it; and the evidence checker, which never computed a breakdown fact for
+ * that column at all, would brand the real figure "unverified" or silently
+ * rewrite it out of the report during the correction retry. Confirmed
+ * against a real medical-insurance dataset: annual_medical_cost_usd is the
+ * LAST of 9 numeric columns but the #2-ranked metric, and every region/
+ * gender/smoker breakdown of it was flagged this way -- independently
+ * recomputed from the raw data and confirmed correct to the cent in every
+ * case. Sharing this one ranking closes the gap structurally instead of
+ * relying on two hand-written lists staying in sync.
+ *
+ * aggType is computed value-aware (smartAgg(col, values), matching the
+ * per-call pattern buildDataSummary already used) rather than name-only, so
+ * a column that reads as an amount by name but holds proportions in [0, 1]
+ * still gets the value-shape veto.
+ */
+export function rankedBusinessMetrics(
+  dataset: Dataset
+): { primaryMetric: string | null; profitCols: string[]; ranked: string[] } {
+  const businessMetrics = businessMetricColumns(dataset);
+  const aggTypes = new Map<string, "mean" | "sum">();
+  for (const col of businessMetrics) {
+    const values = dataset.rows.map((r) => r[col]).filter((v): v is number => typeof v === "number");
+    aggTypes.set(col, smartAgg(col, values));
+  }
+  const aggTypeOf = (col: string): "mean" | "sum" => aggTypes.get(col) ?? "mean";
+
+  const profitCols = businessMetrics.filter(
+    (col) => tokenize(col).some((t) => AMOUNT_TOKENS.has(t)) && aggTypeOf(col) === "sum"
+  );
+  const primaryMetric =
+    profitCols[0] ??
+    businessMetrics.find((c) => aggTypeOf(c) === "sum") ??
+    businessMetrics[0] ??
+    null;
+  const ranked = [
+    ...profitCols,
+    ...businessMetrics.filter((c) => !profitCols.includes(c) && aggTypeOf(c) === "sum"),
+    ...businessMetrics.filter((c) => !profitCols.includes(c) && aggTypeOf(c) !== "sum"),
+  ];
+  return { primaryMetric, profitCols, ranked };
+}
+
 export interface DataSummaryOptions {
   filterCol?: string;
   filterVal?: string;
@@ -1090,51 +1159,14 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   }
   const aggTypeOf = (col: string) => aggTypes.get(col) ?? smartAgg(col);
 
-  // Identify the dollar-amount columns - the ones a total is meaningful for.
-  //
-  // BUG FIX (2026-09): this was a substring match, and it included "margin".
-  // A "Profit Margin" column therefore matched, was promoted to profitCols,
-  // and could be chosen as primaryMetric - the figure labelled to the model as
-  // the primary dollar metric in TOP/BOTTOM and CROSS-BREAKDOWN. A margin is a
-  // ratio, not an amount. Now token-matched, and margin is excluded (it is a
-  // MEAN keyword, so smartAgg already averages it; this makes the two agree).
-  const AMOUNT_TOKENS = new Set(
-    ["profit", "revenue", "sales", "income", "earnings"].map(singularize)
-  );
-  // BUG FIX (2026-09): token matching alone still let "Profit Margin" through
-  // -- it tokenizes to ["profit", "margin"], and "profit" is an AMOUNT_TOKEN,
-  // so `.some()` matched on that one token even though the column as a whole
-  // is a ratio, not a dollar amount. The comment above this block described
-  // margin exclusion as already fixed, but nothing enforced it. Now gated on
-  // the column's own aggregation type: a genuine dollar amount is always
-  // sum-typed (that is what profitCols exists to find), and requiring
-  // aggTypeOf(col) === "sum" excludes "Profit Margin" (mean-typed, because
-  // "margin" is a MEAN_KEYWORD checked before SUM_KEYWORDS in smartAgg)
-  // without needing a second keyword list kept in sync with the first.
-  //
-  // Also now sourced from businessMetricColumns(), not raw numericCols --
-  // an ID/count/distinct column (see NON_METRIC_PATTERNS) can never become
-  // the primary dollar metric even if its name happens to contain an
-  // amount-like token, and can never appear in a BREAKDOWN/CROSS-BREAKDOWN/
-  // TOP-BOTTOM section as if it were an additive business figure. Confirmed
-  // against superstore_data.csv: without this, "Profit Margin" became
-  // primaryMetric ahead of "Profit" itself, and "Distinct count of Customer
-  // ID" -- a per-slice count that is not valid to sum across slices -- was
-  // aggregated exactly like a dollar total and handed to the model as one,
-  // which is how a category's real distinct-customer count (999) ended up
-  // reported as a dollar figure ($3,220.00 for another category).
+  // Dollar-amount columns and the metric ranking -- see rankedBusinessMetrics()
+  // above, which both this function and buildEvidenceFacts() (lib/evidence.ts)
+  // now share, so the model is never shown a breakdown for a metric the
+  // evidence checker didn't also rank in front and build facts for.
+  const { primaryMetric: rankedPrimary, ranked: rankedMetrics } = rankedBusinessMetrics(filtered);
   const businessMetrics = businessMetricColumns(filtered);
   const businessMetricSet = new Set(businessMetrics);
-  const profitCols = businessMetrics.filter(
-    (col) => tokenize(col).some((t) => AMOUNT_TOKENS.has(t)) && aggTypeOf(col) === "sum"
-  );
-
-  // Primary dollar metric: first amount-like col, or first sum-type business metric
-  const primaryMetric =
-    profitCols[0] ??
-    businessMetrics.find((c) => aggTypeOf(c) === "sum") ??
-    businessMetrics[0] ??
-    numericCols[0];
+  const primaryMetric = rankedPrimary ?? numericCols[0];
 
   if (numericCols.length > 0) {
     lines.push("NUMERIC SUMMARY");
@@ -1164,11 +1196,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   }
 
   // Prioritise amount columns in breakdowns so the model always sees dollar totals
-  const breakdownMetrics = [
-    ...profitCols,
-    ...businessMetrics.filter(c => !profitCols.includes(c) && aggTypeOf(c) === "sum"),
-    ...businessMetrics.filter(c => !profitCols.includes(c) && aggTypeOf(c) !== "sum"),
-  ].slice(0, 4);
+  const breakdownMetrics = rankedMetrics.slice(0, 4);
 
   // Find the most useful categorical columns: prefer low-cardinality (2–20 unique values)
   // Skip ID/date/name columns, scan ALL catCols (not just first 3)

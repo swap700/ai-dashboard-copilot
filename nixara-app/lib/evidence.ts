@@ -27,11 +27,11 @@
 
 import {
   aggregateBy,
-  businessMetricColumns,
   categoricalColumns,
   computeDerivedFigures,
   looksLikeProportion,
   numericStats,
+  rankedBusinessMetrics,
   smartAgg,
   type Dataset,
 } from "./data-analysis";
@@ -82,7 +82,16 @@ function pushColumnStatFacts(facts: EvidenceFact[], col: string, values: number[
  */
 export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
   const facts: EvidenceFact[] = [];
-  const metricCols = businessMetricColumns(dataset).slice(0, 12);
+  // Same ranking buildDataSummary() uses to decide which metrics the model
+  // sees first in BREAKDOWN/CROSS-BREAKDOWN sections (see rankedBusinessMetrics
+  // in data-analysis.ts) -- not independently re-derived here, so this can never
+  // build facts for a different "top metrics" set than the one actually shown
+  // to the model. BUG FIX (2026-10): it used to be businessMetricColumns(dataset)
+  // in raw left-to-right column order, which silently excluded whichever metric
+  // the model was actually told mattered most whenever that metric wasn't one of
+  // the first few columns as authored -- see rankedBusinessMetrics's own comment
+  // for the real dataset this was confirmed against.
+  const metricCols = rankedBusinessMetrics(dataset).ranked.slice(0, 12);
   const catCols = categoricalColumns(dataset);
 
   const colValues = new Map<string, number[]>();

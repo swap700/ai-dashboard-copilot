@@ -475,6 +475,49 @@ console.log("\nDerived figures - margins and shares are computed, listed, and ve
     JSON.stringify(findUnverifiedFigures(bad, facts)) === JSON.stringify(["77.77%"]), JSON.stringify(findUnverifiedFigures(bad, facts)));
 }
 
+// ── Evidence facts must rank metrics the same way the prompt does ──────────
+// BUG FIX (2026-10): buildDataSummary() ranks business metrics (amount
+// columns first) to decide what BREAKDOWN/CROSS-BREAKDOWN sections show the
+// model; buildEvidenceFacts() used to independently pick its own "top 4" by
+// raw column order instead of using that ranking. So an amount column
+// sitting late in the file -- buried behind several mean-type columns, the
+// way "annual_medical_cost_usd" was the LAST of 9 numeric columns in a real
+// medical-insurance dataset, yet the #2-ranked metric -- got correctly
+// prioritised into what the model saw, but never got a single category-
+// breakdown fact built for it on the verification side. A correct, cited
+// figure for that column was then always flagged "unverified." This is a
+// generic architecture fix (see rankedBusinessMetrics in data-analysis.ts),
+// not specific to that dataset -- this regression proves it with a
+// synthetic dataset shaped the same way, independent of any real CSV.
+console.log("\nbuildEvidenceFacts ranks metrics the same way buildDataSummary does, even when the amount column is last in the file");
+{
+  const regions = ["North", "South"];
+  const rows: Row[] = Array.from({ length: 40 }, (_, i) => ({
+    Region: regions[i % 2],
+    Age: 20 + (i % 50),
+    Bmi: 18 + (i % 20),
+    Duration: 1 + (i % 10),
+    Rating: 1 + (i % 5),
+    Score: 10 + (i % 90),
+    Revenue: 1000 + i * 37, // the only sum-type, amount-shaped column -- deliberately last
+  }));
+  const ds: Dataset = { rows, columns: ["Region", "Age", "Bmi", "Duration", "Rating", "Score", "Revenue"] };
+
+  const summary = buildDataSummary(ds);
+  const northRevenue = rows.filter((r) => r.Region === "North").reduce((s, r) => s + (r.Revenue as number), 0);
+  check("the prompt's BREAKDOWN section includes Revenue by Region even though Revenue is the last column",
+    summary.includes("Revenue by Region:") && summary.includes(`North=${northRevenue.toFixed(2)}`), summary.slice(0, 2000));
+
+  const facts = buildEvidenceFacts(ds);
+  check("buildEvidenceFacts also builds a Revenue-by-Region fact for the same figure",
+    facts.some((f) => !f.isPercent && Math.abs(f.value - northRevenue) < 0.05 && f.description.includes("Revenue")),
+    JSON.stringify(facts.filter((f) => f.description.includes("Revenue"))));
+
+  const cited = `Region North brought in $${northRevenue.toFixed(2)} in revenue.`;
+  check("a real Revenue-by-Region figure now verifies, not just stats on the whole column",
+    findUnverifiedLines(cited, facts).length === 0, JSON.stringify(findUnverifiedLines(cited, facts)));
+}
+
 // ── Suggested outcome rating ────────────────────────────────────────────────
 console.log("\nSuggested outcome rating - visible rule, never a default");
 {
