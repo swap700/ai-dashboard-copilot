@@ -39,7 +39,7 @@ export default function DashboardPage() {
   // the user pauses typing — see use-debounced-value.ts for the full story.
   const debouncedDecision = useDebouncedValue(setup.decision, 400);
 
-  // BIConnector already calls cleanDataset before calling onLoaded.
+  // BIConnector already calls prepareDataset before calling onLoaded.
   // Clear prior decisions so they don't ghost-persist from a previous dataset.
   //
   // Decision Drift (scoped): before wiping the outgoing session's decisions/

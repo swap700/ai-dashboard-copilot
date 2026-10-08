@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { loadFile, parseCsvText } from "@/lib/file-parser";
-import { cleanDataset } from "@/lib/data-analysis";
+import { prepareDataset } from "@/lib/data-analysis";
 import { useSession } from "@/lib/session-context";
 import type { Dataset } from "@/lib/data-analysis";
 
@@ -58,7 +58,7 @@ function UploadTab({ onLoaded }: Props) {
       setLoading(true);
       try {
         const raw = await loadFile(file);
-        const dataset = cleanDataset(raw);
+        const dataset = prepareDataset(raw);
         const ext = file.name.split(".").pop()?.toLowerCase();
         const source = ext === "csv" ? "csv" : "excel";
         logFileUpload(source, dataset.rows.length, dataset.columns.length);
@@ -136,7 +136,7 @@ function TableauTab({ onLoaded }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Tableau connection failed.");
-      const dataset = cleanDataset(parseCsvText(data.csvText));
+      const dataset = prepareDataset(parseCsvText(data.csvText));
       logFileUpload("tableau", dataset.rows.length, dataset.columns.length);
       onLoaded(dataset, data.source);
     } catch (e) {
@@ -273,7 +273,7 @@ function PowerBITab({ onLoaded }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to fetch table.");
-      const dataset = cleanDataset(parseCsvText(data.csvText));
+      const dataset = prepareDataset(parseCsvText(data.csvText));
       logFileUpload("powerbi", dataset.rows.length, dataset.columns.length);
       onLoaded(dataset, data.source);
     } catch (e) {

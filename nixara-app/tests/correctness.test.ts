@@ -655,10 +655,31 @@ check("and every numeric-looking column is accounted for",
 check("a pure text column is not reported as unmeasured",
   !unmeasured.some((u) => u.column === "Region"));
 
+// Since the role resolver landed (Oct 2026) this column is recognised for
+// what it actually is: 70% of its cells are literal date strings, so it is a
+// DATE column rather than a generically mixed one. That is both more accurate
+// and more useful than the old "70% text, 30% numbers" line, which described
+// the symptom rather than the column.
 const signed = unmeasured.find((u) => u.column === "Signed on");
-check("a per-cell-typed date column is reported as mixed", signed?.reason === "mixed", String(signed?.reason));
+check("a date column typed per cell is recognised as a date, not just as mixed",
+  signed?.reason === "not-a-quantity", String(signed?.reason));
+check("and its detail says so", !!signed?.detail.includes("dates"), signed?.detail ?? "");
+
+// A column mixing text and numbers where the text is NOT dates is still
+// reported as mixed, with the real percentages.
+const trulyMixed: Dataset = {
+  columns: ["Region", "Units"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    Region: ["N", "S"][i % 2],
+    Units: i < 70 ? "awaiting count" : 10 + i,
+  })),
+};
+const mixedCol = describeUnmeasuredColumns(trulyMixed).find((u) => u.column === "Units");
+check("a genuinely mixed column is reported as mixed", mixedCol?.reason === "mixed",
+  `${mixedCol?.reason} / ${mixedCol?.detail}`);
 check("and its detail states the actual mix",
-  !!signed?.detail.includes("70% text") && !!signed?.detail.includes("30% numbers"), signed?.detail ?? "");
+  !!mixedCol?.detail.includes("70% text") && !!mixedCol?.detail.includes("30% numbers"),
+  mixedCol?.detail ?? "");
 
 const value = unmeasured.find((u) => u.column === "Contract Value");
 check("a sparse column is reported as too incomplete", value?.reason === "sparse", String(value?.reason));

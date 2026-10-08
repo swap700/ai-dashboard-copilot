@@ -15,6 +15,19 @@ import {
   parseDecoratedNumber,
   type ColumnNumberFormat,
 } from "./number-format";
+// Every "what kind of column is this" question goes through the resolver.
+// Nothing in this file may re-derive a role locally: that is exactly how the
+// chart picker ended up disagreeing with the summary builder about whether a
+// date column was a category.
+import { stripAggregateRows } from "./aggregate-rows";
+import {
+  columnsWithRole,
+  resolveColumnRoles,
+  roleInfo,
+  nameSuggestsIdentifier,
+  NUMERIC_THRESHOLD,
+  MIN_METRIC_COVERAGE,
+} from "./column-roles";
 
 export type Row = Record<string, unknown>;
 
@@ -44,7 +57,6 @@ export interface Dataset {
   numberFormats?: Record<string, ColumnNumberFormat>;
 }
 
-const NUMERIC_THRESHOLD = 0.5;
 
 /** Leaves headroom under the server's 8,000-char summary cap (route.ts MAX_SUMMARY_CHARS). */
 const DERIVED_SUMMARY_BUDGET = 7500;
@@ -114,6 +126,27 @@ export function cleanDataset(dataset: Dataset): Dataset {
 }
 
 /**
+ * The one entry pipeline for a freshly read file.
+ *
+ * Every upload route -- file, Tableau, Power BI -- called cleanDataset
+ * directly, which meant adding a step to the intake meant finding and editing
+ * three call sites and hoping none was missed. That is the same
+ * fix-at-one-call-site pattern the role resolver exists to end, so intake is
+ * now one function:
+ *
+ *   1. cleanDataset   decide each column's number format and type its cells
+ *   2. strip summary  take out "Grand Total" and subtotal rows, which would
+ *                     otherwise double every total and become the largest
+ *                     category in every breakdown
+ *
+ * Anything removed is named in dataset.warnings, which the upload screen
+ * shows above the dashboard.
+ */
+export function prepareDataset(raw: Dataset): Dataset {
+  return stripAggregateRows(cleanDataset(raw)).dataset;
+}
+
+/**
  * Share of a column's rows that hold an actual number, 0 to 1.
  */
 export function numericDensity(dataset: Dataset, col: string): number {
@@ -124,211 +157,61 @@ export function numericDensity(dataset: Dataset, col: string): number {
 }
 
 /**
- * A column has to clear MIN_METRIC_COVERAGE before Nixara will chart it,
- * average it or hand it to the model as a metric.
+ * Thin delegations to the column-role resolver.
  *
- * Why a second, stricter bar than NUMERIC_THRESHOLD: a column can be numeric
- * enough to be worth typing as a number and still be too sparse to average
- * honestly. 0.8 says four out of five rows must carry a real value. Below
- * that, any single figure quietly describes a minority of the data.
+ * These names are kept because the whole codebase and its tests use them, but
+ * none of them decides anything any more: every one is one line over
+ * resolveColumnRoles(). That is the point. Before Oct 2026 each of these
+ * re-derived its own answer, and the answers disagreed -- the chart picker
+ * could key a treemap on a date column that the summary builder had already
+ * refused to group by, because the two asked different functions.
+ *
+ * See column-roles.ts for the roles, the thresholds and the reasoning.
  */
-export const MIN_METRIC_COVERAGE = 0.8;
+export { MIN_METRIC_COVERAGE, NUMERIC_THRESHOLD };
+export { resolveColumnRoles, columnsWithRole, roleInfo } from "./column-roles";
+export type { ColumnRole, ColumnRoleInfo } from "./column-roles";
 
-/**
- * BUG FIX (2026-10): this used `.some()` - one numeric cell anywhere made the
- * whole column "numeric". cleanDataset() meanwhile refuses to coerce a column
- * unless more than NUMERIC_THRESHOLD of it parses, so the two functions
- * answered the same question differently and the weaker one won downstream.
- *
- * Found on coaster_db.csv: across 1087 rows 'Opening date' holds 659 text
- * values ("December 1912", "3 July 1920"), 178 numbers (bare years Papa typed
- * because dynamicTyping types cells individually rather than columns), and
- * 250 blanks. 16.4% numeric. cleanDataset correctly declined it at 16% numeric.
- * numericColumns then promoted it anyway, and the app charted "Opening Date by
- * Status", averaging 104 of 668 Operating rows into a tooltip reading 1,979.85
- * with nothing on screen saying it came from a sixth of the data.
- *
- * Both functions now use the same threshold, so a column the cleaner rejected
- * can no longer be treated as a number by anything further down.
- */
+/** Columns numeric enough to be read as numbers. */
 export function numericColumns(dataset: Dataset): string[] {
-  return dataset.columns.filter(
-    (col) => numericDensity(dataset, col) > NUMERIC_THRESHOLD
-  );
+  const roles = resolveColumnRoles(dataset);
+  return dataset.columns.filter((col) => {
+    const info = roles.get(col);
+    return info !== undefined && info.numericShare > NUMERIC_THRESHOLD;
+  });
 }
 
-/**
- * Subset of numericColumns that are genuine business metrics worth analysing
- * for anomalies and charting. Excludes:
- *   - ID / key columns (Row ID, Customer ID, Order ID …)
- *   - Count / distinct-count aggregations (added by Tableau, Excel pivot tables …)
- *   - Rank / index helper columns
- * These would produce misleading anomaly signals if included.
- */
-/**
- * Column name with separators flattened to single spaces and camelCase humps
- * split, so that NON_METRIC_PATTERNS' word boundaries actually fire.
- *
- * BUG FIX (2026-10): the patterns below were tested against the raw column
- * name, and in JavaScript "_" is a word character. /\bid\b/ therefore does NOT
- * match "Student_ID", and /\bnumber\b/ does not match "TASK_NUMBER". Every
- * underscore-separated identifier in a real export escaped the filter, so
- * Student_ID (ai_student_impact_dataset.csv) and TASK_NUMBER (the Oracle ERP
- * sample) were both being ranked and totalled as business metrics. Summing a
- * column of ids produces a number with no real-world meaning, and the report
- * prompt was being handed exactly that as a headline breakdown.
- */
-function normalizeColumnName(col: string): string {
-  return col
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim();
-}
-
-/** Whether a column's NAME marks it as an identifier or a pre-aggregated count. */
-export function isNonMetricName(col: string): boolean {
-  const normalized = normalizeColumnName(col);
-  return NON_METRIC_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
-const NON_METRIC_PATTERNS = [
-  /\bid\b/i,
-  /\bcount\b/i,
-  /\bdistinct\b/i,
-  /\bkey\b/i,
-  /\bindex\b/i,
-  /\brank\b/i,
-  /\bnumber\b/i,
-  /\bno\b\.?$/i,    // "Order No.", "Row No."
-];
-
-/**
- * The columns Nixara is willing to treat as a business metric: numeric by
- * name and by density, not an ID or a count, and an amount rather than a
- * coordinate.
- */
+/** Columns Nixara will total or average. */
 export function businessMetricColumns(dataset: Dataset): string[] {
-  return numericColumns(dataset).filter(
-    (col) =>
-      !isNonMetricName(col) &&
-      numericDensity(dataset, col) >= MIN_METRIC_COVERAGE &&
-      !isNonQuantityColumn(dataset, col)
-  );
+  return columnsWithRole(dataset, "metric");
 }
 
+/** Every column that is not numeric enough to be a quantity. */
 export function categoricalColumns(dataset: Dataset): string[] {
-  const numeric = new Set(numericColumns(dataset));
-  return dataset.columns.filter((col) => !numeric.has(col));
+  const roles = resolveColumnRoles(dataset);
+  return dataset.columns.filter((col) => {
+    const info = roles.get(col);
+    return info !== undefined && info.numericShare <= NUMERIC_THRESHOLD;
+  });
 }
 
 /**
- * A column may hold up to this share of numbers and still be treated as a
- * label. Above it, the column is a broken amount column rather than a
- * category, and grouping by it produces one group per distinct value.
- */
-const PARTLY_NUMERIC_MAX = 0.2;
-
-/**
- * A label column may be this blank at most. Above it, grouping by the column
- * produces one dominant "(blank)" group holding most of the file, which tells
- * the reader nothing. coaster_db.csv's Website column is 95% empty and was
- * being handed to the model as a breakdown.
- */
-const MAX_LABEL_BLANK_SHARE = 0.5;
-
-function blankShare(dataset: Dataset, col: string): number {
-  if (dataset.rows.length === 0) return 0;
-  let blanks = 0;
-  for (const row of dataset.rows) if (isMissingValue(row[col])) blanks++;
-  return blanks / dataset.rows.length;
-}
-
-/**
- * Columns fit to be the GROUP KEY of a breakdown: genuine labels.
- *
- * BUG FIX (2026-10): breakdowns grouped by whatever categoricalColumns()
- * returned, which is simply "everything numericColumns() rejected". That set
- * includes date columns and amount columns that failed the numeric threshold,
- * so real demo files produced "TOP/BOTTOM BY AWARD DATE", "TOP/BOTTOM BY
- * AWARD AMOUNT USD" and "BREAKDOWN BY EXPENDITURE_ITEM_DATE". A date is a
- * point in time and an amount is a quantity; neither is a category, and a
- * breakdown keyed on one tells the model nothing it can reason about.
- *
- * Dates are excluded here rather than everywhere: bucketByMonth() still uses
- * them, which is the correct way to group by time.
+ * Columns that may be the GROUP KEY of a breakdown or the category axis of a
+ * chart. Both surfaces now read this one list, which is the fix for a chart
+ * keyed on a date column or on a column that is 95% blank.
  */
 export function groupingColumns(dataset: Dataset): string[] {
-  return categoricalColumns(dataset).filter(
-    (col) =>
-      !isDateColumn(dataset.rows, col) &&
-      !holdsDateLikeText(dataset.rows, col) &&
-      numericDensity(dataset, col) <= PARTLY_NUMERIC_MAX &&
-      blankShare(dataset, col) <= MAX_LABEL_BLANK_SHARE
-  );
+  return columnsWithRole(dataset, "label");
 }
 
-const MONTH_NAME = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec";
-
-/**
- * A date written as text. Three shapes cover what real exports produce:
- * all-numeric (2026-01-15, 11/8/2016, 1/17/24, 15.01.2026), Oracle's
- * day-month-year with a month name (31-MAR-2025), and month-first with a
- * month name (Mar 31, 2025).
- */
-const DATE_LIKE_TEXT = [
-  /^\s*\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(\s|T|$)/,
-  new RegExp(`^\\s*\\d{1,2}[-/.\\s](?:${MONTH_NAME})[a-z]*[-/.\\s]\\d{2,4}`, "i"),
-  new RegExp(`^\\s*(?:${MONTH_NAME})[a-z]*\\s+\\d{1,2},?\\s+\\d{2,4}`, "i"),
-];
-
-/**
- * Whether a column holds dates that the parser left as plain text.
- *
- * isDateColumn() only reports true when the parser actually produced Date
- * objects, and whether it does depends on the file: melb_data.csv's "Date"
- * column is coerced, nixara_demo_dataset.csv's "Order Date" and "Ship Date"
- * are not. Those two were therefore being advertised to the model as label
- * columns safe to group by.
- *
- * Detection is by VALUE SHAPE, not by column name. An earlier draft of this
- * matched names containing "date", "year", "period" and so on, which threw
- * out Year_of_Study -- a legitimate category of 1st/2nd/3rd year, not a date.
- * Sampled rather than exhaustive: 200 values settle the question on a
- * 50,000-row file, and this runs on every column.
- */
-function holdsDateLikeText(rows: Row[], col: string): boolean {
-  let sampled = 0;
-  let dateLike = 0;
-  for (const row of rows) {
-    const v = row[col];
-    if (typeof v !== "string" || v.trim() === "") continue;
-    sampled++;
-    if (DATE_LIKE_TEXT.some((pattern) => pattern.test(v))) dateLike++;
-    if (sampled >= 200) break;
-  }
-  return sampled > 0 && dateLike / sampled >= 0.7;
-}
-
-/**
- * Whether a group key leaves enough rows per group to be a breakdown at all.
- * A column with one distinct value per row is not a category; grouping by it
- * re-prints the rows in a different order while looking like an aggregate,
- * and both the model and the reader take it for one.
- */
+/** Whether grouping by a column leaves usable group sizes. */
 export function hasUsableGroupSize(dataset: Dataset, col: string): boolean {
-  const total = dataset.rows.length;
-  if (total === 0) return false;
-  const unique = new Set(dataset.rows.map((r) => r[col])).size;
-  if (unique < 2 || unique > total) return false;
-  // A short list of labels is a real category even in a small file: a
-  // pre-aggregated export with one row per Region x Category has barely more
-  // rows than groups and is still exactly the right thing to group by.
-  if (unique <= 20) return true;
-  // Past that, require at least 1.5 rows per group on average. This is what
-  // excludes market_trend.csv's "Award Amount USD" -- 39 distinct amounts
-  // across 39 rows, which was reaching the model as "TOP/BOTTOM BY AWARD
-  // AMOUNT USD" as though it summarised anything.
-  return unique * 1.5 <= total;
+  return roleInfo(dataset, col)?.usableGroupSize ?? false;
+}
+
+/** Whether a column's NAME suggests an identifier. A hint only -- shape decides. */
+export function isNonMetricName(col: string): boolean {
+  return nameSuggestsIdentifier(col);
 }
 
 /**
@@ -470,15 +353,24 @@ export interface ChartColumnSelection {
  * columns via businessMetricColumns) when there's no question text yet or no overlap.
  */
 export function selectChartColumns(dataset: Dataset, decisionText: string): ChartColumnSelection {
-  const cats = categoricalColumns(dataset);
+  // BUG FIX (2026-10): this used categoricalColumns(), which is simply
+  // "everything the numeric filter rejected" and therefore includes date
+  // columns, half-numeric amount columns and columns that are almost entirely
+  // blank. The summary builder had already been fixed to use groupingColumns;
+  // the CHART, which is the first thing the user sees, had not. Verified
+  // outputs before this change: a treemap titled "Total Sales by When" keyed
+  // on a text date column, and a pie titled "Total Sales by Website" whose
+  // largest slice was an unlabelled 95% of the data. Both surfaces now read
+  // the same one list of label columns.
+  const cats = groupingColumns(dataset);
   const metricCols = businessMetricColumns(dataset);
   if (cats.length === 0 || metricCols.length === 0) return { category: null, metrics: [] };
 
   const questionTokens = new Set(tokenize(decisionText ?? ""));
 
-  // Only a categorical column with a manageable number of distinct values makes a
-  // readable bar chart — try candidates in relevance order, skipping high-cardinality ones
-  // (e.g. "Customer Name") rather than bailing out entirely on the first miss.
+  // Only a label column with a manageable number of distinct values makes a
+  // readable bar chart — try candidates in relevance order, skipping
+  // high-cardinality ones rather than bailing out on the first miss.
   const catCandidates = [...cats].sort(
     (a, b) => relevanceScore(questionTokens, b) - relevanceScore(questionTokens, a)
   );
@@ -578,8 +470,12 @@ const OUTLIER_SKIP_TOKENS = new Set([
  * anomaly path already uses.
  */
 export function isNonQuantityColumn(dataset: Dataset, col: string): boolean {
-  // Mostly Date objects: a date column, whatever it is called.
-  if (isDateColumn(dataset.rows, col)) return true;
+  // Delegated to the resolver, which applies a DENSITY test for dates rather
+  // than the old isDateColumn `.some()`. One mis-formatted cell in a 50-row
+  // Excel export used to make a whole Amount column "a date", deleting the
+  // file's only metric and telling the user it held points in time.
+  const role = roleInfo(dataset, col)?.role;
+  if (role === "date") return true;
   return isOutlierMeaninglessColumn(dataset, col);
 }
 
@@ -1032,7 +928,17 @@ export function detectMalformedEntries(dataset: Dataset): ColumnIssue[] {
   const { rows, columns } = dataset;
   if (rows.length === 0) return [];
 
-  const idLikeColumns = columns.filter((col) => NON_METRIC_PATTERNS.some((p) => p.test(col)));
+  // BUG FIX (2026-10): this tested the RAW column name, so "_" being a word
+  // character meant /\bid\b/ never matched "Student_ID" and id-integrity
+  // checking silently never ran on any snake_case export -- which is most
+  // database dumps. The name normalization added to isNonMetricName was never
+  // applied here, the same fix-at-one-call-site pattern the role resolver
+  // exists to end. Both the normalized name hint and the resolved identifier
+  // role count now, so a text id column and a numeric one are both checked.
+  const roles = resolveColumnRoles(dataset);
+  const idLikeColumns = columns.filter(
+    (col) => nameSuggestsIdentifier(col) || roles.get(col)?.role === "identifier"
+  );
   const issues: ColumnIssue[] = [];
 
   for (const col of idLikeColumns) {
@@ -1375,51 +1281,37 @@ export function describeUnmeasuredColumns(dataset: Dataset): UnmeasuredColumn[] 
   const total = dataset.rows.length;
   if (total === 0) return [];
 
-  const qualified = new Set(businessMetricColumns(dataset));
+  // The reason each column was set aside is no longer re-derived here. The
+  // resolver already decided the role AND recorded why, so this reads them
+  // instead of running a second, slightly different set of tests that could
+  // (and did) disagree with the one that actually excluded the column.
+  const roles = resolveColumnRoles(dataset);
   const out: UnmeasuredColumn[] = [];
 
   for (const col of dataset.columns) {
-    if (qualified.has(col)) continue;
-
-    let numeric = 0;
-    let blank = 0;
-    for (const row of dataset.rows) {
-      const v = row[col];
-      if (v === null || v === undefined || v === "") blank++;
-      else if (typeof v === "number") numeric++;
-    }
-    // Never a candidate in the first place: not worth a line.
-    if (numeric === 0) continue;
-
-    const text = total - numeric - blank;
-    const density = numeric / total;
-    const pct = (n: number) => Math.round((n / total) * 100);
+    const info = roles.get(col);
+    if (!info || info.role === "metric") continue;
+    // Never a candidate in the first place: a column with no numbers at all
+    // was never going to be a metric, and saying so is noise.
+    if (info.numericShare === 0 && info.role !== "date") continue;
 
     let reason: UnmeasuredReason;
-    let detail: string;
-
-    if (isNonMetricName(col)) {
-      reason = "identifier";
-      detail = "an identifier or a count, not an amount";
-    } else if (isNonQuantityColumn(dataset, col)) {
+    if (info.role === "identifier") {
+      reason = /coordinates|calendar years/.test(info.reason) ? "not-a-quantity" : "identifier";
+    } else if (info.role === "date") {
       reason = "not-a-quantity";
-      detail = isDateColumn(dataset.rows, col)
-        ? "dates, which are points in time rather than amounts"
-        : "coordinates or calendar years, which are positions rather than amounts";
-    } else if (text > 0 && numeric > 0 && text >= numeric * 0.25) {
+    } else if (info.textShare >= 0.1 && info.numericShare > 0) {
       reason = "mixed";
-      detail = `${pct(text)}% text, ${pct(numeric)}% numbers, ${pct(blank)}% blank`;
     } else {
       reason = "sparse";
-      detail = `only ${pct(numeric)}% of rows carry a number`;
     }
 
     out.push({
       column: col,
-      count: total - numeric,
-      detail,
+      count: Math.round((1 - info.numericShare) * total),
+      detail: info.reason,
       reason,
-      mix: { text: text / total, numeric: density, blank: blank / total },
+      mix: { text: info.textShare, numeric: info.numericShare, blank: info.blankShare },
     });
   }
 
@@ -1614,6 +1506,14 @@ export function rankedBusinessMetrics(
   const profitCols = businessMetrics.filter(
     (col) => tokenize(col).some((t) => AMOUNT_TOKENS.has(t)) && aggTypeOf(col) === "sum"
   );
+  // BUG FIX (2026-10): the `?? businessMetrics[0]` tail was the same fault as
+  // the `?? numericCols[0]` one removed from buildDataSummary -- it just took
+  // one more step to reach. On a German export (Bestellnummer, Menge, Umsatz)
+  // the order number was ranked first and became the primary metric, because
+  // the old name-based identifier filter only knew English words. The role
+  // resolver now classifies Bestellnummer as an identifier from its VALUES,
+  // so it never reaches this list at all, which is the real fix; the tail is
+  // kept because a file genuinely can have one legitimate non-sum metric.
   const primaryMetric =
     profitCols[0] ??
     businessMetrics.find((c) => aggTypeOf(c) === "sum") ??
