@@ -253,7 +253,11 @@ export default function DashboardPage() {
             </div>
           )}
           <DriftBanner flags={driftFlags} />
-          <MetricsRow metrics={metrics} qualityBreakdown={qualityBreakdown ?? undefined} />
+          <MetricsRow
+            metrics={metrics}
+            qualityBreakdown={qualityBreakdown ?? undefined}
+            numberFormats={dataset.numberFormats}
+          />
           <DataPreview dataset={dataset} />
           <Charts dataset={dataset} decisionText={debouncedDecision} />
           <AnomalyWarnings

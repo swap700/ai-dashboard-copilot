@@ -123,7 +123,23 @@ const FORMULA_TRIGGER_CHARS = ["=", "+", "-", "@", "\t", "\r"];
  * when it starts with a trigger character AND does NOT parse as a plain
  * number.
  */
-const PLAIN_NUMBER = /^\$?[+-]?(\d{1,3}(,\d{3})*|\d+)(\.\d+)?$/;
+/**
+ * WIDENED (2026-10). The old pattern required the currency symbol BEFORE the
+ * sign, so "-$1,500.87" -- which is exactly what Excel's accounting format
+ * emits -- failed it, got the guard prefix, and then failed to parse. Every
+ * loss row in such a file became null, and on a Profit column where all the
+ * negatives are written that way the whole column dropped below the metric
+ * coverage bar and the report was told there was nothing to measure.
+ *
+ * The grammar now covers what real exports actually write: either sign order,
+ * parenthesised negatives, a trailing sign, European grouping and decimals,
+ * space grouping, a percent sign, and a trailing unit. It stays strict about
+ * the one thing that matters for the guard: formula injection needs real
+ * formula syntax after the trigger character -- a function call, a second
+ * operator, a cell reference -- and none of these shapes admit any of that.
+ */
+const PLAIN_NUMBER =
+  /^\(?\s*(?:[+-]\s*)?(?:\p{Sc}\s*)?(?:[+-]\s*)?(?:\d{1,3}(?:[,.\s\u00A0\u202F']\d{3})+|\d+)(?:[.,]\d+)?(?:[eE][+-]?\d+)?\s*(?:\p{Sc})?\s*%?\s*-?\s*\)?$/u;
 
 function sanitizeCell<T>(value: T): T {
   if (typeof value !== "string") return value;
@@ -143,25 +159,54 @@ function sanitizeRow(row: Row): Row {
 }
 
 function sanitizeDataset(dataset: Dataset): Dataset {
+  // Spread first so optional fields (warnings, sourceDelimiter) survive.
   return {
+    ...dataset,
     columns: dataset.columns.map((c) => sanitizeCell(c)),
     rows: dataset.rows.map(sanitizeRow),
   };
 }
+
+/**
+ * DELIBERATELY OFF (2026-10). PapaParse's dynamicTyping decides what a cell
+ * means one cell at a time, with no knowledge of the column, and it does so
+ * before any of our code can see the raw text. Two faults follow, and neither
+ * is fixable downstream because the original string is already gone:
+ *
+ *   "1.200"  a German one thousand two hundred  ->  1.2    (1000x wrong, silently)
+ *   "02134"  a postal code                      ->  2134   (identifier corrupted)
+ *
+ * It also typed cells individually WITHIN a column, which is where the
+ * coaster_db chart came from: a date column where 16% of cells happened to
+ * parse as Excel serial numbers passed as a metric and was averaged over
+ * those cells alone.
+ *
+ * Typing is now done once per column by cleanDataset(), which reads the whole
+ * column before deciding anything (see number-format.ts). Every upload path,
+ * file, Tableau and Power BI, goes through cleanDataset, so this is one place
+ * deciding types instead of two places disagreeing.
+ */
+const DYNAMIC_TYPING = false;
 
 /** Parse a raw CSV string (returned from Tableau / Power BI API routes). */
 export function parseCsvText(text: string): Dataset {
   const result = Papa.parse<Row>(text, {
     header: true,
     skipEmptyLines: true,
-    dynamicTyping: true,
+    dynamicTyping: DYNAMIC_TYPING,
   });
   const columns = result.meta.fields ?? [];
   const insp = inspectCsvResult(result);
   if (insp.unclosedQuoteRow !== null) {
     throw new Error(unclosedQuoteMessage(insp.unclosedQuoteRow, result.data.length, estimateDataLines(text)));
   }
-  const dataset = sanitizeDataset({ rows: result.data, columns });
+  const dataset = sanitizeDataset({
+    rows: result.data,
+    columns,
+    // Carried so cleanDataset can break an ambiguous number format: ";" means
+    // the file came from a locale where "," is the decimal mark.
+    sourceDelimiter: result.meta.delimiter,
+  });
   const warnings = csvWarnings(insp, columns.length);
   return warnings.length > 0 ? { ...dataset, warnings } : dataset;
 }
@@ -184,7 +229,7 @@ function parseCsv(file: File): Promise<Dataset> {
     Papa.parse<Row>(file, {
       header: true,
       skipEmptyLines: true,
-      dynamicTyping: true,
+      dynamicTyping: DYNAMIC_TYPING,
       complete: (result) => {
         const columns = result.meta.fields ?? [];
         const insp = inspectCsvResult(result);
@@ -199,7 +244,11 @@ function parseCsv(file: File): Promise<Dataset> {
           );
           return;
         }
-        const dataset = sanitizeDataset({ rows: result.data, columns });
+        const dataset = sanitizeDataset({
+          rows: result.data,
+          columns,
+          sourceDelimiter: result.meta.delimiter,
+        });
         const warnings = csvWarnings(insp, columns.length);
         resolve(warnings.length > 0 ? { ...dataset, warnings } : dataset);
       },

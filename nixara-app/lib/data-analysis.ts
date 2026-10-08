@@ -5,6 +5,16 @@
  */
 
 import { formatDateSafe, isDateColumn, monthBucketKey, monthBucketSortKey } from "./format";
+// Numeric reading lives in number-format.ts and is decided once per column.
+// There is deliberately no single-cell "toNumber" helper in this file any
+// more: every former caller of it assumed the dot-decimal style, which is the
+// assumption that read a German revenue column at a thousandth of its value.
+// Code that needs to read a cell must say which style it is reading in.
+import {
+  detectColumnNumberFormat,
+  parseDecoratedNumber,
+  type ColumnNumberFormat,
+} from "./number-format";
 
 export type Row = Record<string, unknown>;
 
@@ -17,6 +27,21 @@ export interface Dataset {
    * most datasets have none, and every analysis function ignores it.
    */
   warnings?: string[];
+  /**
+   * The CSV delimiter the file actually used, when the source was a CSV.
+   * Read only as a tie-breaker for ambiguous number formats -- a
+   * semicolon-delimited file is a European export, because the comma being
+   * the decimal mark is the only reason Excel writes semicolons. See
+   * detectColumnNumberFormat() in number-format.ts.
+   */
+  sourceDelimiter?: string;
+  /**
+   * How each numeric column's cells were read, filled in by cleanDataset().
+   * Present so the quality panel can tell the user that a column was read as
+   * European format or that its negatives were in parentheses, rather than
+   * the product making that call silently. Every analysis function ignores it.
+   */
+  numberFormats?: Record<string, ColumnNumberFormat>;
 }
 
 const NUMERIC_THRESHOLD = 0.5;
@@ -24,40 +49,68 @@ const NUMERIC_THRESHOLD = 0.5;
 /** Leaves headroom under the server's 8,000-char summary cap (route.ts MAX_SUMMARY_CHARS). */
 const DERIVED_SUMMARY_BUDGET = 7500;
 
-function toNumberOrNull(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const cleaned = value.trim().replace(/[$,]/g, "");
-  if (cleaned === "") return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
-/** Mirrors clean_dataframe: coerces string columns to numeric when >50% of values parse. */
+/**
+ * Mirrors clean_dataframe: turns string columns into numbers where the column
+ * reads as numeric.
+ *
+ * REWRITTEN (2026-10). The old version applied `replace(/[$,]/g, "")` to each
+ * cell independently, which deletes commas wherever they appear and
+ * understands nothing else. A German revenue column of "1.234,56" became
+ * 1.23456 -- wrong by a factor of a thousand, 100% numeric, quality score
+ * 100, and no warning anywhere. Excel's own accounting format ("-$1,500.87",
+ * "(1,234.00)") failed to parse at all, so every loss row became null and the
+ * column was then either reported as mostly missing or, worse, reclassified
+ * as a CATEGORY and charted as one.
+ *
+ * The format is now decided once per column from the column's own evidence
+ * (see number-format.ts), then applied uniformly. Three further rules matter:
+ *
+ *  - A column is converted only if it reads above NUMERIC_THRESHOLD. Below
+ *    that it stays text, so a mixed column keeps its text half instead of
+ *    having it overwritten with nulls.
+ *  - Leading-zero identifiers (postal codes, store codes, account numbers)
+ *    are never converted, whatever their coverage.
+ *  - The decision is recorded on the returned dataset, so the UI can say what
+ *    was done rather than the product doing it silently.
+ */
 export function cleanDataset(dataset: Dataset): Dataset {
   const { rows, columns } = dataset;
-  const numericCols = new Set<string>();
+  if (rows.length === 0) return { ...dataset, columns };
 
+  const formats: Record<string, ColumnNumberFormat> = {};
   for (const col of columns) {
-    let parsed = 0;
-    for (const row of rows) {
-      if (toNumberOrNull(row[col]) !== null) parsed++;
-    }
-    if (rows.length > 0 && parsed / rows.length > NUMERIC_THRESHOLD) {
-      numericCols.add(col);
-    }
+    const detected = detectColumnNumberFormat(
+      rows.map((row) => row[col]),
+      { delimiter: dataset.sourceDelimiter }
+    );
+    if (detected && detected.coverage > NUMERIC_THRESHOLD) formats[col] = detected;
   }
 
+  const converting = Object.keys(formats);
   const cleanedRows = rows.map((row) => {
     const next: Row = { ...row };
-    for (const col of numericCols) {
-      next[col] = toNumberOrNull(row[col]);
+    for (const col of converting) {
+      const fmt = formats[col];
+      const parsed = parseDecoratedNumber(row[col], fmt.style, fmt.traits.unit);
+      // A cell that does not parse keeps its ORIGINAL value rather than
+      // becoming null. The old version overwrote the whole column, so a Size
+      // column of 12,14,16,XL,L,M lost XL/L/M entirely and was then reported
+      // as 40% blank on a file with no blank cells at all. Keeping the text
+      // is both truthful and what lets the quality score see the column for
+      // what it is: part text, part number.
+      if (parsed !== null) next[col] = parsed;
+      else if (isMissingValue(row[col])) next[col] = null;
     }
     return next;
   });
 
   // Spread first so optional fields such as `warnings` survive cleaning.
-  return { ...dataset, rows: cleanedRows, columns };
+  return {
+    ...dataset,
+    rows: cleanedRows,
+    columns,
+    numberFormats: converting.length > 0 ? formats : undefined,
+  };
 }
 
 /**

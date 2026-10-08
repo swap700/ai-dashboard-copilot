@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import type { DashboardScoreBreakdown } from "@/lib/data-analysis";
+import type { ColumnNumberFormat } from "@/lib/number-format";
 
 interface Metric {
   label: string;
@@ -52,6 +53,65 @@ function scoreHeadline(score: number): string {
  * in the same breath the tiles show the number, using the exact breakdown
  * dashboardScoreBreakdown() already computes — nothing here is re-derived.
  */
+/**
+ * How Nixara read the numbers, when that was not obvious.
+ *
+ * The product now decides each numeric column's format from the column's own
+ * evidence: whether the comma or the dot is the decimal mark, whether
+ * negatives are in parentheses, whether a unit or a percent sign was stripped
+ * (see number-format.ts). Those decisions are usually right and always
+ * consequential -- reading a German column as US format reports it at a
+ * thousandth of its value -- so the ones that were not obvious are stated
+ * here rather than made silently. Nothing is shown for a file where every
+ * column was a plain US-format number, which is most files.
+ */
+function describeFormat(col: string, fmt: ColumnNumberFormat): string | null {
+  const notes: string[] = [];
+  if (fmt.style === "comma") {
+    notes.push(
+      fmt.evidence === "delimiter"
+        ? "read as European format, where the comma is the decimal mark (inferred from the file's semicolons)"
+        : "read as European format, where the comma is the decimal mark"
+    );
+  }
+  if (fmt.traits.parens) notes.push("negatives written in parentheses");
+  if (fmt.traits.percent) notes.push("percent signs removed, values stored as fractions");
+  if (fmt.traits.unit) notes.push(`unit "${fmt.traits.unit}" removed from every value`);
+  if (notes.length === 0 && fmt.rescued >= 0.05) {
+    notes.push(
+      `${Math.round(fmt.rescued * 100)}% of values needed their currency symbols or separators read`
+    );
+  }
+  if (notes.length === 0) return null;
+  return `${col}: ${notes.join("; ")}`;
+}
+
+function NumberFormatCard({ formats }: { formats: Record<string, ColumnNumberFormat> }) {
+  const lines = Object.entries(formats)
+    .map(([col, fmt]) => describeFormat(col, fmt))
+    .filter((l): l is string => l !== null);
+  if (lines.length === 0) return null;
+
+  return (
+    <div className="bg-surface border border-border rounded-xl px-5 py-4 mb-8">
+      <p className="text-text-mute text-[0.72rem] font-bold uppercase tracking-wider mb-2">
+        How Nixara read your numbers
+      </p>
+      <div className="space-y-1.5">
+        {lines.map((line) => (
+          <p key={line} className="text-text text-[0.85rem] leading-relaxed">
+            {line}
+          </p>
+        ))}
+      </div>
+      <p className="text-text-mute text-[0.78rem] leading-relaxed mt-3 mb-0">
+        Each column&apos;s format is decided from that column&apos;s own values, not guessed per
+        cell. If any of this looks wrong, the figures built on it will be wrong too.
+      </p>
+    </div>
+  );
+}
+
 function QualityCard({ breakdown }: { breakdown: DashboardScoreBreakdown }) {
   const { score, reasons } = breakdown;
   return (
@@ -87,10 +147,13 @@ function QualityCard({ breakdown }: { breakdown: DashboardScoreBreakdown }) {
 export default function MetricsRow({
   metrics,
   qualityBreakdown,
+  numberFormats,
 }: {
   metrics: Metric[];
   /** Powers the card below the tiles — omit to render the tiles only. */
   qualityBreakdown?: DashboardScoreBreakdown;
+  /** From cleanDataset(): how each numeric column's cells were read. */
+  numberFormats?: Record<string, ColumnNumberFormat>;
 }) {
   return (
     <>
@@ -114,6 +177,7 @@ export default function MetricsRow({
         ))}
       </div>
       {qualityBreakdown && <QualityCard breakdown={qualityBreakdown} />}
+      {numberFormats && <NumberFormatCard formats={numberFormats} />}
     </>
   );
 }
