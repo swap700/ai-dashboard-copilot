@@ -140,8 +140,41 @@ const DATE_LIKE_TEXT = [
   new RegExp(`^\\s*(?:${MONTH_NAME})[a-z]*\\s+\\d{1,2},?\\s+\\d{2,4}`, "i"),
 ];
 
+/**
+ * Placeholder tokens a real export writes in place of a true blank cell.
+ * Matched whole-value only, never as a substring.
+ *
+ * Deliberately NOT included: a bare "-" or "--". Both are a common blank
+ * convention, but a value starting with "-" is also a formula-injection
+ * trigger character (see sanitizeCell in file-parser.ts), so by the time
+ * this runs it may already carry a guard prefix, making detection depend on
+ * parse order. Narrower but reliable beats broader but sometimes missed.
+ */
+const NULL_PLACEHOLDER_TOKENS = new Set([
+  "na", "n/a", "n.a.", "null", "none", "nan",
+  "#n/a", "#null!", "#value!", "#div/0!", "missing",
+]);
+
+/**
+ * The single definition of "this cell holds nothing".
+ *
+ * It lives here because the role resolver and the quality score must agree
+ * about it. They briefly did not: the resolver counted only true blanks
+ * while the score counted placeholder tokens too, so a file of "N/A" values
+ * was 0% blank to one and 62% blank to the other. Same class of bug as every
+ * other one this file exists to prevent, just about a smaller word.
+ */
+export function isMissingValue(v: unknown): boolean {
+  if (v === null || v === undefined || v === "") return true;
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t === "" || NULL_PLACEHOLDER_TOKENS.has(t.toLowerCase());
+  }
+  return false;
+}
+
 function isBlankValue(v: unknown): boolean {
-  return v === null || v === undefined || v === "" || (typeof v === "string" && v.trim() === "");
+  return isMissingValue(v);
 }
 
 /** Values that mean "position in space or on a calendar", not "amount". */

@@ -16,7 +16,7 @@ import {
   prepareDataset, cleanDataset, resolveColumnRoles, columnsWithRole, roleInfo,
   businessMetricColumns, groupingColumns, pickChartSpecs, buildDataSummary,
   rankedBusinessMetrics, detectMalformedEntries, describeUnmeasuredColumns,
-  detectAnomalies, type Dataset,
+  detectAnomalies, dashboardScoreBreakdown, chartableColumns, type Dataset,
 } from "../lib/data-analysis.ts";
 import { detectAggregateRows } from "../lib/aggregate-rows.ts";
 
@@ -240,6 +240,101 @@ check("a resolved metric never appears as unmeasured", (() => {
   const metrics = new Set(businessMetricColumns(mixedFile));
   return describeUnmeasuredColumns(mixedFile).every((u) => !metrics.has(u.column));
 })());
+
+// ── The quality score answers "can I decide from this file" ────────────────
+console.log("quality score - a file you can analyse must never score below one you cannot");
+
+function scoreOf(ds: Dataset): number {
+  return dashboardScoreBreakdown(ds).score;
+}
+
+const cleanFile = load("Region,Category,Sales,Profit\n" + Array.from({ length: 200 }, (_, i) =>
+  `${["N", "S", "E", "W"][i % 4]},${["A", "B"][i % 2]},${[120, 340, 99, 780][i % 4]},${[10, 25, 7, 40][i % 4]}`).join("\n"));
+const noMetricFile: Dataset = {
+  columns: ["Order ID", "Region", "Signed on", "Contract Value"],
+  rows: Array.from({ length: 100 }, (_, i) => ({
+    "Order ID": 1000 + i, Region: ["N", "S", "E"][i % 3],
+    "Signed on": i < 30 ? 45000 + i : `2026-0${(i % 9) + 1}-15`,
+    "Contract Value": i < 40 ? 5000 + i * 10 : "",
+  })),
+};
+const noLabelFile = load("Amount\n" + Array.from({ length: 40 }, (_, i) => `${100 + i * 7}`).join("\n"));
+const messyButUsable = load("Region,Sales,Junk\n" + Array.from({ length: 60 }, (_, i) =>
+  `${["N", "S", "E"][i % 3]},${[120, 340, 99][i % 3]},${i < 4 ? "x" : ""}`).join("\n"));
+
+// The inversion this rebuild existed to fix: before Oct 2026 coaster_db
+// scored 17 while a file with no usable metric at all scored 43.
+check("a file that cannot be analysed scores below one that can",
+  scoreOf(noMetricFile) < scoreOf(messyButUsable),
+  `${scoreOf(noMetricFile)} vs ${scoreOf(messyButUsable)}`);
+check("and says why in plain English",
+  dashboardScoreBreakdown(noMetricFile).reasons.some((r) => r.key === "noMeasurableMetric"));
+check("a clean file still scores 100", scoreOf(cleanFile) === 100, String(scoreOf(cleanFile)));
+check("numbers with nothing to group them by is a real limitation",
+  dashboardScoreBreakdown(noLabelFile).reasons.some((r) => r.key === "noGroupingColumn"),
+  JSON.stringify(dashboardScoreBreakdown(noLabelFile).reasons.map((r) => r.key)));
+check("but still scores better than having no numbers at all",
+  scoreOf(noLabelFile) > scoreOf(noMetricFile), `${scoreOf(noLabelFile)} vs ${scoreOf(noMetricFile)}`);
+check("placeholder text counts as blank for the score, same as everywhere else",
+  dashboardScoreBreakdown({
+    columns: ["Region", "Sales"],
+    rows: Array.from({ length: 20 }, (_, i) => ({ Region: ["N", "S"][i % 2], Sales: i < 14 ? "N/A" : 100 + i })),
+  }).missingRatio > 0.3);
+check("every reason names the column it is about", (() => {
+  const ds = load("Region,Sales,Gappy\n" + Array.from({ length: 60 }, (_, i) =>
+    `${["N", "S", "E"][i % 3]},${[120, 340, 99][i % 3]},${i < 10 ? i : ""}`).join("\n"));
+  return dashboardScoreBreakdown(ds).reasons
+    .filter((r) => r.key === "sparseColumn" || r.key === "gappyColumn" || r.key === "mixedTypeColumn")
+    .every((r) => ds.columns.some((c) => r.message.includes(c)));
+})());
+
+// ── Charts: no silent substitution, no silent refusal ──────────────────────
+console.log("charts - a big column is collapsed, not swapped out from under you");
+
+const manyPlaces = load("Place,Region,Sales\n" + Array.from({ length: 300 }, (_, i) =>
+  `Place ${i % 120},${["N", "S", "E"][i % 3]},${[120, 340, 99, 780][i % 4]}`).join("\n"));
+const placeChart = pickChartSpecs(manyPlaces, "Place")[0];
+check("a 120-value column is charted rather than skipped",
+  !!placeChart && /by Place/.test(placeChart.title), placeChart?.title ?? "(none)");
+check("its tail is collapsed into one Other bar",
+  !!placeChart && placeChart.data.some((d) => d.key.startsWith("Other (")),
+  placeChart?.data.map((d) => d.key).join(", ") ?? "");
+check("and the chart says so", !!placeChart?.note?.includes("grouped as Other"), placeChart?.note ?? "(no note)");
+check("the Other bar carries the rows it stands for",
+  (() => {
+    const other = placeChart?.data.find((d) => d.key.startsWith("Other ("));
+    return !!other && other.total > 0 && other.used > 0;
+  })());
+check("a small column is NOT collapsed",
+  !pickChartSpecs(manyPlaces, "Region")[0]?.data.some((d) => d.key.startsWith("Other (")),
+  pickChartSpecs(manyPlaces, "Region")[0]?.data.map((d) => d.key).join(", ") ?? "");
+
+check("typing a column name charts that column",
+  /by Region/.test(pickChartSpecs(manyPlaces, "sales by Region")[0]?.title ?? ""),
+  pickChartSpecs(manyPlaces, "sales by Region")[0]?.title ?? "");
+check("typing a VALUE from a column charts that column",
+  /by Place/.test(pickChartSpecs(manyPlaces, "how is Place 7 doing")[0]?.title ?? ""),
+  pickChartSpecs(manyPlaces, "how is Place 7 doing")[0]?.title ?? "");
+check("\"X by Y\" groups by Y, not by X", (() => {
+  const ds = load("Speed,Maker,Sales\n" + Array.from({ length: 60 }, (_, i) =>
+    `S${i % 9},M${i % 5},${[120, 340, 99][i % 3]}`).join("\n"));
+  return /by Maker/.test(pickChartSpecs(ds, "speed by maker")[0]?.title ?? "");
+})(), pickChartSpecs(load("Speed,Maker,Sales\n" + Array.from({ length: 60 }, (_, i) =>
+  `S${i % 9},M${i % 5},${[120, 340, 99][i % 3]}`).join("\n")), "speed by maker")[0]?.title ?? "");
+check("with no question, the default is a readable column rather than file order",
+  (() => {
+    const spec = pickChartSpecs(manyPlaces, "")[0];
+    return !!spec && /by Region/.test(spec.title);
+  })(), pickChartSpecs(manyPlaces, "")[0]?.title ?? "");
+
+check("chartableColumns tells the user what exists and how big it is", (() => {
+  const list = chartableColumns(manyPlaces);
+  const place = list.find((c) => c.column === "Place");
+  const region = list.find((c) => c.column === "Region");
+  return !!place && place.collapses && place.distinct === 120 && !!region && !region.collapses;
+})(), JSON.stringify(chartableColumns(manyPlaces)));
+check("and lists the most readable column first",
+  chartableColumns(manyPlaces)[0]?.column === "Region", chartableColumns(manyPlaces)[0]?.column);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

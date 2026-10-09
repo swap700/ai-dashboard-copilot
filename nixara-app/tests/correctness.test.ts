@@ -768,13 +768,19 @@ const oneGappedColumn: Dataset = {
     "Contract Value": i < 40 ? 5000 + i : "",
   })),
 };
+// Since the score was rebuilt around usability (Oct 2026) the key depends on
+// whether the gappy column is one the report can use. Contract Value at 40%
+// numeric is unusable, so it reports as gappyColumn rather than sparseColumn.
+// What the test is actually about is that the gap is noticed and the column
+// is named, which is asserted directly rather than through a key.
 check("a 60%-blank column is penalised even when the blended ratio is low",
-  reasonKeys(oneGappedColumn).includes("sparseColumn"), reasonKeys(oneGappedColumn).join(", "));
+  reasonKeys(oneGappedColumn).some((k) => k === "sparseColumn" || k === "gappyColumn"),
+  reasonKeys(oneGappedColumn).join(", "));
 check("so the file no longer scores a clean 100", dashboardScore(oneGappedColumn) < 100,
   String(dashboardScore(oneGappedColumn)));
 check("and the reason names the actual column",
-  !!dashboardScoreBreakdown(oneGappedColumn).reasons
-    .find((r) => r.key === "sparseColumn")?.message.includes("Contract Value"));
+  dashboardScoreBreakdown(oneGappedColumn).reasons.some((r) => r.message.includes("Contract Value")),
+  dashboardScoreBreakdown(oneGappedColumn).reasons.map((r) => r.message).join(" | "));
 
 // The dilution gets worse the wider the file: at 20 columns, one entirely
 // empty column is 5% of all cells.
@@ -785,7 +791,11 @@ const wideWithEmptyCol: Dataset = {
   ])) as Row[],
 };
 check("an entirely empty column is caught in a wide file",
-  reasonKeys(wideWithEmptyCol).includes("sparseColumn"), reasonKeys(wideWithEmptyCol).join(", "));
+  reasonKeys(wideWithEmptyCol).some((k) => k === "sparseColumn" || k === "gappyColumn"),
+  reasonKeys(wideWithEmptyCol).join(", "));
+check("and it is named rather than hidden in a blended average",
+  dashboardScoreBreakdown(wideWithEmptyCol).reasons.some((r) => r.message.includes("Empty Column")),
+  dashboardScoreBreakdown(wideWithEmptyCol).reasons.map((r) => r.message).join(" | "));
 
 // A column holding both text and numbers: the coaster_db fault.
 const mixedTypes: Dataset = {
@@ -812,8 +822,12 @@ const allText: Dataset = {
   columns: ["Respondent", "Answer"],
   rows: Array.from({ length: 30 }, (_, i) => ({ Respondent: `P${i}`, Answer: ["yes", "no"][i % 2] })),
 };
-check("a purely categorical file is not accused of having no metric",
+// A file with no numbers at all is a legitimate upload, not a broken one, so
+// it gets its own reason ("holds no numbers, counts only") rather than the
+// one used for a file whose numbers exist but cannot be measured.
+check("a purely categorical file is not accused of having unusable numbers",
   !reasonKeys(allText).includes("noMeasurableMetric"), reasonKeys(allText).join(", "));
+check("and it still scores well", dashboardScore(allText) >= 70, String(dashboardScore(allText)));
 
 // And a cleanMetricFile file is still a cleanMetricFile file.
 const cleanMetricFile: Dataset = {

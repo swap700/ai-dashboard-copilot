@@ -22,6 +22,7 @@ import {
 import { stripAggregateRows } from "./aggregate-rows";
 import {
   columnsWithRole,
+  isMissingValue,
   resolveColumnRoles,
   roleInfo,
   nameSuggestsIdentifier,
@@ -339,6 +340,89 @@ export const SCHEMA_OVERLAP_THRESHOLD = 0.8;
 export interface ChartColumnSelection {
   category: string | null;
   metrics: string[]; // up to 2, ordered by relevance/priority
+  /**
+   * The column the question actually named, when one was identified. Lets
+   * the chart say "you asked about Location, this is Status" instead of
+   * substituting in silence.
+   */
+  asked: string | null;
+}
+
+/**
+ * How well a column answers what the user typed.
+ *
+ * Three kinds of evidence, strongest first. The old version had only the
+ * third, which is why "Location" and "location" scored the same as a column
+ * that merely shared one generic word, and why typing a VALUE rather than a
+ * column name matched nothing at all.
+ *
+ *   100  the question names the column, give or take case and separators
+ *    60  the question contains a VALUE from this column ("Coney Island",
+ *        "Operating"). This is the dataset-driven half: it needs no lexicon
+ *        and works in any language, because the evidence is the user's own
+ *        data rather than a word list.
+ *   1/token  shared words, which is what the old score did on its own
+ */
+function columnMatchScore(
+  dataset: Dataset,
+  column: string,
+  question: string,
+  questionTokens: Set<string>
+): number {
+  const flat = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const q = flat(question);
+  if (q === "") return 0;
+
+  const name = flat(column);
+  if (name !== "" && (q === name || q.includes(name))) return 100;
+
+  // Does the question quote one of this column's own values?
+  const seen = new Set<string>();
+  for (const row of dataset.rows) {
+    const v = row[column];
+    if (typeof v !== "string") continue;
+    const f = flat(v);
+    if (f.length < 3 || seen.has(f)) continue;
+    seen.add(f);
+    if (q.includes(f)) return 60;
+    if (seen.size >= 400) break;
+  }
+
+  return relevanceScore(questionTokens, column);
+}
+
+/**
+ * Where in the question a column's name appears, or -1.
+ *
+ * People write "metric by category", so when two columns match equally well
+ * the one mentioned LATER is the one being grouped by. Without this,
+ * "speed by manufacturer" on coaster_db charted by Speed, because both names
+ * matched exactly and file order decided.
+ */
+function questionPosition(column: string, question: string): number {
+  const flat = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const q = flat(question);
+  const name = flat(column);
+  if (q === "" || name === "") return -1;
+  return q.lastIndexOf(name);
+}
+
+/**
+ * How well a column works AS A CHART AXIS, ignoring the question.
+ *
+ * Only used to break ties and to choose a default when nothing was typed.
+ * Removing the old cardinality veto fixed "Location", but it also meant the
+ * default chart became whatever label column happened to come first in the
+ * file: coaster_db opened on Length (521 values) and the superstore file on
+ * Order ID (5,016). A few distinct values read well; thousands do not, even
+ * with the tail collapsed.
+ */
+function chartability(dataset: Dataset, column: string): number {
+  const info = roleInfo(dataset, column);
+  const distinct = info?.distinct ?? 0;
+  const base =
+    distinct >= 2 && distinct <= 15 ? 100 : distinct <= 40 ? 70 : distinct <= 200 ? 40 : 15;
+  return base - Math.round((info?.blankShare ?? 0) * 30);
 }
 
 /**
@@ -364,25 +448,34 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
   // the same one list of label columns.
   const cats = groupingColumns(dataset);
   const metricCols = businessMetricColumns(dataset);
-  if (cats.length === 0 || metricCols.length === 0) return { category: null, metrics: [] };
+  if (cats.length === 0 || metricCols.length === 0) return { category: null, metrics: [], asked: null };
 
-  const questionTokens = new Set(tokenize(decisionText ?? ""));
+  const question = decisionText ?? "";
+  const questionTokens = new Set(tokenize(question));
+  const score = (c: string) => columnMatchScore(dataset, c, question, questionTokens);
 
-  // Only a label column with a manageable number of distinct values makes a
-  // readable bar chart — try candidates in relevance order, skipping
-  // high-cardinality ones rather than bailing out on the first miss.
-  const catCandidates = [...cats].sort(
-    (a, b) => relevanceScore(questionTokens, b) - relevanceScore(questionTokens, a)
+  // The highest-scoring label column simply wins. There is no longer a
+  // cardinality veto here: a column with 280 values is charted with its tail
+  // collapsed into "Other" (see collapseTail) rather than skipped, which is
+  // what used to make "Location" silently become "Status".
+  // Three keys, in order: how well the column answers the question, where it
+  // was mentioned ("X by Y" means group by Y), and how well it reads as an
+  // axis. The third decides on its own when nothing was typed.
+  const catScores = new Map(cats.map((c) => [c, score(c)] as const));
+  const catCandidates = [...cats].sort((a, b) =>
+    (catScores.get(b) ?? 0) - (catScores.get(a) ?? 0) ||
+    questionPosition(b, question) - questionPosition(a, question) ||
+    chartability(dataset, b) - chartability(dataset, a)
   );
-  const category =
-    catCandidates.find((c) => new Set(dataset.rows.map((r) => r[c])).size <= 25) ?? null;
+  const category = catCandidates[0] ?? null;
+  const asked = (catScores.get(catCandidates[0] ?? "") ?? 0) > 0 ? catCandidates[0] : null;
 
   const metricCandidates = [...metricCols].sort(
-    (a, b) => relevanceScore(questionTokens, b) - relevanceScore(questionTokens, a)
+    (a, b) => score(b) - score(a) || questionPosition(b, question) - questionPosition(a, question)
   );
   const metrics = metricCandidates.slice(0, 2);
 
-  return { category, metrics };
+  return { category, metrics, asked };
 }
 
 function mean(values: number[]): number {
@@ -673,8 +766,12 @@ export interface DashboardScoreReason {
   key:
     | "missingData"
     | "sparseColumn"
+    | "gappyColumn"
     | "mixedTypeColumn"
+    | "unusableColumns"
     | "noMeasurableMetric"
+    | "noNumericData"
+    | "noGroupingColumn"
     | "columnCount"
     | "rowCount";
   penalty: number;
@@ -712,154 +809,145 @@ export interface DashboardScoreBreakdown {
  * has no reason to touch -- it survived as the literal string "N/A" and was
  * invisible to a check that only looked for null/undefined/"".
  */
-const NULL_PLACEHOLDER_TOKENS = new Set([
-  "na", "n/a", "n.a.", "null", "none", "nan",
-  "#n/a", "#null!", "#value!", "#div/0!", "missing",
-]);
-// Deliberately NOT included: a bare "-" or "--". Both are a common blank
-// convention in some exports, but a value starting with "-" is also a
-// formula-injection trigger character (see sanitizeCell in file-parser.ts),
-// so by the time this runs it may already carry a guard prefix ("'--"),
-// making detection inconsistent depending on parse order. Narrower but
-// reliable beats broader but sometimes-silently-missed.
-
-function isMissingValue(v: unknown): boolean {
-  if (v === null || v === undefined || v === "") return true;
-  if (typeof v === "string") return NULL_PLACEHOLDER_TOKENS.has(v.trim().toLowerCase());
-  return false;
-}
-
 export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdown {
   const { rows, columns } = dataset;
-  let score = 100;
   const reasons: DashboardScoreReason[] = [];
   let missingRatio = 0;
+  if (rows.length === 0 || columns.length === 0) return { score: 100, missingRatio, reasons };
 
-  if (rows.length > 0 && columns.length > 0) {
-    // ── Blended blanks across the whole grid ───────────────────────────────
-    // Kept, but no longer the only missing-data signal. The 20% cliff stays
-    // where it was; a second tier catches files that are visibly gappy
-    // without being catastrophic.
-    let missing = 0;
-    const blankShare = new Map<string, number>();
-    const mixedShare = new Map<string, number>();
-    for (const col of columns) {
-      let blanks = 0;
-      let numeric = 0;
-      for (const row of rows) {
-        const v = row[col];
-        if (isMissingValue(v)) blanks++;
-        else if (typeof v === "number") numeric++;
-      }
-      missing += blanks;
-      blankShare.set(col, blanks / rows.length);
-      // "Mixed" means the column holds a real share of BOTH text and numbers,
-      // so nothing can compute with it and nothing can label with it either.
-      const textShare = (rows.length - blanks - numeric) / rows.length;
-      const numericShare = numeric / rows.length;
-      mixedShare.set(col, Math.min(textShare, numericShare));
-    }
-    missingRatio = missing / (rows.length * columns.length);
+  const roles = resolveColumnRoles(dataset);
+  const metrics = columnsWithRole(dataset, "metric");
+  const labels = columnsWithRole(dataset, "label");
+  const unusable = columnsWithRole(dataset, "unusable");
+  const used = [...metrics, ...labels];
 
-    if (missingRatio > 0.2) {
-      score -= 20;
-      reasons.push({
-        key: "missingData",
-        penalty: 20,
-        message: `${(missingRatio * 100).toFixed(1)}% of cells across the whole file are missing or blank`,
-      });
-    } else if (missingRatio > 0.08) {
-      score -= 10;
-      reasons.push({
-        key: "missingData",
-        penalty: 10,
-        message: `${(missingRatio * 100).toFixed(1)}% of cells across the whole file are missing or blank`,
-      });
-    }
+  // ── The base: what can you actually do with this file? ───────────────────
+  // REWRITTEN (2026-10). The previous version started every file at 100 and
+  // subtracted for each flaw it found, independently and without a cap. That
+  // shape produced a result that was not merely harsh but backwards:
+  //
+  //   coaster_db.csv  17/100   messy, but yields a working report
+  //   a thin export   43/100   no usable metric at all, yields nothing
+  //
+  // A file you cannot analyse scored better than one you can, because the
+  // thin file simply had fewer columns to find fault with. The flaws were
+  // also double-counted: a 98%-blank column was penalised once in the
+  // whole-file blank ratio and again as the worst single column.
+  //
+  // The score now starts from what the file supports and deducts for the
+  // state of the columns an analysis will actually touch. Junk columns
+  // sitting beside the usable ones still cost something, but they cost less
+  // than a broken column you were going to rely on.
+  let score: number;
+  const hadCandidates = describeUnmeasuredColumns(dataset).length > 0;
 
-    // ── A single badly gapped column ───────────────────────────────────────
-    // BUG FIX (2026-10): the blended ratio above was the ONLY missing-data
-    // check, and it dilutes. A file with one 60%-empty column and three
-    // intact ones averages to 15% and scored a clean 100/100, in the same
-    // view that tells the reader Nixara could not measure that column. The
-    // wider the file, the more completely a broken column disappears: at 20
-    // columns, one entirely empty column is 5% of cells.
-    const gapped = [...blankShare.entries()]
-      .filter(([, share]) => share >= 0.25)
-      .sort((a, b) => b[1] - a[1]);
-    if (gapped.length > 0) {
-      const [worstCol, worstShare] = gapped[0];
-      const tier = worstShare >= 0.8 ? 25 : worstShare >= 0.5 ? 15 : 8;
-      const extra = Math.min(12, (gapped.length - 1) * 4);
-      const penalty = tier + extra;
-      score -= penalty;
-      reasons.push({
-        key: "sparseColumn",
-        penalty,
-        message:
-          `${worstCol} is ${(worstShare * 100).toFixed(0)}% blank` +
-          (worstShare >= 0.8 ? ", which makes it effectively an empty column" : "") +
-          (gapped.length > 1
-            ? `, and ${gapped.length - 1} other column${gapped.length === 2 ? " is" : "s are"} more than a quarter blank`
-            : ""),
-      });
-    }
-
-    // ── Columns that are part text, part number ────────────────────────────
-    // The fault behind the coaster_db chart: PapaParse types cells, not
-    // columns, so one column can arrive as a mixture. Nothing downstream can
-    // use it, and until now nothing said so in the score.
-    const mixed = [...mixedShare.entries()]
-      .filter(([, share]) => share >= 0.1)
-      .sort((a, b) => b[1] - a[1]);
-    if (mixed.length > 0) {
-      const penalty = Math.min(20, 12 + (mixed.length - 1) * 4);
-      score -= penalty;
-      reasons.push({
-        key: "mixedTypeColumn",
-        penalty,
-        message:
-          `${mixed[0][0]} holds both text and numbers in the same column` +
-          (mixed.length > 1 ? `, as do ${mixed.length - 1} other${mixed.length === 2 ? "" : "s"}` : "") +
-          `, so it cannot be totalled or used as a label`,
-      });
-    }
-
-    // ── Nothing left to measure ────────────────────────────────────────────
-    // Only fires when the file HAD numeric candidates and none of them
-    // qualified. A genuinely categorical file (survey text, a list of names)
-    // is not a quality problem and is not penalised here.
-    const candidates = describeUnmeasuredColumns(dataset);
-    if (candidates.length > 0 && businessMetricColumns(dataset).length === 0) {
-      score -= 20;
-      reasons.push({
-        key: "noMeasurableMetric",
-        penalty: 20,
-        message:
-          `No column qualifies as an amount Nixara can total or average: ` +
-          `${candidates.length} column${candidates.length === 1 ? "" : "s"} carry numbers, ` +
-          `none clears the ${Math.round(MIN_METRIC_COVERAGE * 100)}% coverage bar`,
-      });
-    }
-  }
-
-  if (columns.length > 20) {
-    score -= 10;
+  if (metrics.length > 0 && labels.length > 0) {
+    score = 100;
+  } else if (metrics.length > 0) {
+    score = 70;
     reasons.push({
-      key: "columnCount",
-      penalty: 10,
-      message: `${columns.length} columns is on the high side for clean analysis`,
+      key: "noGroupingColumn",
+      penalty: 30,
+      message:
+        "There are figures to report but no column to break them down by, so no comparison and no chart is possible",
+    });
+  } else if (hadCandidates) {
+    score = 30;
+    reasons.push({
+      key: "noMeasurableMetric",
+      penalty: 70,
+      message: `No column qualifies as an amount that can be totalled or averaged, so the report can only describe categories and gaps`,
+    });
+  } else {
+    // A genuinely categorical file (survey answers, a list of names) is a
+    // legitimate thing to upload and not a quality problem. It supports
+    // counts, which is all it ever claimed to.
+    score = 85;
+    reasons.push({
+      key: "noNumericData",
+      penalty: 15,
+      message: `This file holds no numbers, so the report can describe counts and categories but not amounts`,
     });
   }
 
-  if (rows.length < 10) {
-    score -= 10;
-    reasons.push({
-      key: "rowCount",
-      penalty: 10,
-      message: `Only ${rows.length} row${rows.length === 1 ? "" : "s"} -- too few for reliable patterns`,
-    });
+  // ── Per-column facts, gathered once ──────────────────────────────────────
+  let missing = 0;
+  const blankShare = new Map<string, number>();
+  for (const col of columns) {
+    const info = roles.get(col);
+    const blanks = Math.round((info?.blankShare ?? 0) * rows.length);
+    missing += blanks;
+    blankShare.set(col, info?.blankShare ?? 0);
   }
+  missingRatio = missing / (rows.length * columns.length);
+
+  const deduct = (key: DashboardScoreReason["key"], penalty: number, message: string) => {
+    if (penalty <= 0) return;
+    score -= penalty;
+    reasons.push({ key, penalty, message });
+  };
+
+  // ── 1. The columns the analysis will actually use ────────────────────────
+  // Weighted heaviest, because a gap here changes a figure someone acts on.
+  const gappyUsed = used
+    .filter((c) => (blankShare.get(c) ?? 0) >= 0.25)
+    .sort((a, b) => (blankShare.get(b) ?? 0) - (blankShare.get(a) ?? 0));
+  if (gappyUsed.length > 0) {
+    const worst = gappyUsed[0];
+    const share = blankShare.get(worst) ?? 0;
+    const tier = share >= 0.8 ? 20 : share >= 0.5 ? 12 : 6;
+    const extra = Math.min(9, (gappyUsed.length - 1) * 3);
+    deduct("sparseColumn", tier + extra,
+      `${worst} is ${Math.round(share * 100)}% blank, and it is one of the columns Nixara can report on` +
+      (gappyUsed.length > 1
+        ? `, as ${gappyUsed.length === 2 ? "is 1 other" : `are ${gappyUsed.length - 1} others`}`
+        : ""));
+  }
+
+  // ── 2. Columns that exist but cannot be used ─────────────────────────────
+  // Real, and worth saying, but a junk column you were never going to touch
+  // is not the same kind of problem as a gap in the column you are reporting.
+  const worstUnusable = unusable
+    .slice()
+    .sort((a, b) => (blankShare.get(b) ?? 0) - (blankShare.get(a) ?? 0))[0];
+  if (worstUnusable && (blankShare.get(worstUnusable) ?? 0) >= 0.4) {
+    const share = blankShare.get(worstUnusable) ?? 0;
+    deduct("gappyColumn", share >= 0.8 ? 10 : share >= 0.6 ? 7 : 4,
+      `${worstUnusable} is ${Math.round(share * 100)}% blank, so it holds nothing to report on` +
+      (unusable.length > 1 ? `, and ${unusable.length - 1} other column${unusable.length === 2 ? "" : "s"} cannot be used either` : ""));
+  }
+
+  const mixed = unusable.filter((c) => {
+    const info = roles.get(c);
+    return info !== undefined && info.textShare >= 0.1 && info.numericShare >= 0.1;
+  });
+  if (mixed.length > 0) {
+    deduct("mixedTypeColumn", Math.min(14, 8 + (mixed.length - 1) * 3),
+      `${mixed[0]} holds both text and numbers in the same column` +
+      (mixed.length > 1 ? `, as do ${mixed.length - 1} other${mixed.length === 2 ? "" : "s"}` : "") +
+      `, so it cannot be totalled or used as a label`);
+  }
+
+  const unusableShare = unusable.length / columns.length;
+  if (unusableShare > 0.25) {
+    deduct("unusableColumns", unusableShare > 0.5 ? 10 : 5,
+      `${unusable.length} of ${columns.length} columns hold nothing Nixara can measure or group by`);
+  }
+
+  // ── 3. Whole-file gaps, capped, and no longer the main signal ────────────
+  // Still worth one line, because a reader scanning the file sees the blanks.
+  // Small on purpose: the columns that matter are already covered above, and
+  // charging the same blank cell twice is what produced the 17/100.
+  if (missingRatio > 0.35) deduct("missingData", 10, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
+  else if (missingRatio > 0.2) deduct("missingData", 6, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
+  else if (missingRatio > 0.08) deduct("missingData", 3, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
+
+  // ── 4. Shape ─────────────────────────────────────────────────────────────
+  // 40, not 20: a 21-column business export is ordinary, and charging it 10
+  // points was noise. Past 40 the file is wide enough to be hard to read and
+  // to risk the summary budget.
+  if (columns.length > 40) deduct("columnCount", 5, `${columns.length} columns is wide enough to make a focused report harder`);
+  if (rows.length < 10) deduct("rowCount", 10, `Only ${rows.length} row${rows.length === 1 ? "" : "s"}, too few for reliable patterns`);
 
   return { score: Math.max(score, 0), missingRatio, reasons };
 }
@@ -1156,6 +1244,22 @@ export interface ChartSpec {
   /** Rows that contributed across the whole chart, and rows considered. */
   coverage: { used: number; total: number };
   data: AggregatedPoint[];
+  /**
+   * What the chart had to do to fit, in plain English: categories collapsed
+   * into "Other", or a different column used than the one the question asked
+   * for. Null when the chart shows exactly what was asked for.
+   *
+   * Added 2026-10. A user typing "Location" against a file with 280 of them
+   * got a chart of Status instead, with nothing saying why. Substituting
+   * silently is the same fault as refusing silently.
+   */
+  note: string | null;
+  /**
+   * The unit stripped from this metric's values at parse time ("mph", "kg",
+   * "°"), so the axis and tooltip can put it back. Without it a bar reading
+   * 93 does not say 93 of what. See number-format.ts.
+   */
+  unit: string | null;
 }
 
 /**
@@ -1326,8 +1430,84 @@ export function aggWord(agg: "mean" | "sum"): string {
   return agg === "sum" ? "Total" : "Average of";
 }
 
+/**
+ * Most categories a chart will draw before the rest are grouped as "Other".
+ *
+ * Previously a label column with more than 25 distinct values was simply
+ * skipped, and the picker fell through to whatever column did fit. On
+ * coaster_db that meant 14 of 18 label columns -- Location with 280 values,
+ * Manufacturer with 103, Designer with 154 -- could never be charted, and
+ * asking for any of them silently produced a chart of Status. Collapsing the
+ * tail is what a person would do by hand, and it keeps the biggest
+ * categories, which are the ones being asked about.
+ */
+const MAX_CHART_CATEGORIES = 15;
+
+/**
+ * Keeps the largest categories and rolls the rest into one "Other" bar.
+ *
+ * The Other bar is aggregated the same way as the rest, which for an average
+ * means weighting by how many rows each collapsed category contributed --
+ * averaging the averages would silently give a 2-row category the same
+ * weight as a 2,000-row one.
+ */
+function collapseTail(
+  points: AggregatedPoint[],
+  agg: "mean" | "sum",
+  limit = MAX_CHART_CATEGORIES
+): { points: AggregatedPoint[]; collapsed: number } {
+  if (points.length <= limit) return { points, collapsed: 0 };
+
+  const ranked = [...points].sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+  const kept = ranked.slice(0, limit - 1);
+  const rest = ranked.slice(limit - 1);
+
+  const used = rest.reduce((n, p) => n + p.used, 0);
+  const total = rest.reduce((n, p) => n + p.total, 0);
+  const value =
+    agg === "sum"
+      ? rest.reduce((n, p) => n + p.value, 0)
+      : used > 0
+        ? rest.reduce((n, p) => n + p.value * p.used, 0) / used
+        : 0;
+
+  return {
+    points: [...kept, { key: `Other (${rest.length})`, value, used, total }],
+    collapsed: rest.length,
+  };
+}
+
+export interface ChartableColumn {
+  column: string;
+  distinct: number;
+  /** Whether a chart of this column has to collapse its tail into "Other". */
+  collapses: boolean;
+}
+
+/**
+ * What the user can ask a chart to break down by, and how big each one is.
+ *
+ * Added 2026-10 in answer to a direct question: typing "Location" produced a
+ * chart of Status instead, and there was no way to know from the screen
+ * which columns would work. Every label column is now chartable, so this is
+ * no longer a list of what is allowed; it is a list of what exists, with the
+ * size of each, so a reader can tell that Location has 280 values and will
+ * therefore be shown as a top-15 plus Other.
+ *
+ * Ordered by how well each reads as an axis, which is the order a person
+ * would try them in.
+ */
+export function chartableColumns(dataset: Dataset): ChartableColumn[] {
+  return groupingColumns(dataset)
+    .map((column) => {
+      const distinct = roleInfo(dataset, column)?.distinct ?? 0;
+      return { column, distinct, collapses: distinct > MAX_CHART_CATEGORIES };
+    })
+    .sort((a, b) => chartability(dataset, b.column) - chartability(dataset, a.column));
+}
+
 export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts = 2): ChartSpec[] {
-  const { category, metrics } = selectChartColumns(dataset, decisionText);
+  const { category, metrics, asked } = selectChartColumns(dataset, decisionText);
   const specs: ChartSpec[] = [];
   const primaryMetric = metrics[0];
 
@@ -1346,15 +1526,30 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
         agg: how,
         coverage: { used, total },
         data,
+        note: null,
+        unit: dataset.numberFormats?.[primaryMetric]?.traits.unit ?? null,
       });
     }
   }
 
   if (category && primaryMetric && specs.length < maxCharts) {
     const metric = specs.length > 0 && metrics[1] ? metrics[1] : primaryMetric;
-    const { agg: how, points: data, used, total } = aggregateBy(dataset, category, metric);
+    const { agg: how, points: all, used, total } = aggregateBy(dataset, category, metric);
+    const { points: data, collapsed } = collapseTail(all, how);
     const cardinality = data.length;
     const hasNegative = data.some((d) => d.value < 0);
+
+    // Say what the chart had to do to fit, and say when the question asked
+    // for a column the chart could not use.
+    const notes: string[] = [];
+    if (collapsed > 0) {
+      notes.push(
+        `Showing the ${data.length - 1} largest of ${all.length} ${humanizeColumnName(category)} values; the remaining ${collapsed} are grouped as Other.`
+      );
+    }
+    if (asked && asked !== category) {
+      notes.push(`You asked about ${humanizeColumnName(asked)}, which cannot be charted here, so this is ${humanizeColumnName(category)}.`);
+    }
 
     /**
      * BUG FIX (2026-10): shape was chosen from cardinality alone, so an
@@ -1376,6 +1571,8 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
       agg: how,
       coverage: { used, total },
       data,
+      note: notes.length > 0 ? notes.join(" ") : null,
+      unit: dataset.numberFormats?.[metric]?.traits.unit ?? null,
     });
   }
 

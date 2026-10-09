@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -17,7 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import type { AggregatedPoint, Dataset, ChartSpec, UnmeasuredColumn } from "@/lib/data-analysis";
-import { MIN_METRIC_COVERAGE, describeUnmeasuredColumns, pickChartSpecs } from "@/lib/data-analysis";
+import { MIN_METRIC_COVERAGE, chartableColumns, describeUnmeasuredColumns, pickChartSpecs } from "@/lib/data-analysis";
 import { formatNumber } from "@/lib/format";
 
 const PALETTE = ["#C2542A", "#D98F5E", "#E8B88A", "#8B3A1F", "#A8632F", "#F2D4B8"];
@@ -25,6 +26,21 @@ const tooltipStyle = { borderRadius: 8, borderColor: "#E2E8F0", fontSize: 12 };
 
 function tickFmt(value: unknown): string {
   return typeof value === "number" ? formatNumber(value) : String(value ?? "");
+}
+
+/**
+ * Category names on the axis, cut to fit.
+ *
+ * Recharts wraps a long category tick onto several lines, and on coaster_db
+ * that produced overlapping text: "In Production closed for maintenance as
+ * of july 30 no reopening date known" printed on top of "Under construction".
+ * The full name is still in the tooltip, which is where a reader looks when
+ * a bar matters to them.
+ */
+const MAX_TICK_CHARS = 24;
+function categoryTick(value: unknown): string {
+  const text = String(value ?? "");
+  return text.length > MAX_TICK_CHARS ? `${text.slice(0, MAX_TICK_CHARS - 1).trimEnd()}\u2026` : text;
 }
 
 /**
@@ -40,11 +56,14 @@ function CoverageTooltip({
   payload,
   label,
   agg,
+  unit,
 }: {
   active?: boolean;
   payload?: { payload: AggregatedPoint; name?: string }[];
   label?: unknown;
   agg: "mean" | "sum";
+  /** Put back the unit that number-format.ts stripped at parse time. */
+  unit?: string | null;
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
@@ -57,9 +76,10 @@ function CoverageTooltip({
         thin ? "border-warn-border bg-warn-bg" : "border-border bg-surface"
       }`}
     >
-      <p className="text-text text-xs font-semibold m-0">{heading}</p>
+      <p className="text-text text-xs font-semibold m-0 max-w-[260px] break-words">{heading}</p>
       <p className="text-accent text-xs font-bold m-0 mt-0.5">
         {agg === "sum" ? "Total" : "Average"} {formatNumber(point.value)}
+        {unit ? ` ${unit}` : ""}
       </p>
       {point.total > 0 && (
         <p className={`text-[0.68rem] m-0 mt-1 ${thin ? "text-warn font-semibold" : "text-text-mute"}`}>
@@ -103,6 +123,7 @@ export function BarPanel({
   metricLabel,
   agg,
   data,
+  unit = null,
 }: {
   title: string;
   note?: string | null;
@@ -110,6 +131,7 @@ export function BarPanel({
   metricLabel: string;
   agg: "mean" | "sum";
   data: AggregatedPoint[];
+  unit?: string | null;
 }) {
   const height = Math.max(220, data.length * 32);
   return (
@@ -121,16 +143,18 @@ export function BarPanel({
             type="number"
             tick={{ fontSize: 11, fill: "#64748B" }}
             axisLine={{ stroke: "#E2E8F0" }}
-            tickFormatter={tickFmt}
+            tickFormatter={(v) => (unit ? `${tickFmt(v)} ${unit}` : tickFmt(v))}
           />
           <YAxis
             type="category"
             dataKey="key"
-            width={110}
+            width={150}
+            interval={0}
             tick={{ fontSize: 11, fill: "#1E293B" }}
+            tickFormatter={categoryTick}
             axisLine={{ stroke: "#E2E8F0" }}
           />
-          <Tooltip cursor={{ fill: "#FBEEE7" }} content={<CoverageTooltip agg={agg} />} />
+          <Tooltip cursor={{ fill: "#FBEEE7" }} content={<CoverageTooltip agg={agg} unit={unit} />} />
           <Bar dataKey="value" name={metricLabel} radius={[0, 4, 4, 0]}>
             {data.map((d, i) => (
               <Cell key={i} fill={d.value < 0 ? "#DC2626" : "#C2542A"} />
@@ -142,18 +166,18 @@ export function BarPanel({
   );
 }
 
-export function PiePanel({ title, note, agg, data }: { title: string; note?: string | null; agg: "mean" | "sum"; data: AggregatedPoint[] }) {
+export function PiePanel({ title, note, agg, data, unit = null }: { title: string; note?: string | null; agg: "mean" | "sum"; data: AggregatedPoint[]; unit?: string | null }) {
   return (
     <ChartFrame title={title} note={note}>
       <ResponsiveContainer width="100%" height={260}>
         <PieChart>
-          <Pie data={data} dataKey="value" nameKey="key" cx="50%" cy="50%" outerRadius={85} label={(e) => String(e.name ?? "")}>
+          <Pie data={data} dataKey="value" nameKey="key" cx="50%" cy="50%" outerRadius={85} label={(e) => categoryTick(e.name)}>
             {data.map((_, i) => (
               <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
             ))}
           </Pie>
-          <Tooltip content={<CoverageTooltip agg={agg} />} />
-          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Tooltip content={<CoverageTooltip agg={agg} unit={unit} />} />
+          <Legend wrapperStyle={{ fontSize: 11 }} formatter={(v) => categoryTick(v)} />
         </PieChart>
       </ResponsiveContainer>
     </ChartFrame>
@@ -166,12 +190,14 @@ function AreaPanel({
   metricLabel,
   agg,
   data,
+  unit = null,
 }: {
   title: string;
   note?: string | null;
   metricLabel: string;
   agg: "mean" | "sum";
   data: { key: string; value: number }[];
+  unit?: string | null;
 }) {
   return (
     <ChartFrame title={title} note={note}>
@@ -179,8 +205,12 @@ function AreaPanel({
         <AreaChart data={data} margin={{ left: 8, right: 16, top: 8, bottom: 4 }}>
           <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
           <XAxis dataKey="key" tick={{ fontSize: 10, fill: "#64748B" }} axisLine={{ stroke: "#E2E8F0" }} />
-          <YAxis tick={{ fontSize: 11, fill: "#64748B" }} axisLine={{ stroke: "#E2E8F0" }} tickFormatter={tickFmt} />
-          <Tooltip content={<CoverageTooltip agg={agg} />} />
+          <YAxis
+            tick={{ fontSize: 11, fill: "#64748B" }}
+            axisLine={{ stroke: "#E2E8F0" }}
+            tickFormatter={(v) => (unit ? `${tickFmt(v)} ${unit}` : tickFmt(v))}
+          />
+          <Tooltip content={<CoverageTooltip agg={agg} unit={unit} />} />
           <Area type="monotone" dataKey="value" name={metricLabel} stroke="#C2542A" fill="#F2D4B8" strokeWidth={2} />
         </AreaChart>
       </ResponsiveContainer>
@@ -200,26 +230,26 @@ function AreaPanel({
  * `payload[0].payload`, the exact data object Recharts attaches to whichever
  * rectangle is currently active, instead of trusting a derived label.
  */
-function TreemapTooltip({ active, payload }: { active?: boolean; payload?: { payload: { name: string; size: number } }[] }) {
+function TreemapTooltip({ active, payload, unit = null }: { active?: boolean; payload?: { payload: { name: string; size: number } }[]; unit?: string | null }) {
   if (!active || !payload || payload.length === 0) return null;
   const node = payload[0].payload;
   return (
     <div
       style={{ ...tooltipStyle, background: "#fff" }}
-      className="border px-2.5 py-1.5 text-xs text-text"
+      className="border px-2.5 py-1.5 text-xs text-text max-w-[260px] break-words"
     >
-      {node.name} : {formatNumber(node.size)}
+      {node.name} : {formatNumber(node.size)}{unit ? ` ${unit}` : ""}
     </div>
   );
 }
 
-function TreemapPanel({ title, note, data }: { title: string; note?: string | null; data: AggregatedPoint[] }) {
+function TreemapPanel({ title, note, data, unit = null }: { title: string; note?: string | null; data: AggregatedPoint[]; unit?: string | null }) {
   const treeData = data.map((d) => ({ name: d.key, size: Math.abs(d.value) }));
   return (
     <ChartFrame title={title} note={note}>
       <ResponsiveContainer width="100%" height={260}>
         <Treemap data={treeData} dataKey="size" nameKey="name" stroke="#fff" fill="#C2542A">
-          <Tooltip content={<TreemapTooltip />} />
+          <Tooltip content={<TreemapTooltip unit={unit} />} />
         </Treemap>
       </ResponsiveContainer>
     </ChartFrame>
@@ -227,16 +257,20 @@ function TreemapPanel({ title, note, data }: { title: string; note?: string | nu
 }
 
 function ChartPanel({ spec }: { spec: ChartSpec }) {
-  const note = coverageNote(spec.coverage);
+  // Two kinds of note can apply at once: the chart is built from part of the
+  // file (coverage), and the chart had to collapse categories or use a
+  // different column than the question named (spec.note). Both matter, so
+  // both are shown rather than one quietly winning.
+  const note = [coverageNote(spec.coverage), spec.note].filter(Boolean).join(" ") || null;
   switch (spec.type) {
     case "pie":
-      return <PiePanel title={spec.title} note={note} agg={spec.agg} data={spec.data} />;
+      return <PiePanel title={spec.title} note={note} agg={spec.agg} data={spec.data} unit={spec.unit} />;
     case "area":
-      return <AreaPanel title={spec.title} note={note} metricLabel={spec.metricLabel} agg={spec.agg} data={spec.data} />;
+      return <AreaPanel title={spec.title} note={note} metricLabel={spec.metricLabel} agg={spec.agg} data={spec.data} unit={spec.unit} />;
     case "treemap":
-      return <TreemapPanel title={spec.title} note={note} data={spec.data} />;
+      return <TreemapPanel title={spec.title} note={note} data={spec.data} unit={spec.unit} />;
     default:
-      return <BarPanel title={spec.title} note={note} metricLabel={spec.metricLabel} agg={spec.agg} data={spec.data} />;
+      return <BarPanel title={spec.title} note={note} metricLabel={spec.metricLabel} agg={spec.agg} data={spec.data} unit={spec.unit} />;
   }
 }
 
@@ -307,10 +341,52 @@ export default function Charts({ dataset, decisionText = "" }: { dataset: Datase
   }
 
   return (
-    <div className="grid md:grid-cols-2 gap-4 mb-8">
-      {specs.map((spec, i) => (
-        <ChartPanel key={`${spec.type}-${spec.title}-${i}`} spec={spec} />
+    <>
+      <div className="grid md:grid-cols-2 gap-4 mb-3">
+        {specs.map((spec, i) => (
+          <ChartPanel key={`${spec.type}-${spec.title}-${i}`} spec={spec} />
+        ))}
+      </div>
+      <BreakdownHint dataset={dataset} />
+    </>
+  );
+}
+
+/**
+ * The columns you can ask a chart to break down by, and how big each is.
+ *
+ * Answers a question a user asked directly: typing "Location" gave a chart of
+ * Status, and nothing on the screen said which column names would work or
+ * why that one did not. Every label column is chartable now, so this is not
+ * a list of what is permitted -- it is a list of what exists, with the size
+ * of each, so the reader can see that Location has 280 values and will be
+ * shown as the largest few plus Other.
+ */
+function BreakdownHint({ dataset }: { dataset: Dataset }) {
+  const [open, setOpen] = useState(false);
+  const columns = chartableColumns(dataset);
+  if (columns.length === 0) return null;
+  const shown = open ? columns : columns.slice(0, 6);
+
+  return (
+    <div className="mb-8 text-xs text-text-mute">
+      <span className="mr-1">Name any of these in your question to chart it:</span>
+      {shown.map((c, i) => (
+        <span key={c.column}>
+          <span className="text-text font-semibold">{c.column}</span>
+          <span className="text-text-dim"> ({c.distinct.toLocaleString()}{c.collapses ? ", top 14 + Other" : ""})</span>
+          {i < shown.length - 1 ? <span className="text-text-dim">{" · "}</span> : null}
+        </span>
       ))}
+      {columns.length > 6 && (
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="ml-2 font-semibold text-accent-dk hover:underline"
+        >
+          {open ? "show fewer" : `+${columns.length - 6} more`}
+        </button>
+      )}
     </div>
   );
 }
