@@ -11,14 +11,17 @@ import {
   Legend,
   Pie,
   PieChart,
+  ReferenceLine,
   ResponsiveContainer,
+  Scatter,
+  ScatterChart,
   Tooltip,
   Treemap,
   XAxis,
   YAxis,
 } from "recharts";
 import type { AggregatedPoint, Dataset, ChartSpec, UnmeasuredColumn } from "@/lib/data-analysis";
-import { MIN_METRIC_COVERAGE, chartableColumns, describeUnmeasuredColumns, pickChartSpecs } from "@/lib/data-analysis";
+import { MIN_METRIC_COVERAGE, chartableColumns, describeUnmeasuredColumns, humanizeColumnName, pickChartSpecs } from "@/lib/data-analysis";
 import { formatNumber } from "@/lib/format";
 
 const PALETTE = ["#C2542A", "#D98F5E", "#E8B88A", "#8B3A1F", "#A8632F", "#F2D4B8"];
@@ -134,6 +137,7 @@ export function BarPanel({
   unit?: string | null;
 }) {
   const height = Math.max(220, data.length * 32);
+  const diverging = data.some((d) => d.value < 0) && data.some((d) => d.value > 0);
   return (
     <ChartFrame title={title} note={note}>
       <ResponsiveContainer width="100%" height={height}>
@@ -155,6 +159,12 @@ export function BarPanel({
             axisLine={{ stroke: "#E2E8F0" }}
           />
           <Tooltip cursor={{ fill: "#FBEEE7" }} content={<CoverageTooltip agg={agg} unit={unit} />} />
+          {/* When the values cross zero the chart is a diverging one, and the
+              reader's question is "which side of the line". Without a drawn
+              baseline, a red bar next to a terracotta one only says the sign
+              through colour, which is exactly what colour must never carry
+              alone. */}
+          {diverging && <ReferenceLine x={0} stroke="#94A3B8" strokeWidth={1.5} />}
           <Bar dataKey="value" name={metricLabel} radius={[0, 4, 4, 0]}>
             {data.map((d, i) => (
               <Cell key={i} fill={d.value < 0 ? "#DC2626" : "#C2542A"} />
@@ -256,6 +266,113 @@ function TreemapPanel({ title, note, data, unit = null }: { title: string; note?
   );
 }
 
+/**
+ * Four series is the ceiling the dataviz guidance sets for telling adjacent
+ * bars apart by colour alone, so pickGroupedBar never produces a fifth and
+ * this never needs a generated hue.
+ */
+const SERIES_COLORS = ["#C2542A", "#5B7C99", "#D98F5E", "#7A8B6F"];
+
+function GroupedBarPanel({
+  title,
+  note,
+  agg,
+  groups,
+  unit = null,
+}: {
+  title: string;
+  note?: string | null;
+  agg: "mean" | "sum";
+  groups: NonNullable<ChartSpec["groups"]>;
+  unit?: string | null;
+}) {
+  const height = Math.max(240, groups.rows.length * 46);
+  return (
+    <ChartFrame title={title} note={note}>
+      <ResponsiveContainer width="100%" height={height}>
+        <BarChart data={groups.rows} layout="vertical" margin={{ left: 8, right: 16, top: 4, bottom: 4 }}>
+          <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" horizontal={false} />
+          <XAxis
+            type="number"
+            tick={{ fontSize: 11, fill: "#64748B" }}
+            axisLine={{ stroke: "#E2E8F0" }}
+            tickFormatter={(v) => (unit ? `${tickFmt(v)} ${unit}` : tickFmt(v))}
+          />
+          <YAxis
+            type="category"
+            dataKey="key"
+            width={150}
+            interval={0}
+            tick={{ fontSize: 11, fill: "#1E293B" }}
+            tickFormatter={categoryTick}
+            axisLine={{ stroke: "#E2E8F0" }}
+          />
+          <Tooltip
+            cursor={{ fill: "#FBEEE7" }}
+            contentStyle={{ ...tooltipStyle, background: "#fff" }}
+            formatter={(v, name) => [
+              `${agg === "sum" ? "Total" : "Average"} ${formatNumber(Number(v ?? 0))}${unit ? ` ${unit}` : ""}`,
+              String(name ?? ""),
+            ]}
+          />
+          {/* A legend is always present at two or more series: identity must
+              never rest on colour alone. */}
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {groups.names.map((name, i) => (
+            <Bar key={name} dataKey={name} fill={SERIES_COLORS[i % SERIES_COLORS.length]} radius={[0, 3, 3, 0]} />
+          ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </ChartFrame>
+  );
+}
+
+function ScatterPanel({
+  title,
+  note,
+  scatter,
+}: {
+  title: string;
+  note?: string | null;
+  scatter: NonNullable<ChartSpec["scatter"]>;
+}) {
+  return (
+    <ChartFrame title={title} note={note}>
+      <ResponsiveContainer width="100%" height={280}>
+        <ScatterChart margin={{ left: 8, right: 16, top: 8, bottom: 20 }}>
+          <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
+          <XAxis
+            type="number"
+            dataKey="x"
+            name={humanizeColumnName(scatter.x)}
+            tick={{ fontSize: 11, fill: "#64748B" }}
+            axisLine={{ stroke: "#E2E8F0" }}
+            tickFormatter={tickFmt}
+            label={{ value: humanizeColumnName(scatter.x), position: "insideBottom", offset: -12, fontSize: 11, fill: "#64748B" }}
+          />
+          <YAxis
+            type="number"
+            dataKey="y"
+            name={humanizeColumnName(scatter.y)}
+            tick={{ fontSize: 11, fill: "#64748B" }}
+            axisLine={{ stroke: "#E2E8F0" }}
+            tickFormatter={tickFmt}
+            width={70}
+          />
+          <Tooltip
+            cursor={{ strokeDasharray: "3 3" }}
+            contentStyle={{ ...tooltipStyle, background: "#fff" }}
+            formatter={(v, name) => [formatNumber(Number(v ?? 0)), String(name ?? "")]}
+          />
+          {/* Semi-transparent so a dense cloud still shows where the mass is
+              rather than painting one solid block. */}
+          <Scatter data={scatter.points} fill="#C2542A" fillOpacity={0.45} />
+        </ScatterChart>
+      </ResponsiveContainer>
+    </ChartFrame>
+  );
+}
+
 function ChartPanel({ spec }: { spec: ChartSpec }) {
   // Two kinds of note can apply at once: the chart is built from part of the
   // file (coverage), and the chart had to collapse categories or use a
@@ -263,6 +380,12 @@ function ChartPanel({ spec }: { spec: ChartSpec }) {
   // both are shown rather than one quietly winning.
   const note = [coverageNote(spec.coverage), spec.note].filter(Boolean).join(" ") || null;
   switch (spec.type) {
+    case "scatter":
+      return spec.scatter ? <ScatterPanel title={spec.title} note={note} scatter={spec.scatter} /> : null;
+    case "groupedBar":
+      return spec.groups ? (
+        <GroupedBarPanel title={spec.title} note={note} agg={spec.agg} groups={spec.groups} unit={spec.unit} />
+      ) : null;
     case "pie":
       return <PiePanel title={spec.title} note={note} agg={spec.agg} data={spec.data} unit={spec.unit} />;
     case "area":
@@ -334,7 +457,7 @@ function NoChartsPanel({ dataset }: { dataset: Dataset }) {
 }
 
 export default function Charts({ dataset, decisionText = "" }: { dataset: Dataset; decisionText?: string }) {
-  const specs = pickChartSpecs(dataset, decisionText, 2);
+  const specs = pickChartSpecs(dataset, decisionText, 4);
   if (specs.length === 0) {
     if (dataset.rows.length === 0) return null;
     return <NoChartsPanel dataset={dataset} />;

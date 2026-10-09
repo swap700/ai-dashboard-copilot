@@ -20,6 +20,7 @@ import {
 // chart picker ended up disagreeing with the summary builder about whether a
 // date column was a category.
 import { stripAggregateRows } from "./aggregate-rows";
+import { detectColumnDateFormat, parseDateLike } from "./date-format";
 import {
   columnsWithRole,
   isMissingValue,
@@ -90,6 +91,7 @@ export function cleanDataset(dataset: Dataset): Dataset {
   const { rows, columns } = dataset;
   if (rows.length === 0) return { ...dataset, columns };
 
+  const roles = resolveColumnRoles(dataset);
   const formats: Record<string, ColumnNumberFormat> = {};
   for (const col of columns) {
     const detected = detectColumnNumberFormat(
@@ -99,7 +101,26 @@ export function cleanDataset(dataset: Dataset): Dataset {
     if (detected && detected.coverage > NUMERIC_THRESHOLD) formats[col] = detected;
   }
 
+  // Date columns are turned into real Date objects, decided per column the
+  // same way the number format is (see date-format.ts). Until Oct 2026 only
+  // the Excel reader ever produced a Date, so findDateColumn and
+  // bucketByMonth found nothing in a CSV and no CSV upload has ever drawn a
+  // trend over time -- on every one of the demo files, despite every one of
+  // them having a date column.
+  const dateFormats: Record<string, ReturnType<typeof detectColumnDateFormat>> = {};
+  for (const col of columns) {
+    if (formats[col]) continue; // already a numeric column
+    const info = roles.get(col);
+    if (info?.role !== "date") continue;
+    const detected = detectColumnDateFormat(
+      rows.map((row) => row[col]),
+      { delimiter: dataset.sourceDelimiter }
+    );
+    if (detected && detected.coverage > NUMERIC_THRESHOLD) dateFormats[col] = detected;
+  }
+
   const converting = Object.keys(formats);
+  const convertingDates = Object.keys(dateFormats);
   const cleanedRows = rows.map((row) => {
     const next: Row = { ...row };
     for (const col of converting) {
@@ -111,6 +132,11 @@ export function cleanDataset(dataset: Dataset): Dataset {
       // as 40% blank on a file with no blank cells at all. Keeping the text
       // is both truthful and what lets the quality score see the column for
       // what it is: part text, part number.
+      if (parsed !== null) next[col] = parsed;
+      else if (isMissingValue(row[col])) next[col] = null;
+    }
+    for (const col of convertingDates) {
+      const parsed = parseDateLike(row[col], dateFormats[col]!.order);
       if (parsed !== null) next[col] = parsed;
       else if (isMissingValue(row[col])) next[col] = null;
     }
@@ -448,19 +474,33 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
   // the same one list of label columns.
   const cats = groupingColumns(dataset);
   const metricCols = businessMetricColumns(dataset);
-  if (cats.length === 0 || metricCols.length === 0) return { category: null, metrics: [], asked: null };
+  // A trend over time needs a metric and a date, not a category, so metrics
+  // are still returned when no label column exists. market_trend.csv has two
+  // metrics and a date column and was getting no chart at all, because this
+  // bailed out on the missing category before the caller could ask about the
+  // time axis.
+  if (metricCols.length === 0) return { category: null, metrics: [], asked: null };
 
   const question = decisionText ?? "";
   const questionTokens = new Set(tokenize(question));
   const score = (c: string) => columnMatchScore(dataset, c, question, questionTokens);
 
-  // The highest-scoring label column simply wins. There is no longer a
-  // cardinality veto here: a column with 280 values is charted with its tail
-  // collapsed into "Other" (see collapseTail) rather than skipped, which is
-  // what used to make "Location" silently become "Status".
-  // Three keys, in order: how well the column answers the question, where it
-  // was mentioned ("X by Y" means group by Y), and how well it reads as an
-  // axis. The third decides on its own when nothing was typed.
+  const metricCandidates = [...metricCols].sort(
+    (a, b) => score(b) - score(a) || questionPosition(b, question) - questionPosition(a, question)
+  );
+  const metrics = metricCandidates.slice(0, 2);
+
+  // No label column is not the end of the road: a trend over time needs a
+  // metric and a date, not a category.
+  if (cats.length === 0) return { category: null, metrics, asked: null };
+
+  // The highest-scoring label column wins. There is no longer a cardinality
+  // veto here: a column with 280 values is charted with its tail collapsed
+  // into "Other" (see collapseTail) rather than skipped, which is what used
+  // to make "Location" silently become "Status". Three keys, in order: how
+  // well the column answers the question, where it was mentioned ("X by Y"
+  // means group by Y), and how well it reads as an axis. The third decides
+  // on its own when nothing was typed.
   const catScores = new Map(cats.map((c) => [c, score(c)] as const));
   const catCandidates = [...cats].sort((a, b) =>
     (catScores.get(b) ?? 0) - (catScores.get(a) ?? 0) ||
@@ -469,11 +509,6 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
   );
   const category = catCandidates[0] ?? null;
   const asked = (catScores.get(catCandidates[0] ?? "") ?? 0) > 0 ? catCandidates[0] : null;
-
-  const metricCandidates = [...metricCols].sort(
-    (a, b) => score(b) - score(a) || questionPosition(b, question) - questionPosition(a, question)
-  );
-  const metrics = metricCandidates.slice(0, 2);
 
   return { category, metrics, asked };
 }
@@ -1228,8 +1263,13 @@ export function aggregateBy(
   return { agg, points, used: allValues.length, total };
 }
 
+export interface ScatterPoint {
+  x: number;
+  y: number;
+}
+
 export interface ChartSpec {
-  type: "bar" | "pie" | "area" | "treemap";
+  type: "bar" | "pie" | "area" | "treemap" | "scatter" | "groupedBar";
   title: string;
   /**
    * Human-readable label for the metric this chart's values represent --
@@ -1260,6 +1300,28 @@ export interface ChartSpec {
    * 93 does not say 93 of what. See number-format.ts.
    */
   unit: string | null;
+  /**
+   * Only for type "scatter": the paired values behind a correlation the
+   * engine already computed. TOP CORRELATIONS has been in the model's
+   * summary for months and the user never saw it, even though "these two
+   * move together" is one of the few things a chart shows better than a
+   * sentence.
+   */
+  scatter?: {
+    x: string;
+    y: string;
+    r: number;
+    n: number;
+    points: ScatterPoint[];
+  } | null;
+  /**
+   * Only for type "groupedBar": one bar per series inside each category.
+   * Built from the same cross-breakdown the summary already sends the model.
+   */
+  groups?: {
+    names: string[];
+    rows: Record<string, string | number>[];
+  } | null;
 }
 
 /**
@@ -1332,17 +1394,30 @@ export function bucketByMonth(
 }
 
 /** Finds a Date-typed column with enough distinct months to make a real trend line. */
+/**
+ * The date column worth drawing a trend from: the best-populated one, not
+ * the first one in the file.
+ *
+ * coaster_db.csv has three date columns. "Soft opening date" comes first and
+ * is about 5% filled, so the old first-match loop drew a trend over time from
+ * one row in twenty and said nothing about it. The column that covers the
+ * most rows is the one a trend should be built on.
+ */
 function findDateColumn(dataset: Dataset): string | null {
+  let best: string | null = null;
+  let bestFilled = 0;
   for (const col of dataset.columns) {
     if (!isDateColumn(dataset.rows, col)) continue;
-    const months = new Set(
-      dataset.rows
-        .filter((r): r is Row & { [k: string]: Date } => r[col] instanceof Date)
-        .map((r) => monthBucketKey(r[col] as Date))
-    );
-    if (months.size >= 2) return col;
+    const dates = dataset.rows.map((r) => r[col]).filter((v): v is Date => v instanceof Date);
+    if (new Set(dates.map((d) => monthBucketKey(d))).size < 2) continue;
+    if (dates.length > bestFilled) {
+      bestFilled = dates.length;
+      best = col;
+    }
   }
-  return null;
+  // A trend drawn from a handful of rows is not a trend. Half the file is a
+  // low bar, but it rules out the 5%-populated column that used to win.
+  return bestFilled >= dataset.rows.length * 0.5 ? best : null;
 }
 
 /**
@@ -1506,6 +1581,158 @@ export function chartableColumns(dataset: Dataset): ChartableColumn[] {
     .sort((a, b) => chartability(dataset, b.column) - chartability(dataset, a.column));
 }
 
+/**
+ * A scatter of the strongest relationship between two metrics.
+ *
+ * pairwiseCorrelation has fed TOP CORRELATIONS in the model's summary for
+ * months, and nothing ever put it on screen. "These two move together" is
+ * one of the few claims a picture makes better than a sentence, and a
+ * scatter is the only form that lets a reader see whether the relationship
+ * is real or an artifact of three outliers.
+ *
+ * Only metric columns are paired, which is what keeps Row ID out: before the
+ * role resolver, the summary's own correlation block was reporting
+ * "Row ID ~ Sales: 1.000" as the file's strongest finding.
+ */
+function pickScatter(dataset: Dataset): ChartSpec | null {
+  const metrics = businessMetricColumns(dataset);
+  if (metrics.length < 2) return null;
+
+  let best: { a: string; b: string; r: number; n: number } | null = null;
+  for (let i = 0; i < metrics.length; i++) {
+    for (let j = i + 1; j < metrics.length; j++) {
+      const result = pairwiseCorrelation(dataset.rows, metrics[i], metrics[j]);
+      if (!result || result.n < 10) continue;
+      // A correlation this close to 1 is almost always the same measurement
+      // twice, not a finding: coaster_db pairs Inversions with
+      // Inversions_clean at exactly 1.00, and the chart would tell the
+      // reader nothing except that their file has a duplicate column.
+      if (Math.abs(result.r) >= 0.98) continue;
+      if (!best || Math.abs(result.r) > Math.abs(best.r)) {
+        best = { a: metrics[i], b: metrics[j], r: result.r, n: result.n };
+      }
+    }
+  }
+  // Below this the cloud is a blob and the chart says nothing a reader can
+  // act on, which is worse than showing no chart.
+  if (!best || Math.abs(best.r) < 0.3) return null;
+
+  const points: ScatterPoint[] = [];
+  for (const row of dataset.rows) {
+    const x = row[best.a];
+    const y = row[best.b];
+    if (typeof x !== "number" || typeof y !== "number") continue;
+    points.push({ x, y });
+  }
+  // A browser does not need 50,000 dots to show a shape, and painting them
+  // all is what makes a chart feel broken. Evenly sampled, never head-sliced,
+  // so the sample is not just the first months of the file.
+  const MAX_POINTS = 600;
+  const sampled =
+    points.length <= MAX_POINTS
+      ? points
+      : points.filter((_, i) => i % Math.ceil(points.length / MAX_POINTS) === 0);
+
+  const strength = Math.abs(best.r) >= 0.7 ? "move together closely" : "tend to move together";
+  const direction = best.r < 0 ? "in opposite directions" : "";
+  return {
+    type: "scatter",
+    title: `${humanizeColumnName(best.a)} against ${humanizeColumnName(best.b)}`,
+    metricLabel: humanizeColumnName(best.b),
+    agg: "mean",
+    coverage: { used: best.n, total: dataset.rows.length },
+    data: [],
+    note:
+      `These two ${strength}${direction ? " " + direction : ""} (correlation ${best.r.toFixed(2)} across ${best.n.toLocaleString()} rows). ` +
+      `Moving together is not proof that one causes the other.` +
+      (sampled.length < points.length ? ` Showing ${sampled.length.toLocaleString()} of ${points.length.toLocaleString()} points.` : ""),
+    unit: null,
+    scatter: { x: best.a, y: best.b, r: best.r, n: best.n, points: sampled },
+  };
+}
+
+/**
+ * A grouped bar of one metric across two categories at once.
+ *
+ * buildDataSummary has computed a CROSS-BREAKDOWN (Region x Category) for
+ * the model since long before this, and the user never saw it. "Which
+ * category is weak in which region" is a question a single-axis bar chart
+ * cannot answer at all.
+ *
+ * Capped at four series, which is the point the dataviz guidance calls the
+ * ceiling for telling adjacent bars apart by colour; past it this returns
+ * nothing rather than generating a fifth hue nobody can distinguish.
+ */
+function pickGroupedBar(dataset: Dataset, exclude: string | null): ChartSpec | null {
+  const labels = groupingColumns(dataset).filter((c) => {
+    const d = roleInfo(dataset, c)?.distinct ?? 0;
+    return d >= 2 && d <= 6;
+  });
+  const metrics = businessMetricColumns(dataset);
+  if (labels.length < 2 || metrics.length === 0) return null;
+
+  // The column with MORE values goes on the axis and the one with fewer
+  // becomes the series. The other way round produces four coloured series
+  // over two bars, which is a legend doing the work the axis should.
+  const byWidth = [...labels].sort(
+    (a, b) => (roleInfo(dataset, b)?.distinct ?? 0) - (roleInfo(dataset, a)?.distinct ?? 0)
+  );
+  const outer = byWidth[0];
+  const inner = byWidth.find((c) => c !== outer);
+  if (!inner) return null;
+  void exclude;
+  const metric = metrics[0];
+
+  const seriesNames = [...new Set(dataset.rows.map((r) => String(r[inner] ?? "")))]
+    .filter((v) => v !== "")
+    .sort();
+  if (seriesNames.length < 2 || seriesNames.length > 4) return null;
+
+  const how = smartAgg(metric, dataset.rows.map((r) => r[metric]).filter((v): v is number => typeof v === "number"));
+  const buckets = new Map<string, Map<string, number[]>>();
+  for (const row of dataset.rows) {
+    const o = String(row[outer] ?? "");
+    const i = String(row[inner] ?? "");
+    const v = row[metric];
+    if (o === "" || i === "" || typeof v !== "number") continue;
+    if (!buckets.has(o)) buckets.set(o, new Map());
+    const inner2 = buckets.get(o)!;
+    if (!inner2.has(i)) inner2.set(i, []);
+    inner2.get(i)!.push(v);
+  }
+  if (buckets.size < 2) return null;
+
+  const rows: Record<string, string | number>[] = [];
+  for (const [o, inner2] of buckets) {
+    const row: Record<string, string | number> = { key: o };
+    for (const name of seriesNames) {
+      const vals = inner2.get(name) ?? [];
+      row[name] = vals.length === 0 ? 0 : how === "sum" ? vals.reduce((a, b) => a + b, 0) : mean(vals);
+    }
+    rows.push(row);
+  }
+  rows.sort((a, b) =>
+    seriesNames.reduce((n, s) => n + Number(b[s] ?? 0), 0) -
+    seriesNames.reduce((n, s) => n + Number(a[s] ?? 0), 0)
+  );
+
+  const kept = rows.slice(0, MAX_CHART_CATEGORIES);
+  return {
+    type: "groupedBar",
+    title: `${aggWord(how)} ${humanizeColumnName(metric)} by ${humanizeColumnName(outer)} and ${humanizeColumnName(inner)}`,
+    metricLabel: humanizeColumnName(metric),
+    agg: how,
+    coverage: { used: dataset.rows.length, total: dataset.rows.length },
+    data: [],
+    note:
+      kept.length < rows.length
+        ? `Showing the ${kept.length} largest of ${rows.length} ${humanizeColumnName(outer)} values.`
+        : null,
+    unit: dataset.numberFormats?.[metric]?.traits.unit ?? null,
+    groups: { names: seriesNames, rows: kept },
+  };
+}
+
 export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts = 2): ChartSpec[] {
   const { category, metrics, asked } = selectChartColumns(dataset, decisionText);
   const specs: ChartSpec[] = [];
@@ -1574,6 +1801,18 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
       note: notes.length > 0 ? notes.join(" ") : null,
       unit: dataset.numberFormats?.[metric]?.traits.unit ?? null,
     });
+  }
+
+  // Two charts built from figures the engine already computed for the model
+  // and never put on screen. Both are added last, so they fill remaining
+  // slots rather than displacing the breakdown a user asked for.
+  if (specs.length < maxCharts) {
+    const grouped = pickGroupedBar(dataset, category);
+    if (grouped) specs.push(grouped);
+  }
+  if (specs.length < maxCharts) {
+    const scatter = pickScatter(dataset);
+    if (scatter) specs.push(scatter);
   }
 
   return specs.slice(0, maxCharts);

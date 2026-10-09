@@ -19,6 +19,7 @@ import {
   detectAnomalies, dashboardScoreBreakdown, chartableColumns, type Dataset,
 } from "../lib/data-analysis.ts";
 import { detectAggregateRows } from "../lib/aggregate-rows.ts";
+import { parseDateLike } from "../lib/date-format.ts";
 
 let pass = 0;
 let fail = 0;
@@ -138,10 +139,19 @@ console.log("roles - the chart picker and the summary builder agree");
 
 const dateAndLabel = load("When,Region,Sales\n" + Array.from({ length: 18 }, (_, i) =>
   `${(i % 12) + 1}/15/2025,${["N", "S", "E"][i % 3]},${[120, 340, 99, 780, 210, 455][i % 6]}`).join("\n"));
-check("a date-as-text column never keys a chart",
-  !pickChartSpecs(dateAndLabel, "sales").some((s) => /by When/.test(s.title)),
-  pickChartSpecs(dateAndLabel, "sales").map((s) => s.title).join(", "));
-check("the real label column does", pickChartSpecs(dateAndLabel, "sales").some((s) => /by Region/.test(s.title)));
+// A date column may key a TREND (that is what a date is for, and since
+// Oct 2026 a text date is parsed into real Dates so CSV uploads finally get
+// one). What it must never key is a CATEGORY axis, where it would be read as
+// a set of labels.
+const categoryCharts = pickChartSpecs(dateAndLabel, "sales").filter((s) => s.type !== "area");
+check("a date-as-text column never keys a category axis",
+  !categoryCharts.some((s) => /by When/.test(s.title)),
+  categoryCharts.map((s) => s.title).join(", "));
+check("but it does key a trend over time",
+  pickChartSpecs(dateAndLabel, "sales").some((s) => s.type === "area" && /by When/.test(s.title)),
+  pickChartSpecs(dateAndLabel, "sales").map((s) => `${s.type}:${s.title}`).join(", "));
+check("the real label column keys the category chart",
+  categoryCharts.some((s) => /by Region/.test(s.title)));
 
 const mostlyBlank = load("Website,Region,Sales\n" + Array.from({ length: 60 }, (_, i) =>
   `${i < 3 ? `site${i}.com` : ""},${["N", "S", "E"][i % 3]},${[120, 340, 99, 780, 210, 455][i % 6]}`).join("\n"));
@@ -149,10 +159,13 @@ check("a 95%-blank column never keys a chart",
   !pickChartSpecs(mostlyBlank, "sales").some((s) => /by Website/.test(s.title)),
   pickChartSpecs(mostlyBlank, "sales").map((s) => s.title).join(", "));
 check("and it is not offered as a group key either", !groupingColumns(mostlyBlank).includes("Website"));
-check("every chart category is a label column", (() => {
-  const labels = new Set(groupingColumns(dateAndLabel));
-  return pickChartSpecs(dateAndLabel, "").every((s) => [...labels].some((l) => s.title.includes(l.replace(/_/g, " "))));
-})());
+check("every category chart is keyed on a label column", (() => {
+  const labels = groupingColumns(dateAndLabel);
+  // area is keyed on a date and scatter on two metrics, by design.
+  return pickChartSpecs(dateAndLabel, "", 4)
+    .filter((s) => s.type !== "area" && s.type !== "scatter")
+    .every((s) => labels.some((l) => s.title.includes(l.replace(/_/g, " "))));
+})(), pickChartSpecs(dateAndLabel, "", 4).map((s) => `${s.type}:${s.title}`).join(" | "));
 
 // ── A non-English export ────────────────────────────────────────────────────
 console.log("roles - a file with no English column names still works");
@@ -335,6 +348,106 @@ check("chartableColumns tells the user what exists and how big it is", (() => {
 })(), JSON.stringify(chartableColumns(manyPlaces)));
 check("and lists the most readable column first",
   chartableColumns(manyPlaces)[0]?.column === "Region", chartableColumns(manyPlaces)[0]?.column);
+
+// ── Dates become real dates, so a CSV can finally show a trend ─────────────
+console.log("dates - a trend over time used to be impossible for any CSV");
+
+check("a US-style text date column becomes real Dates", (() => {
+  const ds = load("When,Sales\n" + Array.from({ length: 24 }, (_, i) =>
+    `${(i % 12) + 1}/15/2026,${100 + i}`).join("\n"));
+  return ds.rows.every((r) => r.When instanceof Date);
+})());
+check("and a trend chart appears, which never happened for a CSV before", (() => {
+  const ds = load("When,Sales\n" + Array.from({ length: 24 }, (_, i) =>
+    `${(i % 12) + 1}/15/2026,${100 + i}`).join("\n"));
+  return pickChartSpecs(ds, "", 4).some((c) => c.type === "area");
+})());
+check("day-first is settled by a single day past the 12th", (() => {
+  // 25/03 can only be day-first. Every other row must follow that decision.
+  const ds = load("When,Sales\n25/03/2026,100\n04/03/2026,110\n05/03/2026,120\n06/03/2026,130");
+  const d = ds.rows[1].When as Date;
+  return d instanceof Date && d.getUTCMonth() === 2 && d.getUTCDate() === 4;
+})(), String(load("When,Sales\n25/03/2026,100\n04/03/2026,110\n05/03/2026,120\n06/03/2026,130").rows[1].When));
+check("month-first is settled the same way", (() => {
+  const ds = load("When,Sales\n03/25/2026,100\n03/04/2026,110\n03/05/2026,120\n03/06/2026,130");
+  const d = ds.rows[1].When as Date;
+  return d instanceof Date && d.getUTCMonth() === 2 && d.getUTCDate() === 4;
+})());
+check("ISO dates need no guessing", (() => {
+  const ds = load("When,Sales\n" + Array.from({ length: 12 }, (_, i) =>
+    `2026-${String((i % 12) + 1).padStart(2, "0")}-15,${100 + i}`).join("\n"));
+  const d = ds.rows[0].When as Date;
+  return d instanceof Date && d.getUTCFullYear() === 2026 && d.getUTCDate() === 15;
+})());
+check("an impossible date is rejected rather than rolled into next month",
+  parseDateLike("02/31/2026", "month-first") === null);
+check("Oracle's DD-MON-YYYY parses", (() => {
+  const d = parseDateLike("31-MAR-2025", "month-first");
+  return d instanceof Date && d.getUTCMonth() === 2 && d.getUTCDate() === 31;
+})());
+check("a trend is never drawn from a barely-populated date column", (() => {
+  // One date column 5% filled, one 100% filled: coaster_db's exact shape,
+  // where the first-match loop used to pick the 5% one.
+  const ds = load("Sparse,Full,Sales\n" + Array.from({ length: 40 }, (_, i) =>
+    `${i < 2 ? `1/${(i % 28) + 1}/2026` : ""},${(i % 12) + 1}/15/2026,${100 + i}`).join("\n"));
+  const area = pickChartSpecs(ds, "", 4).find((c) => c.type === "area");
+  return !!area && /by Full/.test(area.title);
+})());
+check("a file with numbers and dates but no category still gets a chart", (() => {
+  const ds = load("When,Amount\n" + Array.from({ length: 20 }, (_, i) =>
+    `${(i % 12) + 1}/15/2026,${100 + i * 7}`).join("\n"));
+  return pickChartSpecs(ds, "", 4).length > 0;
+})());
+
+// ── The two charts built from figures that were already being computed ─────
+console.log("charts - scatter and grouped bar");
+
+const twoCats = load("Region,Segment,Sales,Cost\n" + Array.from({ length: 120 }, (_, i) =>
+  `${["N", "S", "E", "W"][i % 4]},${["Retail", "Trade"][i % 2]},${[120, 340, 99, 780][i % 4]},${[60, 150, 40, 300][i % 4]}`).join("\n"));
+const grouped = pickChartSpecs(twoCats, "", 4).find((c) => c.type === "groupedBar");
+check("two low-cardinality labels produce a grouped bar", !!grouped, "(none)");
+check("the wider column goes on the axis and the narrower becomes the series",
+  grouped?.groups?.names.length === 2 && grouped?.groups?.rows.length === 4,
+  `series=${JSON.stringify(grouped?.groups?.names)} rows=${grouped?.groups?.rows.length}`);
+check("never more than four series, the colour ceiling", (() => {
+  const many = load("Region,Many,Sales\n" + Array.from({ length: 120 }, (_, i) =>
+    `${["N", "S"][i % 2]},${["a", "b", "c", "d", "e"][i % 5]},${100 + i}`).join("\n"));
+  const g = pickChartSpecs(many, "", 4).find((c) => c.type === "groupedBar");
+  return !g || (g.groups?.names.length ?? 0) <= 4;
+})());
+
+// Related but not identical: a perfect pair would be caught by the
+// duplicate-column filter, which is itself one of the cases tested below.
+const wobble = [0, 14, -9, 22, -17, 6, 30, -25, 11, -3];
+const correlated = load("A,B,Label\n" + Array.from({ length: 80 }, (_, i) =>
+  `${i * 3 + wobble[i % wobble.length]},${i * 5 + wobble[(i * 3) % wobble.length] * 4},${["x", "y"][i % 2]}`).join("\n"));
+const scatter = pickChartSpecs(correlated, "", 4).find((c) => c.type === "scatter");
+check("two related metrics produce a scatter", !!scatter, "(none)");
+check("it carries the paired points", (scatter?.scatter?.points.length ?? 0) > 10);
+check("and states that correlation is not causation",
+  !!scatter?.note?.includes("not proof that one causes the other"), scatter?.note ?? "");
+check("a duplicate column is not reported as a finding", (() => {
+  // Inversions vs Inversions_clean in coaster_db: r = 1.00, which says only
+  // that the file has the same column twice.
+  const dup = load("A,A_copy,Label\n" + Array.from({ length: 60 }, (_, i) =>
+    `${100 + i},${100 + i},${["x", "y"][i % 2]}`).join("\n"));
+  return !pickChartSpecs(dup, "", 4).some((c) => c.type === "scatter");
+})());
+check("an unrelated pair produces no scatter at all", (() => {
+  // Deterministic pseudo-random, so the test cannot flake.
+  let seed = 7;
+  const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const rows = Array.from({ length: 200 }, (_, i) =>
+    `${Math.round(next() * 1000)},${Math.round(next() * 1000)},${["x", "y"][i % 2]}`);
+  const ds = load("A,B,Label\n" + rows.join("\n"));
+  return !pickChartSpecs(ds, "", 4).some((c) => c.type === "scatter");
+})());
+check("a scatter never pairs an identifier with a metric", (() => {
+  const ds = load("Row ID,Sales,Label\n" + Array.from({ length: 60 }, (_, i) =>
+    `${i + 1},${100 + i},${["x", "y"][i % 2]}`).join("\n"));
+  const sc = pickChartSpecs(ds, "", 4).find((c) => c.type === "scatter");
+  return !sc || (sc.scatter?.x !== "Row ID" && sc.scatter?.y !== "Row ID");
+})());
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
