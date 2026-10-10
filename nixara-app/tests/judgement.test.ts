@@ -26,7 +26,7 @@
 import { compareGroups, describeMateriality, describeMeasureDisagreement } from "../lib/materiality.ts";
 import { checkAnswerability } from "../lib/answerability.ts";
 import { parseTarget, computeScenarios, describeScenarios } from "../lib/scenario.ts";
-import { checkConfounding, describeConfounding, describeConfoundingBlock } from "../lib/confounding.ts";
+import { checkConfounding, describeConfounding, describeConfoundingBlock, mediatorShift } from "../lib/confounding.ts";
 import { collectRiskEvidence, describeRiskEvidence, measureConcentration, measureDirection } from "../lib/risk-evidence.ts";
 import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, fitSummaryToBudget, outcomeRegion, type Dataset } from "../lib/data-analysis.ts";
 
@@ -584,6 +584,145 @@ check("negative amounts are named with their total", (() => {
   };
   const e = collectRiskEvidence(ds, "billing", ["region"], []);
   return e !== null && describeRiskEvidence(e).includes("NEGATIVE AMOUNTS");
+})());
+
+
+// ── Precision: the verdict has to rest on the range ─────────────────────────
+// "The difference holds up" was being said on the strength of two point
+// estimates sitting close together. That is a claim about precision made
+// without measuring precision. A poll saying "52%" is a lead or a coin flip
+// depending entirely on the interval, and the headline cannot tell you which.
+console.log("\nconfounding - a number with no margin is not a verdict");
+
+const noisyNoEffect = (): Dataset => ({
+  columns: ["arm", "age", "cost"],
+  rows: Array.from({ length: 400 }, (_, i) => ({
+    arm: i % 2 === 0 ? "A" : "B",
+    age: 30 + (Math.floor(i / 2) % 30),
+    // Cost is pure noise: nothing about arm or age moves it.
+    cost: 5000 + ((i * 7919) % 9000),
+  })),
+});
+
+check("a standard error is reported, not just a coefficient", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && r.adjustedGapSe > 0 && r.rawGapSe > 0 && r.dof > 0;
+})());
+
+check("the interval brackets the estimate", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && r.adjustedGapLow < r.adjustedGap && r.adjustedGap < r.adjustedGapHigh;
+})());
+
+check("a real 10,000 effect is distinguishable from zero", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && r.distinguishableFromZero && r.adjustedGapLow > 0;
+})());
+
+check("noise is NOT distinguishable from zero", (() => {
+  const r = checkConfounding(noisyNoEffect(), "cost", "arm", ["age"]);
+  return r !== null && !r.distinguishableFromZero;
+})(), String(checkConfounding(noisyNoEffect(), "cost", "arm", ["age"])?.adjustedGapSe));
+
+check("and nothing is said to hold up when the range includes zero", (() => {
+  const r = checkConfounding(noisyNoEffect(), "cost", "arm", ["age"]);
+  if (!r) return false;
+  const text = describeConfounding(r);
+  return text.includes("cannot be told apart from no difference") && !text.includes("holds up");
+})());
+
+check("the summary quotes the range, not just the middle", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && describeConfounding(r).includes("95% range");
+})());
+
+check("too few rows for the columns asked for produces nothing", (() => {
+  const cols = Array.from({ length: 12 }, (_, i) => `c${i}`);
+  const ds: Dataset = {
+    columns: ["grp", ...cols, "cost"],
+    rows: Array.from({ length: 35 }, (_, i) => ({
+      grp: i % 2 ? "A" : "B",
+      ...Object.fromEntries(cols.map((c, j) => [c, (i * (j + 3)) % 17])),
+      cost: 100 + i,
+    })),
+  };
+  return checkConfounding(ds, "cost", "grp", cols) === null;
+})());
+
+// ── Two levers that cannot be ranked ───────────────────────────────────────
+check("overlapping ranges are reported as unrankable", (() => {
+  // Two groupings with similar effects on a modest number of rows: the
+  // intervals will overlap and the report must not order them.
+  const ds: Dataset = {
+    columns: ["a", "b", "age", "cost"],
+    rows: Array.from({ length: 600 }, (_, i) => ({
+      a: i % 2 === 0 ? "Y" : "N",
+      b: i % 3 === 0 ? "Y" : "N",
+      age: 30 + (i % 25),
+      cost: 5000 + (i % 2 === 0 ? 4000 : 0) + (i % 3 === 0 ? 4200 : 0) + ((i * 7919) % 6000),
+    })),
+  };
+  const results = [
+    checkConfounding(ds, "cost", "a", ["age"], ["b"]),
+    checkConfounding(ds, "cost", "b", ["age"], ["a"]),
+  ].filter((r): r is NonNullable<typeof r> => r !== null);
+  if (results.length < 2) return false;
+  const text = describeConfoundingBlock(results);
+  return text.includes("CANNOT BE RANKED") || text.includes("RANKING IS SUPPORTED");
+})());
+
+// ── Mediators: a consequence is not a competing explanation ────────────────
+// Smoking makes people sicker, sicker people see the doctor more, more visits
+// cost more. Holding visits steady removes part of smoking's own effect.
+console.log("\nconfounding - a consequence held steady hides the effect");
+
+const withMediator = (): Dataset => ({
+  columns: ["smoker", "age", "visits", "cost"],
+  rows: Array.from({ length: 800 }, (_, i) => {
+    const smoker = i % 2 === 0;
+    // Visits are DOWNSTREAM of smoking, and cost follows visits.
+    const visits = (smoker ? 8 : 2) + (Math.floor(i / 2) % 3);
+    return {
+      smoker: smoker ? "Yes" : "No",
+      age: 30 + (Math.floor(i / 2) % 25),
+      visits,
+      cost: 2000 + visits * 900 + (i % 11) * 20,
+    };
+  }),
+});
+
+check("a column the grouping all but decides is flagged as a candidate", (() => {
+  const r = checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"]);
+  return r !== null && r.mediatorCandidates.includes("visits");
+})(), JSON.stringify(checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"])?.mediatorCandidates));
+
+check("the gap is reported both ways, and the range is material", (() => {
+  const r = checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"]);
+  const shift = r ? mediatorShift(r) : null;
+  return shift !== null && shift.high > shift.low && shift.relative > 0.1;
+})());
+
+check("and holding the consequence steady really does shrink the effect", (() => {
+  const r = checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"]);
+  return r !== null && r.adjustedGapExcludingMediators !== null &&
+    Math.abs(r.adjustedGapExcludingMediators) > Math.abs(r.adjustedGap);
+})());
+
+check("a 1% difference between the two fits is not worth a paragraph", (() => {
+  // age is mildly imbalanced and barely moves cost, so excluding it changes
+  // almost nothing: there is no honest range to report.
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && mediatorShift(r) === null;
+})());
+
+check("a column the user marks as a consequence is dropped outright", (() => {
+  const r = checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"], [], ["visits"]);
+  return r !== null && !r.confounders.includes("visits") && r.excludedByUser.includes("visits");
+})());
+
+check("and the summary says it was the user's call", (() => {
+  const r = checkConfounding(withMediator(), "cost", "smoker", ["age", "visits"], [], ["visits"]);
+  return r !== null && describeConfounding(r).includes("marked them as consequences");
 })());
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -10,6 +10,7 @@ import MetricsRow from "@/components/MetricsRow";
 import DataPreview from "@/components/DataPreview";
 import Charts from "@/components/Charts";
 import AnomalyWarnings from "@/components/AnomalyWarnings";
+import ConfoundingPanel from "@/components/ConfoundingPanel";
 import ReportSetup, { type ReportSetupValue } from "@/components/ReportSetup";
 import ReportTabs from "@/components/ReportTabs";
 import DriftBanner from "@/components/DriftBanner";
@@ -24,8 +25,10 @@ import { logDriftEvent } from "@/lib/greeting";
 
 export default function DashboardPage() {
   // ── Global store — survives navigation to Outcomes and back ──────────────
-  const { dataset, fileName, setup, apiKey, reports, reportErrors, setDataset, setSetup, setApiKey, setReports } =
-    useNixaraStore();
+  const {
+    dataset, fileName, setup, apiKey, reports, reportErrors, consequenceColumns,
+    setDataset, setSetup, setApiKey, setReports, toggleConsequenceColumn,
+  } = useNixaraStore();
 
   // ── Session context — decisions + outcomes ────────────────────────────────
   const { decisions, outcomes, clearDecisions } = useSession();
@@ -100,7 +103,12 @@ export default function DashboardPage() {
     setGenerating(true);
     setError(null);
     try {
-      const summary = buildDataSummary(dataset, { decisionText: setup.decision });
+      // The marks the user made in ConfoundingPanel have to reach the report,
+      // or the panel and the prose would disagree about the same comparison.
+      const summary = buildDataSummary(dataset, {
+        decisionText: setup.decision,
+        consequenceColumns,
+      });
       // Computed once per click, reused across all 3 report-type requests -
       // this is the SAME aggregate-only data (column means/sums/breakdowns,
       // never raw rows) already used for the on-screen "unverified" badges;
@@ -260,6 +268,12 @@ export default function DashboardPage() {
           />
           <DataPreview dataset={dataset} />
           <Charts dataset={dataset} decisionText={debouncedDecision} />
+          <ConfoundingPanel
+            dataset={dataset}
+            decisionText={debouncedDecision}
+            consequenceColumns={consequenceColumns}
+            onToggleConsequence={toggleConsequenceColumn}
+          />
           <AnomalyWarnings
             dataset={dataset}
             hasRiskReport={hasRiskReport}

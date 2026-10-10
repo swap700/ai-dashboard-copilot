@@ -262,13 +262,6 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
  * showing a share of a total is drawn from a figure Nixara computed, and when
  * there is no such figure the bar simply does not appear.
  */
-function exposureShare(text: string): number | null {
-  const m = /(\d+(?:\.\d+)?)\s*%/.exec(text);
-  if (!m) return null;
-  const v = Number(m[1]);
-  return Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
-}
-
 function ExposureBar({ share }: { share: number }) {
   // Red past a third of the whole, amber past a sixth. Those are the same
   // thresholds the concentration check in risk-evidence.ts works from, not a
@@ -306,10 +299,7 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
             </div>
             {risk.exposure && (
               <div className="flex items-center gap-3 mb-2">
-                {(() => {
-                  const share = exposureShare(risk.exposure);
-                  return share === null ? null : <ExposureBar share={share} />;
-                })()}
+                {risk.exposureShare !== null && <ExposureBar share={risk.exposureShare} />}
                 <div className="text-[0.8rem] leading-snug">
                   <span className="text-text-mute">Exposure:</span>{" "}
                   {emphasizeParts(risk.exposure, risk.exposureEvidence)}

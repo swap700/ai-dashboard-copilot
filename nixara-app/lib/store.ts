@@ -26,6 +26,18 @@ interface NixaraState {
   // succeeded are still worth showing (and were still paid for).
   reports: ReportSet | null;
   reportErrors: ReportFailures;
+  /**
+   * Columns the user has marked as consequences of what is being measured,
+   * rather than competing explanations for it.
+   *
+   * Nixara cannot tell the two apart from the data - age-causes-smoking and
+   * smoking-causes-doctor-visits look identical to a correlation - so this is
+   * the one piece of knowledge the user has and the file does not. Held here
+   * rather than in sessionStorage because it belongs to the loaded dataset
+   * and is cleared with it: carrying "doctor visits is a consequence" onto an
+   * unrelated upload would silently drop a column from its analysis.
+   */
+  consequenceColumns: string[];
 }
 
 interface NixaraActions {
@@ -34,6 +46,9 @@ interface NixaraActions {
   setSetup: (setup: ReportSetupValue) => void;
   setApiKey: (key: string) => void;
   setReports: (reports: ReportSet | null, errors?: ReportFailures) => void;
+  /** Mark or unmark a column as a consequence. Clears any generated reports,
+   *  since every controlled comparison in them was computed without it. */
+  toggleConsequenceColumn: (column: string) => void;
 }
 
 const DEFAULT_SETUP: ReportSetupValue = {
@@ -49,10 +64,19 @@ export const useNixaraStore = create<NixaraState & NixaraActions>((set) => ({
   apiKey: "",
   reports: null,
   reportErrors: {},
+  consequenceColumns: [],
 
   setDataset: (dataset, fileName = "") =>
-    set({ dataset, fileName, reports: null, reportErrors: {} }),
+    set({ dataset, fileName, reports: null, reportErrors: {}, consequenceColumns: [] }),
   setSetup: (setup) => set({ setup }),
   setApiKey: (apiKey) => set({ apiKey }),
   setReports: (reports, errors = {}) => set({ reports, reportErrors: errors }),
+  toggleConsequenceColumn: (column) =>
+    set((state) => ({
+      consequenceColumns: state.consequenceColumns.includes(column)
+        ? state.consequenceColumns.filter((c) => c !== column)
+        : [...state.consequenceColumns, column],
+      reports: null,
+      reportErrors: {},
+    })),
 }));

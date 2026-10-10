@@ -27,6 +27,18 @@ import { computeScenarios, describeScenarios } from "./scenario";
 import { checkConfounding, describeConfoundingBlock, type ConfoundingResult } from "./confounding";
 import { collectRiskEvidence, describeRiskEvidence } from "./risk-evidence";
 import {
+  singularize,
+  SUM_KEYWORDS,
+  MEAN_KEYWORDS,
+  SUM_SUBSTRINGS,
+  MEAN_SUBSTRINGS,
+  NON_IDENTIFYING_NAME_WORDS,
+  CONFOUNDER_LEAD_INS,
+  CONFOUNDER_TRAILERS,
+  CONFOUNDER_TRAILERS_VERB_FINAL,
+  CONFOUNDER_SANDWICH,
+} from "./vocabulary";
+import {
   columnsWithRole,
   isMissingValue,
   resolveColumnRoles,
@@ -336,25 +348,10 @@ const GENERIC_STOPWORDS = new Set([
  * "doctor_visits_per_year"), so scoring them lets an unrelated column tie
  * with the one the question is actually about.
  */
-const NON_IDENTIFYING_NAME_WORDS = new Set([
-  "year", "years", "yearly", "annual", "annually", "month", "monthly", "months",
-  "week", "weekly", "weeks", "day", "daily", "days", "quarter", "quarterly",
-  "date", "time", "period", "ytd", "mtd", "qtd", "fy",
-  "usd", "eur", "gbp", "inr", "cad", "aud", "jpy", "chf", "sek", "nok", "dkk",
-  "amt", "num", "no", "qty", "pct", "percent", "total", "sum", "avg", "average",
-  "value", "values", "val", "data", "field", "column", "col",
-]);
+
 
 /** Naive English singularization — strips common plural suffixes. Generic, not domain-specific. */
-function singularize(word: string): string {
-  if (word.length > 5 && word.endsWith("ies")) return word.slice(0, -3) + "y";
-  // Only strip "-es" for the sibilant-plural pattern (boxes->box, matches->match,
-  // wishes->wish) — NOT for words that just add "s" to a base ending in "e"
-  // (rates->rate, sales->sale), which the "s"-strip rule below already handles.
-  if (word.length > 4 && /(?:[sxz]|[cs]h)es$/.test(word)) return word.slice(0, -2);
-  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
-  return word;
-}
+
 
 /** Splits a string (free text OR a column name, including camelCase/snake_case) into normalized tokens. */
 export function tokenize(text: string): string[] {
@@ -459,14 +456,9 @@ export interface ChartColumnSelection {
  * phrases that introduce a confounder are a short, closed list, and they are
  * how a finance or clinical reader always writes it.
  */
-const CONFOUNDER_LEAD_INS = [
-  "caused by", "explained by", "due to", "because of", "driven by",
-  "controlling for", "controlled for", "adjusting for", "adjusted for",
-  "accounting for", "accounted for by", "attributable to", "attributed to",
-  "confounded by", "net of", "after allowing for", "allowing for",
-];
+
 /** The mirror image: "... might explain", where the confounders come first. */
-const CONFOUNDER_TRAILERS = /\b([^.?!;]*?)\s+(?:might|may|could|would)\s+(?:explain|account for|be behind|be driving|be the cause)\b/gi;
+
 
 export function outcomeRegion(question: string): string {
   let out = question;
@@ -476,8 +468,17 @@ export function outcomeRegion(question: string): string {
     const re = new RegExp(`\\b${lead}\\b[^.?!;]*`, "gi");
     out = out.replace(re, " ");
   }
+  out = out.replace(CONFOUNDER_SANDWICH, " ");
+  out = out.replace(CONFOUNDER_TRAILERS_VERB_FINAL, " ");
   out = out.replace(CONFOUNDER_TRAILERS, " ");
-  return out.replace(/\s+/g, " ").trim();
+  // Orphaned punctuation left where a clause was removed. Only cosmetic -
+  // this string is scored, never shown - but a stray " ." in a debug dump
+  // reads as a bug.
+  return out
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .replace(/([.,;:!?])\s*\1+/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
@@ -1282,80 +1283,10 @@ export function detectMalformedEntries(dataset: Dataset): ColumnIssue[] {
  * "Discount Rate" matches "rate" and averages. Adding it to MEAN_KEYWORDS
  * would break the "Discount Amount" case, since mean is checked first.
  */
-const SUM_KEYWORDS = new Set(
-  [
-    "sales", "revenue", "profit", "income", "earnings", "cost", "costs", "price",
-    "amount", "total", "spend", "spending", "expense", "expenses", "budget",
-    "quantity", "qty", "units", "volume", "billing", "charge", "charges", "fee",
-    "fees", "payment", "payments", "count", "visits", "orders", "transactions",
-    // Additive things whose names are single compound words, so they can no
-    // longer be caught by a substring match on "count" and friends.
-    "headcount", "hours", "items", "tickets", "claims", "invoices",
+// SUM_KEYWORDS, MEAN_KEYWORDS and their substring stems moved to
+// lib/vocabulary.ts, with every other language-dependent word list.
 
-    // Not English. A German export's "Umsatz" column is revenue, and it was
-    // being AVERAGED, because the default for an unrecognised name is mean.
-    // Every figure downstream of that is wrong and none of them look wrong:
-    // an average revenue per row is a perfectly plausible number. The
-    // column-role resolver was already made language-aware for identifiers
-    // (Bestellnummer); this is the same gap on the aggregation side.
-    // German
-    "umsatz", "erloes", "erlös", "einnahmen", "kosten", "preis", "betrag", "summe",
-    "menge", "anzahl", "gebuehr", "gebühr", "zahlung", "ausgaben", "gewinn",
-    "verkauf", "stueck", "stück", "honorar", "rechnung", "aufwand",
-    // Spanish and Portuguese
-    "ventas", "venta", "ingresos", "ingreso", "receita", "receitas", "beneficio",
-    "lucro", "coste", "costo", "custo", "precio", "preco", "preço", "importe",
-    "cantidad", "quantidade", "monto", "gasto", "gastos", "pago", "pagos",
-    "factura", "facturacion", "despesa", "despesas", "unidades", "faturamento",
-    // French
-    "ventes", "vente", "recettes", "recette", "revenu", "revenus", "cout", "coût",
-    "couts", "coûts", "prix", "montant", "quantite", "quantité", "depense",
-    "dépense", "depenses", "dépenses", "paiement", "benefice", "bénéfice",
-    "frais", "honoraires", "chiffre",
-    // Italian
-    "vendite", "ricavi", "costi", "prezzo", "quantita", "quantità", "spesa",
-    "spese", "pagamento", "utile", "fatturato",
-    // Dutch
-    "omzet", "opbrengst", "prijs", "bedrag", "aantal", "hoeveelheid", "uitgaven",
-    "winst", "betaling",
-    // Nordic
-    "omsaettning", "omsättning", "omsetning", "intaekter", "intäkter", "indtaegter",
-    "kostnad", "kostnader", "pris", "belop", "beløp", "belopp", "antal", "antall",
-    "mengde", "utgifter", "vinst", "fortjeneste",
-  ].map(singularize)
-);
 
-const MEAN_KEYWORDS = new Set(
-  [
-    "average", "avg", "mean", "rate", "ratio", "margin", "score", "pct", "percent",
-    "percentage", "age", "duration", "tenure", "bmi", "height", "weight", "index",
-    "level", "days", "years", "months", "rating", "satisfaction", "length",
-    "distance", "temperature", "speed", "density", "concentration",
-
-    // Not English, same reason as the sum list above. These are checked
-    // FIRST, so anything here beats the sum list on a collision.
-    // German
-    "durchschnitt", "mittelwert", "quote", "anteil", "prozent", "alter", "dauer",
-    "groesse", "größe", "gewicht", "bewertung", "stufe", "tage", "jahre", "monate",
-    "geschwindigkeit", "laenge", "länge", "verhaeltnis", "verhältnis",
-    // Spanish and Portuguese
-    "promedio", "media", "medio", "medio", "medios", "tasa", "porcentaje",
-    "percentual", "proporcion", "proporción", "proporcao", "proporção", "margen",
-    "margem", "edad", "idade", "duracion", "duración", "duracao", "duração",
-    "altura", "puntuacion", "puntuación", "nota", "calificacion", "nivel", "dias",
-    "días", "anos", "años", "meses", "velocidad", "velocidade",
-    // French
-    "moyenne", "moyen", "taux", "pourcentage", "proportion", "marge", "âge",
-    "duree", "durée", "poids", "taille", "niveau", "jours", "annees", "années",
-    "mois", "vitesse",
-    // Italian
-    "tasso", "percentuale", "proporzione", "margine", "eta", "età", "durata",
-    "altezza", "voto", "livello", "giorni", "anni", "mesi", "velocita", "velocità",
-    // Dutch
-    "gemiddelde", "gemiddeld", "tarief", "percentage", "verhouding", "leeftijd",
-    "duur", "lengte", "niveau", "dagen", "jaren", "maanden", "snelheid",
-  ].map(singularize)
-);
 
 function matchesVocabulary(tokens: string[], vocabulary: Set<string>): boolean {
   return tokens.some((token) => vocabulary.has(token));
@@ -1373,16 +1304,7 @@ function matchesVocabulary(tokens: string[], vocabulary: Set<string>): boolean {
  * Mean stems are checked before sum stems, so "Durchschnittsbetrag" (average
  * amount) resolves to mean rather than being caught by "betrag".
  */
-const MEAN_SUBSTRINGS = [
-  "durchschnitt", "mittelwert", "gemiddeld", "promedio", "moyenne",
-  "percent", "prozent", "prosent", "percentuale", "porcentaje",
-];
-const SUM_SUBSTRINGS = [
-  "umsatz", "betrag", "kosten", "erloes", "erlös", "einnahme", "ausgabe",
-  "gewinn", "anzahl", "gebuehr", "gebühr", "zahlung", "rechnung", "honorar",
-  "fatturato", "faturamento", "omzet", "opbrengst", "importe", "montant",
-  "bedrag", "omsaettning", "omsättning", "omsetning", "kostnad",
-];
+
 
 function matchesSubstring(name: string, stems: string[]): boolean {
   const lower = name.toLowerCase();
@@ -2268,6 +2190,88 @@ export interface DataSummaryOptions {
    * the data it was asked about.
    */
   decisionText?: string;
+  /**
+   * Columns the user has marked as consequences of what is being measured,
+   * rather than competing explanations for it.
+   *
+   * Nixara cannot tell the two apart from the data: age-causes-smoking and
+   * smoking-causes-doctor-visits look identical to a correlation. It can only
+   * suggest candidates. This is the one piece of knowledge the user has and
+   * the file does not, so it is the one thing worth asking them for. Marked
+   * columns are dropped from every controlled comparison.
+   */
+  consequenceColumns?: string[];
+}
+
+
+/**
+ * The controlled comparisons for a dataset, computed the same way the summary
+ * computes them.
+ *
+ * Exported so the UI panel and the prompt summary cannot disagree about what
+ * was held steady. This engine's recurring fault has been two surfaces
+ * answering the same question from two definitions: the anomaly banner and
+ * the summary disagreed about bounded counts, the quality score and the risk
+ * block disagreed about duplicate rows. A panel that recomputed the
+ * adjustment with its own column selection would be the third.
+ */
+export function collectConfounding(
+  dataset: Dataset,
+  question: string,
+  consequenceColumns: string[] = []
+): ConfoundingResult[] {
+  const prepared = dataset;
+  const businessMetrics = businessMetricColumns(prepared);
+  if (businessMetrics.length === 0) return [];
+
+  const labelCols = breakdownColumns(prepared).filter((col) => hasUsableGroupSize(prepared, col));
+  const lowCardCats = labelCols.filter((col) => {
+    const u = new Set(prepared.rows.map((r) => r[col])).size;
+    return u >= 2 && u <= 20;
+  });
+  if (lowCardCats.length === 0) return [];
+
+  // Same primary-metric rule as the summary: ranked first, then the question's
+  // outcome half, and never a bounded count while another named metric exists.
+  const { primaryMetric: ranked } = rankedBusinessMetrics(prepared);
+  let primaryMetric = ranked;
+  const ordered = [...lowCardCats];
+  if (question.trim() !== "") {
+    const outcomeText = outcomeRegion(question);
+    const outcomeTokens = new Set(tokenize(outcomeText));
+    const scoreOf = (c: string) => columnMatchScore(prepared, c, outcomeText, outcomeTokens);
+    const namedMetrics = businessMetrics.filter((m) => scoreOf(m) > 0).sort((a, b) => scoreOf(b) - scoreOf(a));
+    const named = namedMetrics.find((m) => !looksLikeBoundedCount(prepared, m)) ?? namedMetrics[0];
+    if (named) primaryMetric = named;
+
+    const qTokens = new Set(tokenize(question));
+    ordered.sort(
+      (a, b) =>
+        columnMatchScore(prepared, b, question, qTokens) - columnMatchScore(prepared, a, question, qTokens)
+    );
+  }
+  if (!primaryMetric) return [];
+
+  const agg = smartAgg(primaryMetric, prepared.rows.map((r) => r[primaryMetric]).filter((v): v is number => typeof v === "number"));
+  const material = ordered.filter((cat) => {
+    const c = compareGroups(prepared, cat, primaryMetric, agg);
+    return c !== null && c.verdict !== "tied";
+  });
+
+  const numericConfounders = businessMetrics.filter((m) => m !== primaryMetric);
+  const out: ConfoundingResult[] = [];
+  for (const cat of material.slice(0, 3)) {
+    const r = checkConfounding(
+      prepared,
+      primaryMetric,
+      cat,
+      numericConfounders,
+      lowCardCats.filter((c) => c !== cat),
+      consequenceColumns
+    );
+    if (r && (r.confounders.length > 0 || r.categoricalConfounders.length > 0)) out.push(r);
+  }
+  return out;
 }
 
 /** Mirrors build_data_summary: produces the text block sent to the AI report generator. */
@@ -2317,7 +2321,16 @@ function blockPriority(heading: string): number {
  * The first block (dataset shape) is never dropped, and a block that is kept
  * but too long keeps its heading so the model is not left with orphan lines.
  */
-export function fitSummaryToBudget(lines: string[], budget: number): string[] {
+export function fitSummaryToBudget(rawLines: string[], budget: number): string[] {
+  // Several blocks are pushed as ONE array element holding embedded newlines
+  // (describeConfoundingBlock, describeRiskEvidence, describeScenarios). This
+  // pass works line by line, so without flattening first, such a block is a
+  // single 4,000-character "line" that can never be partially kept - and a
+  // block that cannot be partially kept is dropped whole. That is exactly
+  // what happened: the controlled comparison, the most valuable block in the
+  // summary, vanished from a file that had room for it, while four
+  // lower-priority breakdowns stayed.
+  const lines = rawLines.flatMap((line) => line.split("\n"));
   const text = lines.join("\n");
   if (text.length <= budget) return lines;
 
@@ -2849,7 +2862,14 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     const confoundingResults: ConfoundingResult[] = [];
     for (const cat of materialCats.slice(0, 3)) {
       const catConfounders = lowCardCats.filter((c) => c !== cat);
-      const r = checkConfounding(filtered, primaryMetric, cat, numericConfounders, catConfounders);
+      const r = checkConfounding(
+        filtered,
+        primaryMetric,
+        cat,
+        numericConfounders,
+        catConfounders,
+        opts.consequenceColumns ?? []
+      );
       // With nothing to hold steady there is nothing to report: an
       // "adjusted" gap identical to the raw one is noise in the output.
       if (r && (r.confounders.length > 0 || r.categoricalConfounders.length > 0)) {

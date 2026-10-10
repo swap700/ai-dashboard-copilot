@@ -56,7 +56,21 @@ export interface ConfoundingResult {
   highGroup: string;
   lowGroup: string;
   rawGap: number;
+  /** Standard error of the raw gap, from the two groups' own spreads. */
+  rawGapSe: number;
   adjustedGap: number;
+  /** Standard error of the adjusted gap, from the regression. */
+  adjustedGapSe: number;
+  /** 95% interval around the adjusted gap. */
+  adjustedGapLow: number;
+  adjustedGapHigh: number;
+  /**
+   * Whether that interval excludes zero. This is the only basis on which the
+   * output may say a difference "holds up": a point estimate cannot say it.
+   */
+  distinguishableFromZero: boolean;
+  /** Rows minus columns in the fit. */
+  dof: number;
   /** Share of the raw gap the confounders account for, 0 to 1. */
   explainedAway: number;
   /** Numeric confounders held steady in the adjustment. */
@@ -71,15 +85,69 @@ export interface ConfoundingResult {
   balance: BalanceCheck[];
   /** Columns checked for balance but not adjusted for, because the adjustment is capped. */
   checkedOnly: string[];
+  /**
+   * Confounders the grouping strongly predicts, which is the shape of a
+   * CONSEQUENCE rather than a competing explanation.
+   *
+   * Smoking makes people sicker, sicker people see the doctor more, more
+   * visits cost more. Doctor visits are a step on smoking's own path to cost,
+   * not a rival explanation for it, so holding them steady throws away part
+   * of smoking's effect and the adjusted figure comes out too small. Nixara
+   * cannot tell a cause from a consequence from the data - age-causes-smoking
+   * and smoking-causes-visits look identical to a correlation - so it names
+   * the candidates and reports the gap BOTH ways instead of picking one.
+   */
+  mediatorCandidates: string[];
+  /** The adjusted gap with the mediator candidates left out of the fit. */
+  adjustedGapExcludingMediators: number | null;
+  /** Columns the USER marked as consequences. Excluded from the fit outright. */
+  excludedByUser: string[];
   rows: number;
 }
 
-/** Solves (X'X)b = X'y by Gaussian elimination with partial pivoting. */
-function leastSquares(X: number[][], y: number[]): number[] | null {
+/**
+ * The result of a least squares fit: coefficients AND how much each one could
+ * move if you had sampled different rows.
+ *
+ * The first version returned coefficients alone. That is one number with no
+ * margin around it, and the output was still willing to say "the difference
+ * holds up" on the strength of it. A political poll reporting "52% support"
+ * without "plus or minus 3 points" is the same mistake: 52 plus or minus 3 is
+ * a real lead and 52 plus or minus 9 is a coin flip, and the headline figure
+ * cannot tell you which you have. On one test file an adjusted gap came out
+ * at 0.7 from a raw 6,000, and nothing in the output could distinguish a true
+ * zero from a number Nixara simply could not pin down.
+ */
+interface Regression {
+  /** One coefficient per column of X. */
+  beta: number[];
+  /** Standard error of each coefficient. */
+  se: number[];
+  /** Rows minus columns: how much information is left after the fit. */
+  dof: number;
+  /** Residual standard deviation, in the metric's own units. */
+  residualStd: number;
+}
+
+/** 95% two-sided, from the normal approximation. */
+const Z_95 = 1.959964;
+
+/**
+ * Solves (X'X)b = X'y and inverts (X'X) in the same pass, by Gauss-Jordan on
+ * the augmented matrix [X'X | X'y | I]. The inverse is what standard errors
+ * need: se_j = sqrt(s2 * inv(X'X)_jj), where s2 is the residual variance.
+ */
+function leastSquares(X: number[][], y: number[]): Regression | null {
   const n = X[0].length;
+  const rows = X.length;
+  const dof = rows - n;
+  // Without spare rows there is nothing left to estimate the spread from, so
+  // a standard error would be undefined or absurdly wide.
+  if (dof < 10) return null;
+
   const xtx: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
   const xty = new Array<number>(n).fill(0);
-  for (let r = 0; r < X.length; r++) {
+  for (let r = 0; r < rows; r++) {
     const row = X[r];
     for (let i = 0; i < n; i++) {
       xty[i] += row[i] * y[r];
@@ -88,24 +156,56 @@ function leastSquares(X: number[][], y: number[]): number[] | null {
   }
   for (let i = 0; i < n; i++) for (let j = 0; j < i; j++) xtx[i][j] = xtx[j][i];
 
-  // A small ridge term, so a confounder that is perfectly collinear with the
-  // grouping cannot produce a singular matrix and a NaN coefficient.
-  for (let i = 0; i < n; i++) xtx[i][i] += 1e-8;
+  // A small ridge term, scaled to the matrix, so a confounder that is
+  // perfectly collinear with the grouping cannot produce a singular matrix
+  // and a NaN coefficient. Scaled rather than fixed: 1e-8 against a diagonal
+  // of 1e12 is not a regulariser, it is a rounding error.
+  const scale = Math.max(...xtx.map((row, i) => Math.abs(row[i]))) || 1;
+  for (let i = 0; i < n; i++) xtx[i][i] += scale * 1e-10;
 
-  const aug = xtx.map((row, i) => [...row, xty[i]]);
+  // [X'X | X'y | I], width 2n + 1.
+  const aug = xtx.map((row, i) => {
+    const identity = new Array<number>(n).fill(0);
+    identity[i] = 1;
+    return [...row, xty[i], ...identity];
+  });
+  const width = 2 * n + 1;
+
   for (let col = 0; col < n; col++) {
     let pivot = col;
-    for (let r = col + 1; r < n; r++) if (Math.abs(aug[r][col]) > Math.abs(aug[pivot][col])) pivot = r;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(aug[r][col]) > Math.abs(aug[pivot][col])) pivot = r;
+    }
     if (Math.abs(aug[pivot][col]) < 1e-12) return null;
     [aug[col], aug[pivot]] = [aug[pivot], aug[col]];
+    const p = aug[col][col];
+    for (let c = col; c < width; c++) aug[col][c] /= p;
     for (let r = 0; r < n; r++) {
       if (r === col) continue;
-      const f = aug[r][col] / aug[col][col];
-      for (let c = col; c <= n; c++) aug[r][c] -= f * aug[col][c];
+      const f = aug[r][col];
+      if (f === 0) continue;
+      for (let c = col; c < width; c++) aug[r][c] -= f * aug[col][c];
     }
   }
-  const beta = aug.map((row, i) => row[n] / row[i]);
-  return beta.every((b) => Number.isFinite(b)) ? beta : null;
+
+  const beta = aug.map((row) => row[n]);
+  if (!beta.every((b) => Number.isFinite(b))) return null;
+
+  // Residual sum of squares, then the variance per degree of freedom.
+  let rss = 0;
+  for (let r = 0; r < rows; r++) {
+    let fitted = 0;
+    for (let i = 0; i < n; i++) fitted += X[r][i] * beta[i];
+    rss += (y[r] - fitted) ** 2;
+  }
+  const s2 = rss / dof;
+  const se = aug.map((row, i) => {
+    const v = s2 * row[n + 1 + i];
+    return v > 0 ? Math.sqrt(v) : 0;
+  });
+  if (!se.every((v) => Number.isFinite(v))) return null;
+
+  return { beta, se, dof, residualStd: Math.sqrt(s2) };
 }
 
 function std(values: number[]): number {
@@ -191,15 +291,39 @@ function etaSquared(rows: Record<string, unknown>[], col: string, metric: string
 const MAX_ADJUSTED = 8;
 /** Balanced columns named in the prose before it collapses to a count. */
 const MAX_NAMED_BALANCED = 5;
+/**
+ * A standardised difference this large means the grouping all but determines
+ * the column, which is what a consequence looks like from the data's side. A
+ * genuine confounder is usually mildly imbalanced; a mediator is lopsided.
+ * Half a standard deviation is the conventional line for "a large imbalance",
+ * so it is the line used here rather than one invented for this purpose.
+ */
+const MEDIATOR_IMBALANCE = 0.8;
+/**
+ * And the two fits have to actually disagree before it is worth a paragraph.
+ * On one real file the with-and-without figures were 14,711 and 14,867, a 1%
+ * difference, and reporting that as a caveat is noise dressed as rigour.
+ */
+const MEDIATOR_MATERIAL_SHIFT = 0.1;
 
 export function checkConfounding(
   dataset: Dataset,
   metric: string,
   group: string,
   confounders: string[],
-  categoricalConfounders: string[] = []
+  categoricalConfounders: string[] = [],
+  /**
+   * Columns the user has marked as consequences of the grouping. Dropped from
+   * the adjustment entirely, because the user knows something the data does
+   * not contain. Nixara never infers this set; it only ever suggests
+   * candidates (see mediatorCandidates).
+   */
+  userMarkedConsequences: string[] = []
 ): ConfoundingResult | null {
-  const numericCandidates = [...new Set(confounders)].filter((c) => c !== metric && c !== group);
+  const excluded = new Set(userMarkedConsequences);
+  const numericCandidates = [...new Set(confounders)].filter(
+    (c) => c !== metric && c !== group && !excluded.has(c)
+  );
   const buckets = new Map<string, number[]>();
   for (const row of dataset.rows) {
     const v = row[metric];
@@ -224,7 +348,7 @@ export function checkConfounding(
   // as a number and once as a category -- and was named twice in the output.
   const catCandidates = new Map<string, string[]>();
   for (const c of [...new Set(categoricalConfounders)]) {
-    if (c === metric || c === group || numericCandidates.includes(c)) continue;
+    if (c === metric || c === group || numericCandidates.includes(c) || excluded.has(c)) continue;
     const levels = new Set<string>();
     for (const r of dataset.rows) {
       const v = r[c];
@@ -340,27 +464,85 @@ export function checkConfounding(
     return [1, String(r[group]) === highGroup ? 1 : 0, ...adjustNumeric.map((c) => r[c] as number), ...dummies];
   });
   const y = rows.map((r) => r[metric] as number);
-  const beta = leastSquares(X, y);
-  if (!beta) return null;
+  const fit = leastSquares(X, y);
+  if (!fit) return null;
 
-  const adjustedGap = beta[1];
+  // Candidate consequences: chosen confounders the grouping all but
+  // determines. If any, the fit is run a SECOND time without them, so the
+  // reader gets both ends of the honest range instead of one number that may
+  // be too small for a reason the output does not mention.
+  const mediatorCandidates = chosen
+    .filter((c) => c.check.standardisedDifference >= MEDIATOR_IMBALANCE)
+    .map((c) => c.check.column);
+  let adjustedGapExcludingMediators: number | null = null;
+  if (mediatorCandidates.length > 0 && mediatorCandidates.length < chosen.length) {
+    const keepNumeric = adjustNumeric.filter((c) => !mediatorCandidates.includes(c));
+    const keepCats = adjustCats.filter((c) => !mediatorCandidates.includes(c));
+    const X2 = rows.map((r) => {
+      const dummies: number[] = [];
+      for (const c of keepCats) {
+        for (const level of catCandidates.get(c)!.slice(1)) dummies.push(String(r[c]) === level ? 1 : 0);
+      }
+      return [1, String(r[group]) === highGroup ? 1 : 0, ...keepNumeric.map((c) => r[c] as number), ...dummies];
+    });
+    const fit2 = leastSquares(X2, y);
+    if (fit2) adjustedGapExcludingMediators = fit2.beta[1];
+  }
+
+  const adjustedGap = fit.beta[1];
+  const adjustedGapSe = fit.se[1];
+  const half = Z_95 * adjustedGapSe;
+
+  // The raw gap's own standard error: the ordinary two-sample difference of
+  // means. Reported because the raw gap is the headline figure, and it was
+  // just as naked as the adjusted one.
+  const hiVals = hiRows.map((r) => r[metric] as number);
+  const loVals = loRows.map((r) => r[metric] as number);
+  const rawGapSe = Math.sqrt(
+    std(hiVals) ** 2 / hiVals.length + std(loVals) ** 2 / loVals.length
+  );
+
   return {
     metric,
     group,
     highGroup,
     lowGroup,
     rawGap,
+    rawGapSe,
     adjustedGap,
+    adjustedGapSe,
+    adjustedGapLow: adjustedGap - half,
+    adjustedGapHigh: adjustedGap + half,
+    distinguishableFromZero: Math.abs(adjustedGap) > half,
+    dof: fit.dof,
     explainedAway: 1 - adjustedGap / rawGap,
     confounders: adjustNumeric,
     categoricalConfounders: adjustCats,
     balance: ranked.map((r) => r.check),
     checkedOnly: ranked.map((r) => r.check.column).filter((c) => !chosenNames.has(c)),
+    mediatorCandidates,
+    adjustedGapExcludingMediators,
+    excludedByUser: [...excluded],
     rows: rows.length,
   };
 }
 
 const num = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 1 });
+
+/**
+ * The with-and-without range, or null when the distinction does not change
+ * the answer. Exported so the UI panel and the summary apply one rule.
+ */
+export function mediatorShift(
+  c: ConfoundingResult
+): { low: number; high: number; relative: number } | null {
+  if (c.mediatorCandidates.length === 0 || c.adjustedGapExcludingMediators === null) return null;
+  const a = c.adjustedGap;
+  const b = c.adjustedGapExcludingMediators;
+  const relative = a === 0 ? Infinity : Math.abs(b - a) / Math.abs(a);
+  if (relative < MEDIATOR_MATERIAL_SHIFT) return null;
+  return { low: Math.min(a, b), high: Math.max(a, b), relative };
+}
 
 function listWithCap(names: string[], cap: number): string {
   if (names.length <= cap) return names.join(", ");
@@ -373,19 +555,40 @@ export function describeConfounding(c: ConfoundingResult): string {
   const held = [...c.confounders, ...c.categoricalConfounders];
   const heldText = listWithCap(held, 6);
   const share = c.explainedAway;
-  const verdict =
-    Math.abs(share) < 0.1
-      ? `holds up: adjusting for ${heldText} changes it by under 10%`
-      : share > 0.5
-        ? `is mostly explained by ${heldText}, not by ${c.group} itself`
-        : share > 0
-          ? `shrinks by ${(share * 100).toFixed(0)}% once ${heldText} are held steady`
-          : `grows by ${(-share * 100).toFixed(0)}% once ${heldText} are held steady, ` +
-            `so those columns were masking part of it`;
+
+  // The verdict rests on the INTERVAL, never on the point estimate. Saying a
+  // difference "holds up" because two point estimates are close is a claim
+  // about precision made without measuring precision. Where the interval
+  // includes zero, nothing holds up: Nixara cannot tell the adjusted gap
+  // from no gap at all, and that is the finding.
+  let verdict: string;
+  if (!c.distinguishableFromZero) {
+    verdict =
+      `cannot be told apart from no difference once ${heldText} are held steady: the adjusted ` +
+      `figure is ${num(c.adjustedGap)} but its 95% range runs from ${num(c.adjustedGapLow)} to ` +
+      `${num(c.adjustedGapHigh)}, which includes zero. Do NOT report this as a driver or size a ` +
+      `saving from it`;
+  } else if (Math.abs(share) < 0.1) {
+    verdict = `holds up: adjusting for ${heldText} changes it by under 10%`;
+  } else if (share > 0.5) {
+    verdict = `is mostly explained by ${heldText}, not by ${c.group} itself`;
+  } else if (share > 0) {
+    verdict = `shrinks by ${(share * 100).toFixed(0)}% once ${heldText} are held steady`;
+  } else {
+    verdict =
+      `grows by ${(-share * 100).toFixed(0)}% once ${heldText} are held steady, ` +
+      `so those columns were masking part of it`;
+  }
 
   lines.push(
     `  ${c.group}: ${c.highGroup} against ${c.lowGroup} on ${c.metric} is ${num(c.rawGap)} raw ` +
-      `and ${num(c.adjustedGap)} adjusted, across ${c.rows.toLocaleString()} rows. The difference ${verdict}.`
+      `(give or take ${num(Z_95 * c.rawGapSe)}) and ${num(c.adjustedGap)} adjusted ` +
+      `(95% range ${num(c.adjustedGapLow)} to ${num(c.adjustedGapHigh)}), across ` +
+      `${c.rows.toLocaleString()} rows. The difference ${verdict}.`
+  );
+  lines.push(
+    `    Quote the range, not the single adjusted figure: one number implies a precision ` +
+      `${c.rows.toLocaleString()} rows do not support.`
   );
 
   const fmt = (b: BalanceCheck) =>
@@ -420,6 +623,20 @@ export function describeConfounding(c: ConfoundingResult): string {
         `The adjustment is capped so it stays stable.`
     );
   }
+  if (c.excludedByUser.length > 0) {
+    lines.push(
+      `    Left out because the user marked them as consequences of ${c.group}: ` +
+        `${listWithCap(c.excludedByUser, 6)}.`
+    );
+  }
+  const shift = mediatorShift(c);
+  if (shift !== null) {
+    lines.push(
+      `    MAY BE CONSEQUENCES: ${listWithCap(c.mediatorCandidates, 3)}. ${c.group} all but determines ` +
+        `them, so holding them steady may remove part of its own effect. Report ${num(shift.low)} to ` +
+        `${num(shift.high)}, naming those columns.`
+    );
+  }
   return lines.join("\n");
 }
 
@@ -428,6 +645,40 @@ export function describeConfoundingBlock(results: ConfoundingResult[]): string {
   if (results.length === 0) return "";
   const lines = ["CONTROLLED COMPARISON (calculated by Nixara - what survives when the others are held steady)"];
   for (const r of results) lines.push(describeConfounding(r));
+  // Can the levers be RANKED? The user's question was "is smoking or chronic
+  // disease the bigger cost driver", and a report that answers it by putting
+  // the larger point estimate first is answering a question the data may not
+  // settle. On the user's own file smoking adjusts to 13,844-14,139 and
+  // chronic disease at its extreme to 12,781-16,641: the ranges overlap, so
+  // the honest answer is that this file cannot order them.
+  const rankable = results.filter((r) => r.distinguishableFromZero);
+  if (rankable.length >= 2) {
+    const byGap = [...rankable].sort((a, b) => Math.abs(b.adjustedGap) - Math.abs(a.adjustedGap));
+    const overlapping: string[] = [];
+    for (let i = 0; i < byGap.length - 1; i++) {
+      const a = byGap[i];
+      const b = byGap[i + 1];
+      // Two intervals overlap when neither sits entirely above the other.
+      if (Math.min(a.adjustedGapHigh, b.adjustedGapHigh) >= Math.max(a.adjustedGapLow, b.adjustedGapLow)) {
+        overlapping.push(`${a.group} and ${b.group}`);
+      }
+    }
+    if (overlapping.length > 0) {
+      lines.push(
+        `  CANNOT BE RANKED: the 95% ranges for ${overlapping.join(", ")} overlap, so this file ` +
+          `does not establish which is larger. If the question asks which is bigger, say that both ` +
+          `matter and that the data cannot order them, and give both ranges. Do NOT rank them by ` +
+          `the middle figure.`
+      );
+    } else {
+      lines.push(
+        `  RANKING IS SUPPORTED: the 95% ranges do not overlap, in this order - ` +
+          `${byGap.map((r) => `${r.group} (${num(r.adjustedGapLow)} to ${num(r.adjustedGapHigh)})`).join(", ")}. ` +
+          `This ranking may be reported.`
+      );
+    }
+  }
+
   lines.push(
     `  WHAT THIS CANNOT SHOW: adjustment removes only the columns named above. ` +
       `This file is observational, so a difference that survives may still be caused by ` +

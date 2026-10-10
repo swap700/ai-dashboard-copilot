@@ -54,6 +54,16 @@ export interface RiskCard {
    */
   exposure: string | null;
   exposureEvidence: EvidenceResult;
+  /**
+   * The exposure as a share of the whole, 0 to 100, for the bar beside it.
+   *
+   * Taken from a percentage in the text where there is one. Where the model
+   * wrote an absolute amount instead ("$290 million of total billing"), it is
+   * computed against the matching "Total X" figure Nixara itself produced, so
+   * the bar still draws. Null only when neither is available, and then the
+   * Exposure line renders on its own rather than the card looking broken.
+   */
+  exposureShare: number | null;
   signal: string | null;
   consequence: string | null;
   type: "Strategic Risk" | "Operational Risk" | null;
@@ -209,6 +219,59 @@ export function firstFigure(text: string | null): string | null {
   const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|(?<![\d.,/-])[\d,]+\.\d{1,2}(?![\d])(?![.,/-]\d)/.exec(text);
   return m ? m[0] : null;
 }
+
+/**
+ * The exposure as a percentage of the whole.
+ *
+ * A percentage in the text is taken as written. An absolute amount is divided
+ * by the matching total: the prompt requires the exposure to say what it is a
+ * share of, so the metric is named in the same sentence, and Nixara's own
+ * evidence facts carry a "Total <metric> across N rows" entry for every
+ * additive column. Without this the bar silently did not render whenever the
+ * model chose to write money instead of a share.
+ */
+export function exposureShareOf(text: string, facts: EvidenceFact[]): number | null {
+  const pct = /(\d+(?:\.\d+)?)\s*%/.exec(text);
+  if (pct) {
+    const v = Number(pct[1]);
+    return Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
+  }
+
+  // Deliberately NOT firstFigure(), which requires decimals on a currency
+  // amount and so missed the common "$290 million" shape entirely. Here the
+  // first number in the text is the amount, whatever its decoration.
+  const amountM = /\$?\s*([\d,]+(?:\.\d+)?)/.exec(text);
+  if (!amountM) return null;
+  const amount = Number(amountM[1].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  // "$290 million" is 290 in the text and 290,000,000 in the data, so the
+  // magnitude word has to be applied before the division.
+  const magnitude = /\b(million|billion|thousand|bn|mn)\b/i.exec(text);
+  const scaled = magnitude
+    ? amount *
+      ({ thousand: 1e3, mn: 1e6, million: 1e6, bn: 1e9, billion: 1e9 }[magnitude[1].toLowerCase()] ?? 1)
+    : amount;
+
+  // The total it is a share of: a "Total <metric>" fact whose metric name
+  // appears in the same sentence. Totals only, never an average or a maximum,
+  // and never a figure Nixara derived from others.
+  const lower = text.toLowerCase();
+  const totals = facts.filter((f) => {
+    if (f.isPercent || f.formula) return false;
+    const m = /^Total (.+?) across /.exec(f.description);
+    if (!m) return false;
+    const words = m[1].toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+    return words.length > 0 && words.some((w) => lower.includes(w));
+  });
+  if (totals.length !== 1) return null;
+
+  const total = totals[0].value;
+  if (!(total > 0)) return null;
+  const share = (scaled / total) * 100;
+  return share > 0 && share <= 100 ? share : null;
+}
+
 
 /**
  * The individual unverified figures, in the order the report renders them,
@@ -411,6 +474,7 @@ function parseSection(
           name: c.name ?? "Risk",
           exposure: c.exposure ?? null,
           exposureEvidence: c.exposure ? findEvidence(c.exposure, evidenceFacts) : { status: "none" as const },
+          exposureShare: c.exposure ? exposureShareOf(c.exposure, evidenceFacts) : null,
           signal: c.signal ?? null,
           consequence: c.consequence ?? null,
           type: c.type ?? null,

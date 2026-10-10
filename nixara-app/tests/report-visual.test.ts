@@ -12,7 +12,7 @@
  * sibling lines that happened to match got one. Confirmed against a real
  * report where exactly this happened on the middle of three action lines.
  */
-import { buildVisualSections, listUnverifiedFigures, firstFigure, type VisualSection } from "../lib/report-visual.ts";
+import { buildVisualSections, listUnverifiedFigures, firstFigure, type VisualSection, exposureShareOf } from "../lib/report-visual.ts";
 
 let pass = 0;
 let fail = 0;
@@ -74,8 +74,8 @@ console.log("\nlistUnverifiedFigures - names the figure and where it is");
       kind: "topRisks",
       heading: "Top Risks Identified",
       risks: [
-        { name: "A", exposure: "28.4% of total billing", exposureEvidence: none, type: null, signal: "Margins fell 14.2% last quarter.", consequence: "Loss of $9,000.00", signalEvidence: none, consequenceEvidence: unv },
-        { name: "B", exposure: null, exposureEvidence: none, type: null, signal: "Returns hit 7.5% of orders.", consequence: "Brand damage", signalEvidence: unv, consequenceEvidence: none },
+        { name: "A", exposure: "28.4% of total billing", exposureEvidence: none, exposureShare: 28.4, type: null, signal: "Margins fell 14.2% last quarter.", consequence: "Loss of $9,000.00", signalEvidence: none, consequenceEvidence: unv },
+        { name: "B", exposure: null, exposureEvidence: none, exposureShare: null, type: null, signal: "Returns hit 7.5% of orders.", consequence: "Brand damage", signalEvidence: unv, consequenceEvidence: none },
       ],
     },
   ];
@@ -190,6 +190,38 @@ Efficiency gaps appear in medical conditions where the Billing Amount for Obesit
     check(`firstFigure(${JSON.stringify(text)}) is ${JSON.stringify(expected)}`,
       firstFigure(text) === expected, JSON.stringify(firstFigure(text)));
   }
+}
+
+
+// ── The exposure bar needs a number it can draw ─────────────────────────────
+// The bar is the only visual on a risk card. It was drawn from a percentage
+// found in the Exposure text, so whenever the model chose to write an
+// absolute amount instead the bar silently did not appear. An amount is now
+// divided by the matching total Nixara itself computed.
+{
+  const facts = [
+    { value: 1417432042, isPercent: false, description: "Total Billing Amount across 55500 rows" },
+    { value: 25539.32, isPercent: false, description: "Average Billing Amount across 55500 rows" },
+  ];
+  check("a percentage is taken as written",
+    exposureShareOf("20.3% of total Billing Amount", facts) === 20.3,
+    String(exposureShareOf("20.3% of total Billing Amount", facts)));
+  check("a magnitude amount is divided by the matching total", (() => {
+    const share = exposureShareOf("$290 million of total Billing Amount", facts);
+    return share !== null && Math.abs(share - 20.46) < 0.1;
+  })(), String(exposureShareOf("$290 million of total Billing Amount", facts)));
+  check("a plain amount works too", (() => {
+    const share = exposureShareOf("$141,743,204.00 of Billing Amount", facts);
+    return share !== null && Math.abs(share - 10) < 0.1;
+  })(), String(exposureShareOf("$141,743,204.00 of Billing Amount", facts)));
+  check("an average is never used as the denominator",
+    exposureShareOf("$290 million of average Billing", [facts[1]]) === null);
+  check("an amount with no matching total gives null, not a wrong bar",
+    exposureShareOf("$290 million of total Headcount", facts) === null);
+  check("a share over 100% is refused rather than drawn off the end",
+    exposureShareOf("$3 billion of total Billing Amount", facts) === null);
+  check("text with no figure at all gives null",
+    exposureShareOf("most of the book of business", facts) === null);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
