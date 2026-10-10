@@ -300,11 +300,21 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
             {risk.exposure && (
               <div className="flex items-center gap-3 mb-2">
                 {risk.exposureShare !== null && <ExposureBar share={risk.exposureShare} />}
-                <div className="text-[0.8rem] leading-snug">
-                  <span className="text-text-mute">Exposure:</span>{" "}
-                  {emphasizeParts(risk.exposure, risk.exposureEvidence)}
-                  <EvidenceTag result={risk.exposureEvidence} />
-                </div>
+                {/* Where the model gave no name line, the exposure sentence is
+                    already the card's title. Repeating it underneath reads as
+                    a rendering fault, so only the bar and the evidence tag are
+                    shown. */}
+                {risk.name === risk.exposure ? (
+                  <div className="text-[0.8rem] leading-snug">
+                    <EvidenceTag result={risk.exposureEvidence} />
+                  </div>
+                ) : (
+                  <div className="text-[0.8rem] leading-snug">
+                    <span className="text-text-mute">Exposure:</span>{" "}
+                    {emphasizeParts(risk.exposure, risk.exposureEvidence)}
+                    <EvidenceTag result={risk.exposureEvidence} />
+                  </div>
+                )}
               </div>
             )}
             {risk.signal && (

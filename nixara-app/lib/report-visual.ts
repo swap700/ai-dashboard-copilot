@@ -231,11 +231,22 @@ export function firstFigure(text: string | null): string | null {
  * model chose to write money instead of a share.
  */
 export function exposureShareOf(text: string, facts: EvidenceFact[]): number | null {
-  const pct = /(\d+(?:\.\d+)?)\s*%/.exec(text);
+  // A SHARE of a whole, never a rate of change. The prompt requires the
+  // exposure to say what it is a share of, so a genuine share always reads
+  // "20.3% of total Billing Amount". A model that put a direction figure here
+  // instead - "the total is rising ... (+33.2%)" - would otherwise have drawn
+  // a bar a third of the way across, as though a third of the business were
+  // at stake. A signed percentage is a change, and a percentage with no "of"
+  // attached is not a share of anything this code can name.
+  const pct =
+    /(\d+(?:\.\d+)?)\s*%\s+of\b/i.exec(text) ??
+    /\bof\b[^.]{0,40}?(\d+(?:\.\d+)?)\s*%/i.exec(text);
   if (pct) {
+    const signed = new RegExp(`[+\\-\u2212]\\s*${pct[1].replace(".", "\\.")}\\s*%`).test(text);
     const v = Number(pct[1]);
-    return Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
+    return !signed && Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
   }
+  if (/%/.test(text)) return null;
 
   // Deliberately NOT firstFigure(), which requires decimals on a currency
   // amount and so missed the common "$290 million" shape entirely. Here the
@@ -471,7 +482,10 @@ function parseSection(
 
       const flush = (c: Partial<RiskCard>) => {
         risks.push({
-          name: c.name ?? "Risk",
+          // With no name line, the exposure sentence is the best headline
+          // available. The card detects that the two are the same and renders
+          // the sentence once, keeping the bar and the evidence tag.
+          name: c.name ?? c.exposure ?? "Risk",
           exposure: c.exposure ?? null,
           exposureEvidence: c.exposure ? findEvidence(c.exposure, evidenceFacts) : { status: "none" as const },
           exposureShare: c.exposure ? exposureShareOf(c.exposure, evidenceFacts) : null,
@@ -500,6 +514,14 @@ function parseSection(
         const ratingM = /^(?:Likelihood|Impact):\s*/i.exec(l.text);
         const signalM = /^Signal:\s*(.*)$/i.exec(l.text);
         const consequenceM = /^Consequence:\s*(.*)$/i.exec(l.text);
+
+        // A labelled field with no risk open means the model skipped the name
+        // line and led with the field. Seen in production the day Exposure
+        // shipped: every risk began "Exposure: ..." with no name above it, so
+        // this branch never fired, the line fell through to the name branch,
+        // and the card rendered the exposure text as the risk's title with no
+        // bar and no evidence tag. Open a risk instead of losing the field.
+        if (!cur && (exposureM || signalM || consequenceM)) cur = {};
 
         if (exposureM && cur) { cur.exposure = exposureM[1].trim(); continue; }
         if (ratingM && cur) continue;

@@ -98,6 +98,10 @@ Top Risks Identified
 (UP TO 3 risks, numbered from 1. Fewer is correct when the data supports fewer — a report with one traced risk is worth more than three with two invented. For EACH risk use this format:
 [Number]. Risk name
 Exposure: [copy a figure from the RISK EVIDENCE or DERIVED FIGURES block, exactly as written, and say what it is a share of]
+
+The risk name line is MANDATORY and comes first, on its own line, before Exposure. It is a short label for the risk in plain words — "Billing concentrated in one insurer", "Totals inflated by duplicate records" — never a sentence, never a figure, and it must NEVER begin with "Exposure:", "Signal:" or "Consequence:". A risk that starts with a labelled field and no name above it renders without its exposure figure.
+
+The Exposure figure must be a SHARE OF A WHOLE, such as "20.3% of total Billing Amount" or "$13.4m of total Billing Amount". A rate of change is not an exposure: "+33.2% since 2019" says how fast something moved, not how much is at stake. Where the risk is about a direction, put the change in the Signal and give the exposure as the share of the metric the change applies to.
 Signal: [the specific metric or number from the data that flags this]
 Consequence: [what happens if unaddressed, with a number]
 _Strategic Risk_ or _Operational Risk_

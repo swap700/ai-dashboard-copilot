@@ -224,5 +224,55 @@ Efficiency gaps appear in medical conditions where the Billing Amount for Obesit
     exposureShareOf("most of the book of business", facts) === null);
 }
 
+
+// ── A risk that leads with Exposure must not lose it ───────────────────────
+// Seen in production the day Exposure shipped: the model skipped the name
+// line and began every risk with "Exposure: ...". The parser only accepted a
+// labelled field when a risk was already open, so the line fell through to
+// the name branch. Every card rendered the exposure sentence as its title
+// with no bar and no evidence tag.
+{
+  const report = [
+    "### Top Risks Identified",
+    "Exposure: 0.9% of the total Billing Amount, equating to $13,363,704.00 comes from 534 exact repeat rows.",
+    "Signal: The presence of duplicate rows indicates potential overstatement of revenue.",
+    "Consequence: Inaccurate financial reporting.",
+    "_Operational Risk_",
+  ].join("\n");
+  const sections = buildVisualSections(report, "Risk Report", []);
+  const risks = sections.find((s) => s.kind === "topRisks");
+  const card = risks && risks.kind === "topRisks" ? risks.risks[0] : null;
+  check("the exposure is captured even with no name line above it",
+    card !== null && card.exposure !== null && card.exposure.startsWith("0.9%"),
+    JSON.stringify(card?.exposure));
+  check("the signal and consequence still land",
+    card !== null && card.signal !== null && card.consequence !== null);
+  check("the type tag still closes the risk",
+    card !== null && card.type === "Operational Risk");
+  check("and the bar has a share to draw",
+    card !== null && card.exposureShare !== null && Math.abs(card.exposureShare - 0.9) < 0.01,
+    String(card?.exposureShare));
+  check("the headline falls back to the exposure rather than the word Risk",
+    card !== null && card.name === card.exposure);
+}
+
+// A rate of change is not an exposure, and must not draw a bar.
+{
+  const facts = [{ value: 1417432042, isPercent: false, description: "Total Billing Amount across 55500 rows" }];
+  check("a signed change percentage draws no bar",
+    exposureShareOf("The total Billing Amount is rising from $17.6m to $23.5m (+33.2%).", facts) === null,
+    String(exposureShareOf("The total Billing Amount is rising from $17.6m to $23.5m (+33.2%).", facts)));
+  check("a percentage with nothing to be a share OF draws no bar",
+    exposureShareOf("Costs rose 33.2% over the period.", facts) === null,
+    String(exposureShareOf("Costs rose 33.2% over the period.", facts)));
+  check("a genuine share still draws",
+    exposureShareOf("20.3% of total Billing Amount", facts) === 20.3);
+  check("the 'of ... %' word order also draws",
+    exposureShareOf("of total Billing Amount, 12.5% sits with one insurer", facts) === 12.5,
+    String(exposureShareOf("of total Billing Amount, 12.5% sits with one insurer", facts)));
+  check("a percentage that names nothing it is a share of is refused, by design",
+    exposureShareOf("accounts for a 12.5% slice", facts) === null);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
