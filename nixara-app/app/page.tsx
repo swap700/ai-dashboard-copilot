@@ -100,7 +100,7 @@ export default function DashboardPage() {
     setGenerating(true);
     setError(null);
     try {
-      const summary = buildDataSummary(dataset);
+      const summary = buildDataSummary(dataset, { decisionText: setup.decision });
       // Computed once per click, reused across all 3 report-type requests -
       // this is the SAME aggregate-only data (column means/sums/breakdowns,
       // never raw rows) already used for the on-screen "unverified" badges;

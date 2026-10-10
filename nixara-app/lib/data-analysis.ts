@@ -21,6 +21,9 @@ import {
 // date column was a category.
 import { stripAggregateRows } from "./aggregate-rows";
 import { detectColumnDateFormat, parseDateLike } from "./date-format";
+import { compareGroups, describeMateriality, describeMeasureDisagreement } from "./materiality";
+import { checkAnswerability, stem } from "./answerability";
+import { computeScenarios, describeScenarios } from "./scenario";
 import {
   columnsWithRole,
   isMissingValue,
@@ -231,6 +234,32 @@ export function groupingColumns(dataset: Dataset): string[] {
   return columnsWithRole(dataset, "label");
 }
 
+/**
+ * Columns a BREAKDOWN may be keyed on: label columns, plus metric columns
+ * that take only a handful of distinct values.
+ *
+ * A count like chronic_diseases (0 to 5) is both a quantity you can average
+ * and a dimension you can group by, and treating it only as the former cost
+ * a real answer. Asked to rank "smoking cessation, chronic-disease
+ * management and exercise programs", the summary broke down by smoker and
+ * exercise_level and never once by chronic_diseases, because the resolver
+ * had correctly called it a metric and breakdowns only read labels.
+ *
+ * Deliberately not folded into the "label" role: it IS a metric, and
+ * calling it a label would stop it being averaged. Two legitimate uses, one
+ * column.
+ */
+const MAX_DISTINCT_FOR_METRIC_BREAKDOWN = 8;
+
+export function breakdownColumns(dataset: Dataset): string[] {
+  const labels = groupingColumns(dataset);
+  const countLike = businessMetricColumns(dataset).filter((col) => {
+    const distinct = roleInfo(dataset, col)?.distinct ?? 0;
+    return distinct >= 2 && distinct <= MAX_DISTINCT_FOR_METRIC_BREAKDOWN;
+  });
+  return [...labels, ...countLike];
+}
+
 /** Whether grouping by a column leaves usable group sizes. */
 export function hasUsableGroupSize(dataset: Dataset, col: string): boolean {
   return roleInfo(dataset, col)?.usableGroupSize ?? false;
@@ -399,8 +428,23 @@ function columnMatchScore(
   const q = flat(question);
   if (q === "") return 0;
 
-  const name = flat(column);
-  if (name !== "" && (q === name || q.includes(name))) return 100;
+  // BUG FIX (2026-10): this used `q.includes(name)`, a raw substring test.
+  // A three-letter column name matches inside an unrelated word: asked to
+  // "cut annual medical cost ... chronic-disease management", the column
+  // "age" scored a perfect 100 because "management" contains "age", and the
+  // entire report -- every breakdown, every materiality verdict, the whole
+  // target calculation -- came out about patient age instead of cost.
+  //
+  // Matching is now word by word, on stems, so "smoker" matches "smoking"
+  // and "age" matches only the word age. A name is scored by HOW MANY of
+  // its words the question used, so a four-word column the question names
+  // in full outranks a one-word column it mentions in passing.
+  const qStems = new Set(q.split(" ").filter(Boolean).map(stem));
+  const nameWords = flat(column).split(" ").filter(Boolean);
+  if (nameWords.length > 0) {
+    const hits = nameWords.filter((w) => qStems.has(stem(w))).length;
+    if (hits > 0) return 25 * hits + (hits === nameWords.length ? 25 : 0);
+  }
 
   // Does the question quote one of this column's own values?
   const seen = new Set<string>();
@@ -804,6 +848,8 @@ export interface DashboardScoreReason {
     | "gappyColumn"
     | "mixedTypeColumn"
     | "unusableColumns"
+    | "duplicateRows"
+    | "negativeValues"
     | "noMeasurableMetric"
     | "noNumericData"
     | "noGroupingColumn"
@@ -976,6 +1022,43 @@ export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdo
   if (missingRatio > 0.35) deduct("missingData", 10, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
   else if (missingRatio > 0.2) deduct("missingData", 6, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
   else if (missingRatio > 0.08) deduct("missingData", 3, `${(missingRatio * 100).toFixed(1)}% of all cells in the file are blank`);
+
+  // ── 3b. Rows that should not be counted ──────────────────────────────────
+  // Both found in a real 55,500-row healthcare export that scored 100/100:
+  // 534 exactly duplicated rows and 108 negative billing amounts. A
+  // duplicate inflates every total it touches; a negative in an amount
+  // column is a refund or an adjustment, which is a real thing but not the
+  // same thing as a charge, and summing the two together silently nets them.
+  // Only meaningful on a wide file. On four columns, two rows matching is
+  // ordinary: two customers in the same region buying the same product for
+  // the same amount are two real sales, not a duplicated record. Past about
+  // eight columns a full-row match by coincidence is implausible, so the
+  // match is evidence of a duplicated record rather than of similar events.
+  const MIN_COLUMNS_FOR_DUPLICATE_CHECK = 8;
+  const seen = new Set<string>();
+  let duplicates = 0;
+  for (const row of columns.length >= MIN_COLUMNS_FOR_DUPLICATE_CHECK ? rows : []) {
+    const key = columns.map((c) => String(row[c] ?? "")).join("\u0001");
+    if (seen.has(key)) duplicates++;
+    else seen.add(key);
+  }
+  if (duplicates > 0) {
+    const share = duplicates / rows.length;
+    deduct("duplicateRows", share >= 0.05 ? 12 : share >= 0.01 ? 7 : 4,
+      `${duplicates.toLocaleString()} row${duplicates === 1 ? " is an exact duplicate" : "s are exact duplicates"} of another row (${(share * 100).toFixed(1)}% of the file), which inflates every total they appear in`);
+  }
+
+  const negatives = metrics
+    .map((col) => ({ col, n: rows.filter((r) => typeof r[col] === "number" && (r[col] as number) < 0).length }))
+    .filter((x) => x.n > 0)
+    .sort((a, b) => b.n - a.n);
+  if (negatives.length > 0) {
+    const worst = negatives[0];
+    deduct("negativeValues", 5,
+      `${worst.col} contains ${worst.n.toLocaleString()} negative value${worst.n === 1 ? "" : "s"}` +
+      (negatives.length > 1 ? `, as ${negatives.length === 2 ? "does 1 other column" : `do ${negatives.length - 1} other columns`}` : "") +
+      `, which net against the positives in every total unless they are meant to`);
+  }
 
   // ── 4. Shape ─────────────────────────────────────────────────────────────
   // 40, not 20: a 21-column business export is ordinary, and charging it 10
@@ -1966,6 +2049,21 @@ export function rankedBusinessMetrics(
 export interface DataSummaryOptions {
   filterCol?: string;
   filterVal?: string;
+  /**
+   * What the user actually asked.
+   *
+   * Added 2026-10. The chart picker has read the question for a while; the
+   * summary builder never did, and it is the summary that decides what the
+   * model gets to reason about. On a real healthcare file the user asked
+   * about condition, insurer and admission type, and the summary sent
+   * Gender and Blood Type breakdowns, a Gender x Blood Type cross-tab, and
+   * Gender and Blood Type shares. Admission Type was dropped entirely by
+   * the four-breakdown cap, which is why the report's third risk read
+   * "Admission types, not detailed in numeric value, show varied billing
+   * impacts" -- the model was guessing, because it had never been shown
+   * the data it was asked about.
+   */
+  decisionText?: string;
 }
 
 /** Mirrors build_data_summary: produces the text block sent to the AI report generator. */
@@ -1990,7 +2088,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // key a breakdown (see groupingColumns): not dates, not half-numeric. The
   // rest are listed separately so the model is never left to assume a date or
   // a malformed amount column is a category it can group by.
-  const labelCols = groupingColumns(filtered).filter((col) => hasUsableGroupSize(filtered, col));
+  const labelCols = breakdownColumns(filtered).filter((col) => hasUsableGroupSize(filtered, col));
   const otherCatCols = catCols.filter((col) => !labelCols.includes(col));
   lines.push(`Label columns (safe to group by): [${labelCols.join(", ")}]`);
   if (otherCatCols.length > 0) {
@@ -2029,7 +2127,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // "TOP/BOTTOM BY SIGNED ON (TOTAL Order ID)" as the headline figure. There
   // is no safe fallback for a metric that does not exist, so there is none:
   // the metric-based blocks are skipped and row counts are sent instead.
-  const primaryMetric = rankedPrimary;
+  let primaryMetric = rankedPrimary;
 
   if (numericCols.length > 0) {
     lines.push("NUMERIC SUMMARY");
@@ -2066,6 +2164,30 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // (hasUsableGroupSize). The old version scanned every non-numeric column
   // and only filtered on cardinality, which is how "TOP/BOTTOM BY AWARD
   // AMOUNT USD" reached the model on a 39-row file with 39 distinct amounts.
+  // Breakdowns and metrics are both capped, so WHICH of each gets a slot
+  // decides what the model can reason about. Rank both by the question
+  // before the caps apply.
+  //
+  // The metric half matters most. On a file holding both annual_income_usd
+  // and annual_medical_cost_usd, asked to "cut annual medical cost per
+  // member by 8%", the ranker picked income and every breakdown, every
+  // materiality verdict and the whole target calculation came out about the
+  // wrong column. Nothing downstream can recover from that: the figures are
+  // all internally consistent and all about something nobody asked about.
+  const question = opts.decisionText ?? "";
+  if (question.trim() !== "") {
+    const qTokens = new Set(tokenize(question));
+    const byQuestion = (a: string, b: string) =>
+      columnMatchScore(filtered, b, question, qTokens) -
+      columnMatchScore(filtered, a, question, qTokens);
+    labelCols.sort(byQuestion);
+    breakdownMetrics.sort(byQuestion);
+    const named = [...businessMetrics].sort(byQuestion)[0];
+    if (named && columnMatchScore(filtered, named, question, qTokens) > 0) {
+      primaryMetric = named;
+    }
+  }
+
   const lowCardCats = labelCols.filter((col) => {
     const u = new Set(rows.map((r) => r[col])).size;
     return u >= 2 && u <= 20;
@@ -2128,6 +2250,17 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     if (breakdownLines.length > 0) {
       lines.push(`BREAKDOWN BY ${cat.toUpperCase()}`);
       lines.push(...breakdownLines);
+      // Whether the model is allowed to call any of these a target. A
+      // sorted list always has a top, and without this the model named the
+      // top of a list whose groups differed by a quarter of a percent.
+      if (primaryMetric) {
+        const c = compareGroups(filtered, cat, primaryMetric, aggTypeOf(primaryMetric));
+        if (c) {
+          lines.push(`  ${describeMateriality(c)}`);
+          const disagree = describeMeasureDisagreement(c);
+          if (disagree) lines.push(`  ${disagree}`);
+        }
+      }
       lines.push("");
       breakdownCount++;
     }
@@ -2255,6 +2388,25 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
         used += line.length + 1;
       }
       if (kept.length > 1) lines.splice(derivedInsertAt, 0, ...kept, "");
+    }
+  }
+
+  // What the question asks about that this file does not contain. Placed
+  // near the end so it is the last thing read before the model writes, and
+  // phrased as an instruction rather than a note, because a model handed a
+  // gap will reason across it: on a file with no smoking column it called
+  // smoking "significant" and "influential" and then ranked it.
+  if (question.trim() !== "") {
+    const answerable = checkAnswerability(filtered, question);
+    if (answerable.note) {
+      lines.push(answerable.note);
+      lines.push("");
+    }
+
+    const scenario = computeScenarios(filtered, primaryMetric ?? "", labelCols, question);
+    if (scenario) {
+      lines.push(describeScenarios(scenario));
+      lines.push("");
     }
   }
 
