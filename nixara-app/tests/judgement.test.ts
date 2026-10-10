@@ -27,7 +27,7 @@ import { compareGroups, describeMateriality, describeMeasureDisagreement } from 
 import { checkAnswerability } from "../lib/answerability.ts";
 import { parseTarget, computeScenarios, describeScenarios } from "../lib/scenario.ts";
 import { checkConfounding, describeConfounding, describeConfoundingBlock } from "../lib/confounding.ts";
-import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, fitSummaryToBudget, type Dataset } from "../lib/data-analysis.ts";
+import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, fitSummaryToBudget, outcomeRegion, type Dataset } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -409,6 +409,91 @@ check("a file so wide that nothing fits still returns its shape", (() => {
   const lines = ["Rows: 1 | Columns: 1", "", "TOP CORRELATIONS", "  " + "x".repeat(500), ""];
   const out = fitSummaryToBudget(lines, 40).join("\n");
   return out.startsWith("Rows: 1") && !out.includes("TOP CORRELATIONS");
+})());
+
+
+// ── Which metric the question is actually about ─────────────────────────────
+// Two real failures, both from name matching alone. Asked "is smoking or
+// chronic disease the bigger cost driver", the question repeats both words of
+// chronic_diseases and one of annual_medical_cost_usd, so the 0-5 disease
+// count became the outcome. With that fixed, "we reprice next year" tied
+// doctor_visits_per_year against annual_medical_cost_usd on the word "year".
+console.log("\nprimary metric - the outcome, not a word the question repeats");
+
+const repricing = (): Dataset => ({
+  columns: ["smoker", "insurance_plan", "age", "chronic_diseases", "doctor_visits_per_year", "annual_medical_cost_usd"],
+  rows: Array.from({ length: 900 }, (_, i) => ({
+    smoker: i % 5 === 0 ? "Yes" : "No",
+    insurance_plan: ["Basic", "Standard", "Gold"][i % 3],
+    age: 25 + (i % 40),
+    chronic_diseases: i % 6,
+    doctor_visits_per_year: i % 9,
+    annual_medical_cost_usd: 8000 + (i % 5 === 0 ? 14000 : 0) + (i % 6) * 3000 + (i % 37) * 11,
+  })),
+});
+
+// The materiality verdict names the primary metric, so the verdict line for
+// the smoker breakdown is a direct read of which column the whole analysis
+// was run on.
+const smokerVerdict = (question: string): string =>
+  buildDataSummary(repricing(), { decisionText: question })
+    .split("\n")
+    .find((l) => l.includes("smoker") && l.includes("DIFFERENCE")) ?? "(no verdict)";
+
+check("a 0-5 scale the question names is not treated as the outcome",
+  smokerVerdict("Is smoking or chronic disease the bigger cost driver, and which plan carries more risk than it is priced for?")
+    .includes("annual_medical_cost_usd"),
+  smokerVerdict("Is smoking or chronic disease the bigger cost driver, and which plan carries more risk than it is priced for?"));
+
+check("'next year' in the question does not pick the per-year column",
+  smokerVerdict("We reprice next year. What is the bigger cost driver?").includes("annual_medical_cost_usd"),
+  smokerVerdict("We reprice next year. What is the bigger cost driver?"));
+
+check("the per-row leader is the one named beside the per-row figures",
+  smokerVerdict("Is smoking the bigger cost driver?").includes("Yes leads"),
+  smokerVerdict("Is smoking the bigger cost driver?"));
+
+check("and the total leader gets its own caution line", (() => {
+  const out = buildDataSummary(repricing(), { decisionText: "Is smoking the bigger cost driver?" });
+  return out.includes("CAUTION on smoker") && out.includes("No is largest by TOTAL");
+})());
+
+
+check("a column named only in a 'caused by' clause is not the outcome",
+  !outcomeRegion("Rank the savings. Say which differences might be caused by age, BMI or plan mix.").includes("age"),
+  outcomeRegion("Rank the savings. Say which differences might be caused by age, BMI or plan mix."));
+check("and the outcome half of the question is kept intact",
+  outcomeRegion("Cut annual medical cost by 8%. Say which differences might be caused by age or BMI.")
+    .includes("annual medical cost"));
+check("the mirror phrasing is handled too",
+  !outcomeRegion("Cut cost by 8%. Say what age or plan mix might explain.").includes("age"),
+  outcomeRegion("Cut cost by 8%. Say what age or plan mix might explain."));
+check("a question with no confounder clause is returned unchanged",
+  outcomeRegion("Cut billing by 10% next year") === "Cut billing by 10% next year");
+
+check("a controlled comparison is run on the cost column", (() => {
+  const out = buildDataSummary(repricing(), {
+    decisionText: "Is smoking or chronic disease the bigger cost driver? Say which differences might be caused by age or plan mix.",
+  });
+  return out.includes("CONTROLLED COMPARISON") && out.includes("on annual_medical_cost_usd");
+})());
+
+check("an abstract business word is not reported as a missing column", (() => {
+  const out = buildDataSummary(repricing(), { decisionText: "Cut billing exposure by 10% next year" });
+  return !out.includes('refers to "exposure"');
+})());
+
+check("a measurement is never correlated against an identifier", (() => {
+  const ds: Dataset = {
+    columns: ["Room Number", "Age", "Billing Amount"],
+    rows: Array.from({ length: 4000 }, (_, i) => ({
+      "Room Number": 101 + (i % 400),
+      Age: 20 + (i % 60),
+      "Billing Amount": 1000 + (i % 913),
+    })),
+  };
+  const out = buildDataSummary(ds);
+  return !out.includes("Room Number:") || !out.includes("~ Room Number");
 })());
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -314,6 +314,23 @@ const GENERIC_STOPWORDS = new Set([
   "any", "all", "each", "per",
 ]);
 
+/**
+ * Words that appear inside column names but never identify WHICH column.
+ *
+ * Calendar words, units and currency codes are the whole list. They are
+ * common to most names in a file ("annual_income_usd", "annual_cost_usd",
+ * "doctor_visits_per_year"), so scoring them lets an unrelated column tie
+ * with the one the question is actually about.
+ */
+const NON_IDENTIFYING_NAME_WORDS = new Set([
+  "year", "years", "yearly", "annual", "annually", "month", "monthly", "months",
+  "week", "weekly", "weeks", "day", "daily", "days", "quarter", "quarterly",
+  "date", "time", "period", "ytd", "mtd", "qtd", "fy",
+  "usd", "eur", "gbp", "inr", "cad", "aud", "jpy", "chf", "sek", "nok", "dkk",
+  "amt", "num", "no", "qty", "pct", "percent", "total", "sum", "avg", "average",
+  "value", "values", "val", "data", "field", "column", "col",
+]);
+
 /** Naive English singularization — strips common plural suffixes. Generic, not domain-specific. */
 function singularize(word: string): string {
   if (word.length > 5 && word.endsWith("ies")) return word.slice(0, -3) + "y";
@@ -403,6 +420,50 @@ export interface ChartColumnSelection {
    * substituting in silence.
    */
   asked: string | null;
+  /**
+   * True when the question named the primary metric. The second chart only
+   * swaps in a different metric for variety when it did NOT: on a healthcare
+   * file asked about billing, the time chart took Billing Amount and the
+   * category chart then switched to Age, so the one chart keyed on what was
+   * asked about was the one the user had to scroll past.
+   */
+  metricAsked: boolean;
+}
+
+/**
+ * The part of a question that names the OUTCOME, with the part that names
+ * possible explanations removed.
+ *
+ * "Is smoking or chronic disease the bigger cost driver? Say which
+ * differences might be caused by age, BMI or plan mix." Everything after
+ * "caused by" is a list of things to hold steady, not the thing to measure.
+ * Scoring the whole question made `age` the outcome -- a one-word column
+ * name matched in full outranks a four-word one matched in part -- and the
+ * entire report came out about how age is distributed.
+ *
+ * This is the smallest piece of question structure worth reading: the
+ * phrases that introduce a confounder are a short, closed list, and they are
+ * how a finance or clinical reader always writes it.
+ */
+const CONFOUNDER_LEAD_INS = [
+  "caused by", "explained by", "due to", "because of", "driven by",
+  "controlling for", "controlled for", "adjusting for", "adjusted for",
+  "accounting for", "accounted for by", "attributable to", "attributed to",
+  "confounded by", "net of", "after allowing for", "allowing for",
+];
+/** The mirror image: "... might explain", where the confounders come first. */
+const CONFOUNDER_TRAILERS = /\b([^.?!;]*?)\s+(?:might|may|could|would)\s+(?:explain|account for|be behind|be driving|be the cause)\b/gi;
+
+export function outcomeRegion(question: string): string {
+  let out = question;
+  for (const lead of CONFOUNDER_LEAD_INS) {
+    // Everything from the lead-in to the end of that sentence is the
+    // confounder list. The rest of the question is untouched.
+    const re = new RegExp(`\\b${lead}\\b[^.?!;]*`, "gi");
+    out = out.replace(re, " ");
+  }
+  out = out.replace(CONFOUNDER_TRAILERS, " ");
+  return out.replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -441,8 +502,17 @@ function columnMatchScore(
   // and "age" matches only the word age. A name is scored by HOW MANY of
   // its words the question used, so a four-word column the question names
   // in full outranks a one-word column it mentions in passing.
+  // Words that are in the name but carry no identifying weight do not score.
+  // "next year" in a question matched "per_year" in doctor_visits_per_year,
+  // which tied it with annual_medical_cost_usd on the word "cost" and then
+  // won the tie, so a repricing question produced a report about doctor
+  // visits. A calendar word, a unit and a currency code say nothing about
+  // WHICH column is meant: they appear in most column names in the file.
   const qStems = new Set(q.split(" ").filter(Boolean).map(stem));
-  const nameWords = flat(column).split(" ").filter(Boolean);
+  const nameWords = flat(column)
+    .split(" ")
+    .filter(Boolean)
+    .filter((w) => !NON_IDENTIFYING_NAME_WORDS.has(w) && !GENERIC_STOPWORDS.has(w));
   if (nameWords.length > 0) {
     const hits = nameWords.filter((w) => qStems.has(stem(w))).length;
     if (hits > 0) return 25 * hits + (hits === nameWords.length ? 25 : 0);
@@ -525,7 +595,7 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
   // metrics and a date column and was getting no chart at all, because this
   // bailed out on the missing category before the caller could ask about the
   // time axis.
-  if (metricCols.length === 0) return { category: null, metrics: [], asked: null };
+  if (metricCols.length === 0) return { category: null, metrics: [], asked: null, metricAsked: false };
 
   const question = decisionText ?? "";
   const questionTokens = new Set(tokenize(question));
@@ -535,10 +605,11 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
     (a, b) => score(b) - score(a) || questionPosition(b, question) - questionPosition(a, question)
   );
   const metrics = metricCandidates.slice(0, 2);
+  const metricAsked = metrics.length > 0 && score(metrics[0]) > 0;
 
   // No label column is not the end of the road: a trend over time needs a
   // metric and a date, not a category.
-  if (cats.length === 0) return { category: null, metrics, asked: null };
+  if (cats.length === 0) return { category: null, metrics, asked: null, metricAsked };
 
   // The highest-scoring label column wins. There is no longer a cardinality
   // veto here: a column with 280 values is charted with its tail collapsed
@@ -556,7 +627,7 @@ export function selectChartColumns(dataset: Dataset, decisionText: string): Char
   const category = catCandidates[0] ?? null;
   const asked = (catScores.get(catCandidates[0] ?? "") ?? 0) > 0 ? catCandidates[0] : null;
 
-  return { category, metrics, asked };
+  return { category, metrics, asked, metricAsked };
 }
 
 function mean(values: number[]): number {
@@ -1920,7 +1991,7 @@ function pickGroupedBar(dataset: Dataset, exclude: string | null): ChartSpec | n
 }
 
 export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts = 2): ChartSpec[] {
-  const { category, metrics, asked } = selectChartColumns(dataset, decisionText);
+  const { category, metrics, asked, metricAsked } = selectChartColumns(dataset, decisionText);
   const specs: ChartSpec[] = [];
   const primaryMetric = metrics[0];
 
@@ -1932,6 +2003,17 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
       const data = bucketed;
       const used = data.reduce((n, d) => n + d.used, 0);
       const total = data.reduce((n, d) => n + d.total, 0);
+
+      // A last month that is still being filled holds far fewer rows than the
+      // ones before it, and a total over fewer rows draws as a cliff. Nothing
+      // in the data says the business fell off; the month just is not over.
+      // Said on the chart rather than left for the reader to work out.
+      const counts = data.map((d) => d.total);
+      const sortedCounts = [...counts].sort((a, b) => a - b);
+      const medianCount = sortedCounts[Math.floor(sortedCounts.length / 2)];
+      const lastCount = counts[counts.length - 1];
+      const partialLast = how === "sum" && data.length >= 3 && lastCount < medianCount * 0.6;
+
       specs.push({
         type: "area",
         title: `${aggWord(how)} ${humanizeColumnName(primaryMetric)} over time, by ${humanizeColumnName(dateCol)}`,
@@ -1939,14 +2021,20 @@ export function pickChartSpecs(dataset: Dataset, decisionText: string, maxCharts
         agg: how,
         coverage: { used, total },
         data,
-        note: null,
+        note: partialLast
+          ? `${data[data.length - 1].key} holds only ${lastCount} rows against a typical ${medianCount}, so it is probably still being filled. The drop at the end is the period being incomplete, not a fall.`
+          : null,
         unit: dataset.numberFormats?.[primaryMetric]?.traits.unit ?? null,
       });
     }
   }
 
   if (category && primaryMetric && specs.length < maxCharts) {
-    const metric = specs.length > 0 && metrics[1] ? metrics[1] : primaryMetric;
+    // Variety only where the question did not name a metric. Asked to "cut
+    // billing exposure", the user got a time chart of Billing Amount and
+    // then a category chart of Age, because this swapped in the second
+    // metric unconditionally once any chart existed.
+    const metric = !metricAsked && specs.length > 0 && metrics[1] ? metrics[1] : primaryMetric;
     const { agg: how, points: all, used, total } = aggregateBy(dataset, category, metric);
     const { points: data, collapsed } = collapseTail(all, how);
     const cardinality = data.length;
@@ -2473,10 +2561,29 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   if (qTokens !== null) {
     labelCols.sort(byQuestion);
     breakdownMetrics.sort(byQuestion);
-    const named = [...businessMetrics].sort(byQuestion)[0];
-    if (named && columnMatchScore(filtered, named, question, qTokens) > 0) {
-      primaryMetric = named;
-    }
+    // The metric the question names, but never a bounded count or small
+    // ordered scale, however well its name matches.
+    //
+    // Asked "is smoking or chronic disease the bigger cost driver", the
+    // question repeats both words of chronic_diseases and only one of
+    // annual_medical_cost_usd, so the name match picked the 0-5 disease
+    // count as the outcome and the whole report came out about how chronic
+    // disease is distributed instead of what it costs. A question's outcome
+    // is a continuous quantity; a 0-5 scale is one of the things you compare
+    // it ACROSS, which is why the same column is also in labelCols. A
+    // bounded count is only accepted as the outcome when no other named
+    // metric exists at all.
+    // Scored against the outcome half of the question only, so a column named
+    // in a "caused by age, BMI or plan mix" clause cannot become the outcome.
+    const outcomeText = outcomeRegion(question);
+    const outcomeTokens = new Set(tokenize(outcomeText));
+    const scoreOf = (c: string) => columnMatchScore(filtered, c, outcomeText, outcomeTokens);
+    const namedMetrics = [...businessMetrics]
+      .filter((m) => scoreOf(m) > 0)
+      .sort((a, b) => scoreOf(b) - scoreOf(a));
+    const named =
+      namedMetrics.find((m) => !looksLikeBoundedCount(filtered, m)) ?? namedMetrics[0];
+    if (named) primaryMetric = named;
   }
 
   const lowCardCats = labelCols.filter((col) => {
@@ -2537,9 +2644,18 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
       const { agg: how, points } = aggregateBy(filtered, cat, nc);
       // The model is told which operation produced these, so it cannot
       // describe an average as a total in the report text.
+      //
+      // And where every group holds exactly one row, it is told that too. On
+      // a 15-row pre-aggregated export the grouping is legitimate but the
+      // word TOTAL is not: each figure is a single row's value, and the model
+      // was writing "the Northeast total" as though rows had been added up.
+      const singleRowGroups = points.length > 0 && points.every((a) => a.total <= 1);
       breakdownLines.push(
         `  ${how === "sum" ? "TOTAL" : "AVERAGE"} ${nc} by ${cat}: ` +
-          points.map((a) => `${a.key}=${a.value.toFixed(2)}`).join(", ")
+          points.map((a) => `${a.key}=${a.value.toFixed(2)}`).join(", ") +
+          (singleRowGroups
+            ? " [one row per group, so each figure IS that row's value, not a sum or an average across rows - do not describe it as a total]"
+            : "")
       );
     }
     if (breakdownLines.length > 0) {
@@ -2630,12 +2746,18 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     lines.push("");
   }
 
-  if (numericCols.length >= 2) {
+  // Correlations between MEASUREMENTS only. numericCols still holds the
+  // identifier columns, so a hospital export reported "Age ~ Room Number:
+  // -0.001" as one of its top findings. A correlation with a room number is
+  // not a weak finding, it is not a finding -- the number has no magnitude to
+  // correlate with anything.
+  const correlatable = numericCols.filter((col) => businessMetricSet.has(col));
+  if (correlatable.length >= 2) {
     const pairs: { a: string; b: string; r: number; n: number }[] = [];
-    for (let i = 0; i < numericCols.length; i++) {
-      for (let j = i + 1; j < numericCols.length; j++) {
-        const a = numericCols[i];
-        const b = numericCols[j];
+    for (let i = 0; i < correlatable.length; i++) {
+      for (let j = i + 1; j < correlatable.length; j++) {
+        const a = correlatable[i];
+        const b = correlatable[j];
         const result = pairwiseCorrelation(rows, a, b);
         if (result) pairs.push({ a, b, r: result.r, n: result.n });
       }

@@ -75,6 +75,27 @@ const STOP = new Set([
   "one","two","three","both","either","neither","another","other","others","same",
   "good","bad","better","best","worse","worst","new","old","current","future","past",
   "this","next","per","via","etc","ratio","percent","percentage",
+  // Abstract business words. These never name a column in anybody's export,
+  // so reporting one as "not in this file" is always a false alarm, and a
+  // false alarm here is worse than the confabulation the check exists to
+  // prevent: asked to "cut billing exposure by 10%" on a file with a Billing
+  // Amount column, Nixara told the model to state that the file could not
+  // answer the question. The word carrying the meaning was "billing", which
+  // matched; "exposure" is how a finance reader says "what is at stake".
+  "exposure","exposures","burden","headroom","leakage","spend","uplift","run-rate",
+  "performance","efficiency","productivity","profitability","viability","liquidity",
+  "growth","decline","trend","trends","trajectory","momentum","outlook","forecast",
+  "opportunity","opportunities","initiative","initiatives","lever","levers",
+  "strategy","strategic","operational","tactical","priority","priorities",
+  "impact","impacts","value","values","return","returns","benefit","benefits",
+  "baseline","benchmark","variance","volatility","concentration","distribution",
+  "quality","compliance","governance","oversight","accountability",
+  "insight","insights","finding","findings","recommendation","recommendations",
+  "scenario","scenarios","assumption","assumptions","sensitivity","materiality",
+  "explain","explains","explained","explaining","account","accounts","accounted",
+  "controlling","controlled","adjusting","adjusted","allowing","attributable",
+  "stakeholder","stakeholders","business","company","organisation","organization",
+  "team","teams","department","departments","unit","units","portfolio","segment","segments",
 ]);
 
 function words(text: string): string[] {

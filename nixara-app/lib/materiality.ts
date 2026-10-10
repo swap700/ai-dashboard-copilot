@@ -183,10 +183,16 @@ export function describeMateriality(c: GroupComparison): string {
       `of the variation. Report the ranking only with that caveat stated.`
     );
   }
-  const lead = c.agg === "sum" ? c.topByTotal : c.topByAverage;
+  // The per-row leader, always, because both figures in this sentence are
+  // per row: gapToRunnerUp is the gap between group MEANS and variance
+  // explained is computed across rows. Naming the leader by total put the
+  // wrong name on them -- "No leads smoker by 89.2%" on a file where Yes is
+  // 89.2% higher per row and No is only bigger because there are four times
+  // as many of them. Which group is biggest by total is a different fact,
+  // and describeMeasureDisagreement below is where it belongs.
   return (
-    `CLEAR DIFFERENCE: ${lead} leads ${c.label} by ${pct(c.gapToRunnerUp)} over second place, ` +
-    `and ${c.label} explains ${pct(c.varianceExplained)} of the variation in ${c.metric}.`
+    `CLEAR DIFFERENCE: ${c.topByAverage} leads ${c.label} by ${pct(c.gapToRunnerUp)} per row over ` +
+    `second place, and ${c.label} explains ${pct(c.varianceExplained)} of the variation in ${c.metric}.`
   );
 }
 

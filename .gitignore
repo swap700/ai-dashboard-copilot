@@ -36,3 +36,6 @@ Claude outputs/
 
 # build tarballs used for out-of-sandbox verification
 *.tgz
+
+nixara-src.tar.gz
+*.tar.gz

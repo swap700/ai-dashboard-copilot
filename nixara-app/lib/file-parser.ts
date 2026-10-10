@@ -257,6 +257,86 @@ function parseCsv(file: File): Promise<Dataset> {
   });
 }
 
+/** How many rows from the top to consider as a possible header. */
+const MAX_HEADER_SCAN_ROWS = 10;
+/** And how many to measure the sheet's real width from. */
+const WIDTH_SAMPLE_ROWS = 25;
+
+/**
+ * Which row is the header.
+ *
+ * Row 1 was simply assumed to be it. A spreadsheet exported from a reporting
+ * tool usually opens with a title in A1 ("Q3 Billing Summary") and sometimes a
+ * blank row, with the real header two or three rows down. Because ExcelJS's
+ * eachCell only visits populated cells, that title produced a ONE-column
+ * dataset named after the title, and every row of real data collapsed into it.
+ * The file looked unreadable and the user had no way to tell why.
+ *
+ * The test is width: a header row spans the table, a title row does not. So
+ * the sheet's real width is measured over the first rows, and the first row
+ * reaching most of it, with at least two cells and no cell that is a bare
+ * number, is the header. A sheet that is genuinely one column still works,
+ * because then the title row IS most of the width.
+ */
+function findHeaderRow(sheet: ExcelJS.Worksheet): number {
+  let width = 0;
+  const populated: number[] = [];
+  const limit = Math.min(sheet.rowCount, WIDTH_SAMPLE_ROWS);
+  for (let r = 1; r <= limit; r++) {
+    let count = 0;
+    sheet.getRow(r).eachCell(() => count++);
+    populated[r] = count;
+    if (count > width) width = count;
+  }
+  if (width === 0) return 1;
+
+  for (let r = 1; r <= Math.min(limit, MAX_HEADER_SCAN_ROWS); r++) {
+    if ((populated[r] ?? 0) < 2 || (populated[r] ?? 0) < width * 0.6) continue;
+    // A row of numbers is data, not a header, however wide it is.
+    let numeric = 0;
+    let cells = 0;
+    sheet.getRow(r).eachCell((cell) => {
+      cells++;
+      const v = cell.value;
+      if (typeof v === "number" || v instanceof Date) numeric++;
+    });
+    if (cells > 0 && numeric / cells > 0.5) continue;
+    return r;
+  }
+  // Nothing looked like a header. Row 1 remains the least surprising answer.
+  return 1;
+}
+
+/**
+ * Header names, with the gaps filled and the repeats made unique.
+ *
+ * ExcelJS skips empty cells, so a blank header in the middle of the row left a
+ * HOLE in this array. A hole reads as `undefined` everywhere downstream, and
+ * the data-quality panel duly reported "undefined is 100% blank" on files that
+ * had nothing wrong with them except an unlabelled column.
+ */
+function excelHeaderNames(sheet: ExcelJS.Worksheet, headerRowNumber: number): string[] {
+  const row = sheet.getRow(headerRowNumber);
+  let lastColumn = 0;
+  row.eachCell((_cell, colNumber) => {
+    if (colNumber > lastColumn) lastColumn = colNumber;
+  });
+
+  const seen = new Map<string, number>();
+  const columns: string[] = [];
+  for (let c = 1; c <= lastColumn; c++) {
+    const raw = row.getCell(c).value;
+    let name = raw === null || raw === undefined ? "" : String(raw).trim();
+    if (name === "") name = `col_${c}`;
+    // Two columns with the same header would overwrite each other in the row
+    // object, silently dropping one column's data.
+    const n = seen.get(name) ?? 0;
+    seen.set(name, n + 1);
+    columns.push(n === 0 ? name : `${name} (${n + 1})`);
+  }
+  return columns;
+}
+
 async function parseExcel(file: File): Promise<Dataset> {
   const buffer = await file.arrayBuffer();
   const workbook = new ExcelJS.Workbook();
@@ -264,15 +344,13 @@ async function parseExcel(file: File): Promise<Dataset> {
   const sheet = workbook.worksheets[0];
   if (!sheet) return { rows: [], columns: [] };
 
-  const headerRow = sheet.getRow(1);
-  const columns: string[] = [];
-  headerRow.eachCell((cell, colNumber) => {
-    columns[colNumber - 1] = String(cell.value ?? `col_${colNumber}`);
-  });
+  const headerRowNumber = findHeaderRow(sheet);
+  const columns = excelHeaderNames(sheet, headerRowNumber);
+  if (columns.length === 0) return { rows: [], columns: [] };
 
   const rows: Row[] = [];
   sheet.eachRow((row, rowNumber) => {
-    if (rowNumber === 1) return;
+    if (rowNumber <= headerRowNumber) return;
     const obj: Row = {};
     columns.forEach((col, idx) => {
       const cell = row.getCell(idx + 1);
@@ -280,8 +358,23 @@ async function parseExcel(file: File): Promise<Dataset> {
         ? (cell.value as { result: unknown }).result
         : cell.value;
     });
-    rows.push(obj);
+    // A row that is entirely empty is spreadsheet padding, not a record. They
+    // were being kept, which inflated the row count and every blank-share
+    // figure derived from it.
+    if (columns.some((col) => obj[col] !== null && obj[col] !== undefined && obj[col] !== "")) {
+      rows.push(obj);
+    }
   });
 
-  return sanitizeDataset({ rows, columns });
+  const dataset = sanitizeDataset({ rows, columns });
+  if (headerRowNumber > 1) {
+    return {
+      ...dataset,
+      warnings: [
+        ...(dataset.warnings ?? []),
+        `Column names were read from row ${headerRowNumber}. The ${headerRowNumber - 1} row${headerRowNumber === 2 ? "" : "s"} above it looked like a title rather than a header, so they were skipped.`,
+      ],
+    };
+  }
+  return dataset;
 }

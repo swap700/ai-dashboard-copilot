@@ -171,5 +171,26 @@ Efficiency gaps appear in medical conditions where the Billing Amount for Obesit
   }
 }
 
+
+// ── A date is not a figure ──────────────────────────────────────────────────
+// The bare-decimal branch used \b boundaries, so "31.03" was pulled out of
+// "31.03.2025" and the report carried an unverified-figure warning about a
+// number that was never a number. European dates are the common case.
+{
+  const cases: [string, string | null][] = [
+    ["Signed on 31.03.2025 the deal closed", null],
+    ["On 2025-03-31 we closed", null],
+    ["Version 1.2.3 shipped", null],
+    ["Margin fell to 1,234.56 last quarter", "1,234.56"],
+    ["Loss of $9,000.00", "$9,000.00"],
+    ["Up 14.2%", "14.2%"],
+    ["Rate 0.55 per unit", "0.55"],
+  ];
+  for (const [text, expected] of cases) {
+    check(`firstFigure(${JSON.stringify(text)}) is ${JSON.stringify(expected)}`,
+      firstFigure(text) === expected, JSON.stringify(firstFigure(text)));
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -13,7 +13,8 @@
  * fabricated $128,982.68, and a column with zero blanks into a reported
  * "35 missing values" data-quality flag.
  */
-import { parseCsvText } from "../lib/file-parser.ts";
+import ExcelJS from "exceljs";
+import { parseCsvText, loadFile } from "../lib/file-parser.ts";
 import { cleanDataset } from "../lib/data-analysis.ts";
 
 let pass = 0;
@@ -109,6 +110,70 @@ console.log("\nCSV read checks - unclosed quotes, column-count mismatches");
 }
 check("cleanDataset keeps the warnings field instead of dropping it",
   cleanDataset({ rows: [], columns: [], warnings: ["x"] }).warnings?.[0] === "x");
+
+
+// ── Excel: the header is not always row 1 ───────────────────────────────────
+// A reporting-tool export opens with a title in A1, often a blank row, and the
+// real header two or three rows down. Row 1 was assumed to be the header, and
+// because ExcelJS only visits populated cells, that title produced a ONE-column
+// dataset named after the title with every row of data collapsed into it. The
+// file looked unreadable with no explanation of why.
+console.log("\nexcel - the header row, the gaps in it, and the repeats");
+
+async function sheetFile(rows: unknown[][]): Promise<File> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("S");
+  for (const r of rows) ws.addRow(r);
+  const buf = await wb.xlsx.writeBuffer();
+  return new File([buf as ArrayBuffer], "t.xlsx", {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+}
+
+{
+  const titled = await loadFile(await sheetFile([
+    ["Q3 Billing Summary"],
+    [],
+    ["Region", "Insurer", "Billing Amount"],
+    ["North", "Cigna", 1200],
+    ["South", "Aetna", 900],
+    [],
+  ]));
+  check("a title row does not become the only column",
+    titled.columns.join(",") === "Region,Insurer,Billing Amount", titled.columns.join(","));
+  check("and the data rows survive", titled.rows.length === 2, String(titled.rows.length));
+  check("and the user is told which row the names came from",
+    (titled.warnings ?? []).some((w) => w.includes("row 3")), JSON.stringify(titled.warnings));
+  check("a trailing blank spreadsheet row is not counted as a record",
+    titled.rows.every((r) => r.Region !== null && r.Region !== undefined));
+
+  const gapped = await loadFile(await sheetFile([
+    ["Region", null, "Billing Amount", "Region"],
+    ["North", "x", 1200, "N"],
+  ]));
+  check("a blank header cell gets a name instead of leaving a hole",
+    gapped.columns.every((c) => typeof c === "string" && c.length > 0), JSON.stringify(gapped.columns));
+  check("specifically col_2, so nothing downstream reads 'undefined'",
+    gapped.columns[1] === "col_2", String(gapped.columns[1]));
+  check("a repeated header name is made unique rather than overwriting",
+    gapped.columns[3] === "Region (2)", String(gapped.columns[3]));
+
+  const plain = await loadFile(await sheetFile([
+    ["Region", "Amount"],
+    ["North", 10],
+    ["South", 20],
+  ]));
+  check("an ordinary sheet still reads its header from row 1",
+    plain.columns.join(",") === "Region,Amount" && plain.rows.length === 2);
+  check("and gets no warning about it", (plain.warnings ?? []).length === 0);
+
+  const numericFirstRow = await loadFile(await sheetFile([
+    ["Region", "Amount"],
+    [1, 2],
+  ]));
+  check("a row of bare numbers is never mistaken for the header",
+    numericFirstRow.columns.join(",") === "Region,Amount", numericFirstRow.columns.join(","));
+}
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

@@ -202,7 +202,11 @@ export interface UnverifiedFigure {
 /** First cited figure in a piece of text: same pattern, same order, as the highlighter in ReportVisual.tsx, so the banner names the figure the reader actually sees underlined. */
 export function firstFigure(text: string | null): string | null {
   if (!text) return null;
-  const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b/.exec(text);
+  // The bare-decimal branch deliberately refuses a run that sits inside a
+  // date or a version string: /\b[\d,]+\.\d{1,2}\b/ pulled "31.03" out of
+  // "31.03.2025" and the report then warned about an unverified figure that
+  // was never a figure. Kept in step with BARE_DECIMAL in lib/evidence.ts.
+  const m = /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|(?<![\d.,/-])[\d,]+\.\d{1,2}(?![\d])(?![.,/-]\d)/.exec(text);
   return m ? m[0] : null;
 }
 

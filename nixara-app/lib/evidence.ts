@@ -36,6 +36,17 @@ import {
   type Dataset,
 } from "./data-analysis";
 
+/**
+ * A bare decimal, but never one that is part of a date or a version string.
+ *
+ * The old pattern was /\b[\d,]+\.\d{1,2}\b/, which matches "31.03" inside
+ * "31.03.2025". A European date in a report therefore produced an unverified
+ * figure, and the report carried a warning about a number that was never a
+ * number. The lookarounds require the run to be bounded by something that is
+ * not another digit group: "1,234.56" matches, "31.03.2025" and "1.2.3" do not.
+ */
+const BARE_DECIMAL = String.raw`(?<![\d.,/-])[\d,]+\.\d{1,2}(?![\d])(?![.,/-]\d)`;
+
 export interface EvidenceFact {
   /** In the same scale the cited text would use: 34.2 for "34.2%", 1234.56 for "$1,234.56". */
   value: number;
@@ -178,7 +189,7 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   // Excludes whole integers (no decimal point) since those are far more
   // likely to be counts/ranks/years-as-labels than a specific measured
   // figure worth verifying, and would produce too many false positives.
-  const bareM = /\b(\d+\.\d{1,2})\b(?!%)/.exec(text);
+  const bareM = new RegExp(`(${BARE_DECIMAL})(?!%)`).exec(text);
   if (bareM) {
     const target = Number(bareM[1]);
     const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
@@ -189,7 +200,7 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
 
 /** Fresh regex per call (a shared /g regex carries lastIndex between uses). */
 function figurePattern(): RegExp {
-  return /\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|\b[\d,]+\.\d{1,2}\b/g;
+  return new RegExp(String.raw`\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|` + BARE_DECIMAL, "g");
 }
 
 function figureIsVerified(token: string, facts: EvidenceFact[]): boolean {
