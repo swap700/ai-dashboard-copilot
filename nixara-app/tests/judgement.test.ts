@@ -26,7 +26,8 @@
 import { compareGroups, describeMateriality, describeMeasureDisagreement } from "../lib/materiality.ts";
 import { checkAnswerability } from "../lib/answerability.ts";
 import { parseTarget, computeScenarios, describeScenarios } from "../lib/scenario.ts";
-import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, type Dataset } from "../lib/data-analysis.ts";
+import { checkConfounding, describeConfounding, describeConfoundingBlock } from "../lib/confounding.ts";
+import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, fitSummaryToBudget, type Dataset } from "../lib/data-analysis.ts";
 
 let pass = 0;
 let fail = 0;
@@ -254,6 +255,160 @@ check("a narrow file is NOT accused of duplicates for ordinary repeats", (() => 
     rows: Array.from({ length: 200 }, (_, i) => ({ Region: ["N", "S"][i % 2], Category: ["A", "B"][i % 2], Sales: 100 })),
   };
   return !dashboardScoreBreakdown(ds).reasons.some((r) => r.key === "duplicateRows");
+})());
+
+
+// ── Controlled comparison ───────────────────────────────────────────────────
+// The two cases that matter are opposite failures. A real effect must survive
+// adjustment, or the module is a gate that blocks everything. A gap that is
+// entirely a confounder's doing must be reported as such, or the module is
+// decoration.
+console.log("\nconfounding - does the gap survive");
+
+// Cost depends ONLY on smoking. Age is identical in both groups.
+const realEffect = (): Dataset => ({
+  columns: ["smoker", "age", "bmi", "cost"],
+  rows: Array.from({ length: 600 }, (_, i) => {
+    const smoker = i % 2 === 0 ? "Yes" : "No";
+    // Age must advance per PAIR of rows, not per row, or the two groups
+    // end up a year apart and the fixture tests the wrong thing.
+    const age = 30 + (Math.floor(i / 2) % 20);
+    return { smoker, age, bmi: 25 + (Math.floor(i / 2) % 7), cost: 5000 + (smoker === "Yes" ? 10000 : 0) + (i % 11) * 50 };
+  }),
+});
+
+// Cost depends ONLY on age. "Treated" rows just happen to all be older.
+const fakeEffect = (): Dataset => ({
+  columns: ["programme", "age", "bmi", "cost"],
+  rows: Array.from({ length: 600 }, (_, i) => {
+    const old = i % 2 === 0;
+    const age = old ? 60 + (i % 10) : 25 + (i % 10);
+    return { programme: old ? "In" : "Out", age, bmi: 25 + (i % 7), cost: 200 * age + (i % 11) * 5 };
+  }),
+});
+
+check("a real effect survives adjustment", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && Math.abs(r.explainedAway) < 0.1 && Math.abs(r.adjustedGap - 10000) < 500;
+})());
+
+check("and the groups are reported as alike on the confounders", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && r.balance.every((b) => b.balanced) && describeConfounding(r).includes("holds up");
+})());
+
+check("a gap that is really age is reported as explained away", (() => {
+  const r = checkConfounding(fakeEffect(), "cost", "programme", ["age", "bmi"]);
+  return r !== null && r.explainedAway > 0.9;
+})());
+
+check("and the imbalance on age is named", (() => {
+  const r = checkConfounding(fakeEffect(), "cost", "programme", ["age", "bmi"]);
+  return r !== null && describeConfounding(r).includes("They do differ on age");
+})());
+
+check("a categorical confounder is held steady, not ignored", (() => {
+  // Cost is set entirely by plan. "North" rows are mostly on the dear plan.
+  const ds: Dataset = {
+    columns: ["region", "plan", "cost"],
+    rows: Array.from({ length: 800 }, (_, i) => {
+      const north = i % 2 === 0;
+      const plan = north ? (i % 10 < 9 ? "Gold" : "Basic") : (i % 10 < 9 ? "Basic" : "Gold");
+      return { region: north ? "North" : "South", plan, cost: plan === "Gold" ? 9000 : 3000 };
+    }),
+  };
+  const r = checkConfounding(ds, "cost", "region", [], ["plan"]);
+  return r !== null && r.categoricalConfounders.includes("plan") && r.explainedAway > 0.9;
+})());
+
+check("a column is never both a numeric and a categorical confounder", (() => {
+  const ds = realEffect();
+  const r = checkConfounding(ds, "cost", "smoker", ["age", "bmi"], ["age", "bmi"]);
+  if (!r) return false;
+  const all = [...r.confounders, ...r.categoricalConfounders];
+  return new Set(all).size === all.length;
+})());
+
+check("the adjustment is capped so the sentence stays readable", (() => {
+  const cols = Array.from({ length: 20 }, (_, i) => `c${i}`);
+  const ds: Dataset = {
+    columns: ["grp", ...cols, "cost"],
+    rows: Array.from({ length: 2000 }, (_, i) => ({
+      grp: i % 2 === 0 ? "A" : "B",
+      ...Object.fromEntries(cols.map((c, j) => [c, (i * (j + 3)) % 50])),
+      cost: 1000 + (i % 2 === 0 ? 500 : 0) + (i % 17),
+    })),
+  };
+  const r = checkConfounding(ds, "cost", "grp", cols);
+  return r !== null && r.confounders.length <= 8 && r.checkedOnly.length > 0;
+})());
+
+check("the block states that a consequence cannot be told from a cause", (() => {
+  const r = checkConfounding(realEffect(), "cost", "smoker", ["age", "bmi"]);
+  return r !== null && describeConfoundingBlock([r]).includes("cannot tell a cause from a consequence");
+})());
+
+check("too few rows produces nothing rather than a confident number", (() => {
+  const ds: Dataset = {
+    columns: ["smoker", "age", "cost"],
+    rows: Array.from({ length: 20 }, (_, i) => ({ smoker: i % 2 ? "Yes" : "No", age: 30 + i, cost: 1000 + i * 10 })),
+  };
+  return checkConfounding(ds, "cost", "smoker", ["age"]) === null;
+})());
+
+
+// ── A wide file must not produce a summary the server refuses ───────────────
+// A 200-column export produced 15,934 characters against an 8,000-character
+// cap, so the request came back 413 and the user saw "report failed" with
+// nothing to act on. Every file must now fit, whatever its shape.
+console.log("\nsummary budget - a wide file still gets a report");
+
+const wideFile = (metrics: number, dims: number, rows: number): Dataset => {
+  const mcols = Array.from({ length: metrics }, (_, i) => `metric_${i}_usd`);
+  const dcols = Array.from({ length: dims }, (_, i) => `dim_${i}`);
+  return {
+    columns: [...mcols, ...dcols],
+    rows: Array.from({ length: rows }, (_, r) => ({
+      ...Object.fromEntries(mcols.map((c, j) => [c, 100 + ((r * (j + 7)) % 9000)])),
+      ...Object.fromEntries(dcols.map((c) => [c, `v${r % 5}`])),
+    })) as Dataset["rows"],
+  };
+};
+
+check("a 200-column file fits under the server's cap",
+  buildDataSummary(wideFile(140, 60, 400), { decisionText: "Cut total costs by 10%" }).length <= 7500,
+  String(buildDataSummary(wideFile(140, 60, 400), { decisionText: "Cut total costs by 10%" }).length));
+
+check("a 500-column file fits too",
+  buildDataSummary(wideFile(500, 0, 50), { decisionText: "reduce cost" }).length <= 7500);
+
+check("and the blocks that constrain what may be claimed are the ones kept", (() => {
+  const out = buildDataSummary(wideFile(140, 60, 400), { decisionText: "Cut total metric_3_usd by 10%" });
+  return out.includes("TARGET ARITHMETIC") && out.includes("Data Quality Score:");
+})());
+
+check("the question's own column is still described on a wide file", (() => {
+  const out = buildDataSummary(wideFile(140, 60, 400), { decisionText: "Cut total metric_77_usd by 10%" });
+  return out.includes("metric_77_usd: count=");
+})());
+
+check("a summary already under budget is returned untouched", (() => {
+  const lines = ["Rows: 3 | Columns: 2", "", "NUMERIC SUMMARY", "  a: 1", ""];
+  return fitSummaryToBudget(lines, 5000).join("\n") === lines.join("\n");
+})());
+
+check("low-priority context is given up before the claim constraints", (() => {
+  const header = ["Rows: 1000 | Columns: 4"];
+  const big = (h: string, n: number) => [h, ...Array.from({ length: n }, (_, i) => `  line ${i} ` + "x".repeat(60))];
+  const lines = [...header, "", ...big("TOP CORRELATIONS", 20), "", ...big("NOT IN THIS FILE: something", 2), ""];
+  const out = fitSummaryToBudget(lines, 600).join("\n");
+  return out.includes("NOT IN THIS FILE") && out.length <= 600;
+})());
+
+check("a file so wide that nothing fits still returns its shape", (() => {
+  const lines = ["Rows: 1 | Columns: 1", "", "TOP CORRELATIONS", "  " + "x".repeat(500), ""];
+  const out = fitSummaryToBudget(lines, 40).join("\n");
+  return out.startsWith("Rows: 1") && !out.includes("TOP CORRELATIONS");
 })());
 
 console.log(`\n${pass} passed, ${fail} failed`);

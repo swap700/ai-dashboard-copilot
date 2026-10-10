@@ -74,8 +74,8 @@ console.log("\nlistUnverifiedFigures - names the figure and where it is");
       kind: "topRisks",
       heading: "Top Risks Identified",
       risks: [
-        { name: "A", likelihood: "medium", impact: "high", type: null, signal: "Margins fell 14.2% last quarter.", consequence: "Loss of $9,000.00", signalEvidence: none, consequenceEvidence: unv },
-        { name: "B", likelihood: "low", impact: "low", type: null, signal: "Returns hit 7.5% of orders.", consequence: "Brand damage", signalEvidence: unv, consequenceEvidence: none },
+        { name: "A", exposure: "28.4% of total billing", exposureEvidence: none, type: null, signal: "Margins fell 14.2% last quarter.", consequence: "Loss of $9,000.00", signalEvidence: none, consequenceEvidence: unv },
+        { name: "B", exposure: null, exposureEvidence: none, type: null, signal: "Returns hit 7.5% of orders.", consequence: "Brand damage", signalEvidence: unv, consequenceEvidence: none },
       ],
     },
   ];

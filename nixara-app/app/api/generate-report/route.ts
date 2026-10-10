@@ -182,8 +182,8 @@ interface GenerateResult {
 
 /**
  * BUG FIX (2026-09): Risk Report structurally has more to say than the other
- * two report types — 3 full risk objects (name + Likelihood + Impact +
- * Signal + Consequence + type tag), plus 3-4 Early Warning Signs, plus one
+ * two report types — up to 3 full risk objects (name + Exposure + Signal +
+ * Consequence + type tag), plus 3-4 Early Warning Signs, plus one
  * Mitigation Action per risk, plus a Data Quality paragraph. A single shared
  * ceiling sized for Executive Summary/Operational Detail leaves Risk Report
  * the most exposed to truncation, and — because Mitigation Actions and Data

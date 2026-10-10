@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import type { VisualSection, Severity, ActionItem } from "@/lib/report-visual";
+import type { VisualSection, ActionItem } from "@/lib/report-visual";
 import type { EvidenceResult } from "@/lib/evidence";
 import type { ColumnIssue, UnmeasuredColumn } from "@/lib/data-analysis";
 import { MIN_METRIC_COVERAGE } from "@/lib/data-analysis";
@@ -254,35 +254,32 @@ function QuickWinsSection({ heading, items }: Extract<VisualSection, { kind: "qu
   );
 }
 
-/* ── Risk matrix: 3x3 severity-gradient grid with the specific risk's cell marked ── */
-const RANK: Record<Severity, number> = { low: 1, medium: 2, high: 3 };
-const ROWS: Severity[] = ["high", "medium", "low"];
-const COLS: Severity[] = ["low", "medium", "high"];
-const TIER_CLASS = { g: "bg-success", a: "bg-warn", r: "bg-danger" };
+/* ── Exposure bar: how much of the whole this risk puts at stake ──────────── */
+/*
+ * This replaced a 3x3 likelihood-by-impact matrix. The matrix looked like
+ * analysis and was drawn entirely from two words the model made up, because
+ * nothing in a single uploaded file says how likely a future event is. A bar
+ * showing a share of a total is drawn from a figure Nixara computed, and when
+ * there is no such figure the bar simply does not appear.
+ */
+function exposureShare(text: string): number | null {
+  const m = /(\d+(?:\.\d+)?)\s*%/.exec(text);
+  if (!m) return null;
+  const v = Number(m[1]);
+  return Number.isFinite(v) && v >= 0 && v <= 100 ? v : null;
+}
 
-function RiskMatrix({ likelihood, impact }: { likelihood: Severity; impact: Severity }) {
-  const cells: { tier: keyof typeof TIER_CLASS; here: boolean }[] = [];
-  for (const r of ROWS) {
-    for (const c of COLS) {
-      const sum = RANK[r] + RANK[c];
-      const tier = sum <= 3 ? "g" : sum === 4 ? "a" : "r";
-      cells.push({ tier, here: r === likelihood && c === impact });
-    }
-  }
+function ExposureBar({ share }: { share: number }) {
+  // Red past a third of the whole, amber past a sixth. Those are the same
+  // thresholds the concentration check in risk-evidence.ts works from, not a
+  // separate opinion about what counts as a lot.
+  const tone = share >= 33 ? "bg-danger" : share >= 16.7 ? "bg-warn" : "bg-success";
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-0.5 w-[46px] h-[46px] shrink-0">
-      {cells.map((cell, i) => (
-        <div
-          key={i}
-          className={`rounded-sm ${TIER_CLASS[cell.tier]} ${cell.here ? "opacity-100 outline outline-2 outline-text outline-offset-1" : "opacity-30"}`}
-        />
-      ))}
+    <div className="w-[70px] h-2 rounded-full bg-border overflow-hidden shrink-0" aria-hidden>
+      <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(share, 2)}%` }} />
     </div>
   );
 }
-
-const SEVERITY_LABEL: Record<Severity, string> = { low: "Low", medium: "Medium", high: "High" };
-const SEVERITY_TEXT_CLASS: Record<Severity, string> = { low: "text-success", medium: "text-warn", high: "text-danger" };
 
 function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "topRisks" }>) {
   return (
@@ -307,14 +304,19 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-4 mb-2">
-              <RiskMatrix likelihood={risk.likelihood} impact={risk.impact} />
-              <div className="text-[0.8rem] text-text-mute">
-                Likelihood <b className={SEVERITY_TEXT_CLASS[risk.likelihood]}>{SEVERITY_LABEL[risk.likelihood]}</b>
-                {"  \u00B7  "}
-                Impact <b className={SEVERITY_TEXT_CLASS[risk.impact]}>{SEVERITY_LABEL[risk.impact]}</b>
+            {risk.exposure && (
+              <div className="flex items-center gap-3 mb-2">
+                {(() => {
+                  const share = exposureShare(risk.exposure);
+                  return share === null ? null : <ExposureBar share={share} />;
+                })()}
+                <div className="text-[0.8rem] leading-snug">
+                  <span className="text-text-mute">Exposure:</span>{" "}
+                  {emphasizeParts(risk.exposure, risk.exposureEvidence)}
+                  <EvidenceTag result={risk.exposureEvidence} />
+                </div>
               </div>
-            </div>
+            )}
             {risk.signal && (
               <div className="text-[0.85rem] leading-snug mb-1">
                 <span className="text-text-mute">Signal:</span> {emphasizeParts(risk.signal, risk.signalEvidence)}

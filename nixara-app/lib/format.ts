@@ -13,6 +13,25 @@
  */
 export function formatNumber(value: number): string {
   if (!Number.isFinite(value)) return "—";
+
+  // Two decimals is right for money and wrong for a small rate. A conversion
+  // rate of 0.0012 rendered as "0", and the anomaly banner then read
+  // "Conversion Rate as low as 0" -- a figure that is not in the data and
+  // that reads as a broken column rather than a small number. Anything
+  // smaller than a hundredth gets enough decimals to survive, capped so a
+  // floating-point tail never leaks into the page. The cut is at a hundredth
+  // rather than at half of one, so that 0.005 does not round to "0.01" and
+  // double itself on the way to the screen.
+  const magnitude = Math.abs(value);
+  if (magnitude > 0 && magnitude < 0.01) {
+    // Three significant figures, which is 0.00120 for 0.0012 and
+    // 0.00000456 for 4.56e-6, then the trailing zeros trimmed.
+    const digits = Math.min(20, Math.ceil(-Math.log10(magnitude)) + 2);
+    return value
+      .toFixed(digits)
+      .replace(/(\.\d*?)0+$/, "$1")
+      .replace(/\.$/, "");
+  }
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 

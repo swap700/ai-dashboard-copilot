@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Dataset } from "@/lib/data-analysis";
-import { describeAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries, humanizeColumnName } from "@/lib/data-analysis";
+import { describeAnomalies, businessMetricColumns, detectMissingValuesByColumn, detectMalformedEntries, humanizeColumnName, looksLikeBoundedCount } from "@/lib/data-analysis";
 import { formatNumber, formatPercent } from "@/lib/format";
 import Tooltip from "@/components/Tooltip";
 
@@ -123,7 +123,14 @@ export default function AnomalyWarnings({ dataset, hasRiskReport, onJumpToDataQu
   // deterministic (no model involved), so "what's actually unusual" is
   // always available here even before a Risk Report is generated.
   const { statisticalDescriptions, realIssueCount } = useMemo(() => {
+    // The same filter buildDataSummary applies, and it was missing here, so
+    // this banner and the report disagreed on the same file: the banner said
+    // "Children up to 5, Chronic Diseases up to 5" was statistically unusual
+    // while the report never mentioned either, because the summary had
+    // already excluded them. A z-score on a 0-5 scale flags the top of the
+    // scale by construction. One definition, used in both places.
     const statistical = businessMetricColumns(dataset)
+      .filter((col) => !looksLikeBoundedCount(dataset, col))
       .map((col) => describeAnomalies(dataset, col))
       .filter((d): d is NonNullable<typeof d> => d !== null);
     const missing = detectMissingValuesByColumn(dataset);

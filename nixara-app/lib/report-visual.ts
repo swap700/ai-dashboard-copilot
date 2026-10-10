@@ -20,7 +20,6 @@ import { parseReportLines, type ReportLine, type ReportType } from "./report";
 import { findEvidence, type EvidenceFact, type EvidenceResult } from "./evidence";
 import type { ColumnIssue, UnmeasuredColumn } from "./data-analysis";
 
-export type Severity = "low" | "medium" | "high";
 
 export interface ActionItem {
   verb: "Decide" | "Restrict" | "Approve" | "Mandate" | null;
@@ -46,8 +45,15 @@ export interface QuickWinItem {
 
 export interface RiskCard {
   name: string;
-  likelihood: Severity;
-  impact: Severity;
+  /**
+   * The share of something this risk puts at stake, copied from a figure
+   * Nixara computed. This replaced a Likelihood/Impact pair of High/Medium/Low
+   * ratings: nothing in a single file supports a probability of a future
+   * event, so the model was inventing both words and a 3x3 matrix was drawn
+   * from them. A share of a total is a number the file actually contains.
+   */
+  exposure: string | null;
+  exposureEvidence: EvidenceResult;
   signal: string | null;
   consequence: string | null;
   type: "Strategic Risk" | "Operational Risk" | null;
@@ -84,21 +90,10 @@ export type VisualSection =
       unmeasured: UnmeasuredColumn[];
     };
 
-const SEVERITY_MAP: Record<string, Severity> = { high: "high", medium: "medium", low: "low" };
-
-function parseSeverity(raw: string | undefined): Severity {
-  if (!raw) return "medium";
-  const key = raw.trim().toLowerCase();
-  if (SEVERITY_MAP[key]) return SEVERITY_MAP[key];
-  // Prompt only allows exact High/Medium/Low, but if the model deviates
-  // (e.g. "Very High"), match by substring rather than silently downgrading
-  // to Medium — understating a stated severity is the worse failure mode
-  // for a risk display. Check "high" first so "Medium-High" reads as High.
-  if (key.includes("high")) return "high";
-  if (key.includes("low")) return "low";
-  if (key.includes("medium")) return "medium";
-  return "medium";
-}
+// A Severity type and its parser lived here. The parser turned the model's
+// "High"/"Medium"/"Low" into a Severity and the risk cards drew a 3x3 matrix
+// from two of them. All of it is gone: the words were invented, not measured,
+// and a risk now carries a computed Exposure figure instead.
 
 function stripNumberPrefix(text: string): string {
   return text.replace(/^\d+\.\s*/, "");
@@ -227,6 +222,12 @@ export function listUnverifiedFigures(sections: VisualSection[]): UnverifiedFigu
       });
     } else if (s.kind === "topRisks") {
       s.risks.forEach((r, i) => {
+        // Exposure is supposed to be a copied figure, so an unverified one is
+        // the most important kind to list: it means the model estimated it.
+        if (r.exposureEvidence.status === "unverified") {
+          const figure = firstFigure(r.exposure);
+          if (figure) out.push({ figure, where: `Risk ${i + 1}, exposure` });
+        }
         if (r.signalEvidence.status === "unverified") {
           const figure = firstFigure(r.signal);
           if (figure) out.push({ figure, where: `Risk ${i + 1}, signal` });
@@ -404,8 +405,8 @@ function parseSection(
       const flush = (c: Partial<RiskCard>) => {
         risks.push({
           name: c.name ?? "Risk",
-          likelihood: c.likelihood ?? "medium",
-          impact: c.impact ?? "medium",
+          exposure: c.exposure ?? null,
+          exposureEvidence: c.exposure ? findEvidence(c.exposure, evidenceFacts) : { status: "none" as const },
           signal: c.signal ?? null,
           consequence: c.consequence ?? null,
           type: c.type ?? null,
@@ -425,13 +426,15 @@ function parseSection(
           continue;
         }
         if (l.kind !== "text") continue;
-        const likelihoodM = /^Likelihood:\s*(.*)$/i.exec(l.text);
-        const impactM = /^Impact:\s*(.*)$/i.exec(l.text);
+        const exposureM = /^Exposure:\s*(.*)$/i.exec(l.text);
+        // The prompt forbids these two, but a model that emits one anyway
+        // must not have it read as the next risk's NAME. Swallowed, not shown.
+        const ratingM = /^(?:Likelihood|Impact):\s*/i.exec(l.text);
         const signalM = /^Signal:\s*(.*)$/i.exec(l.text);
         const consequenceM = /^Consequence:\s*(.*)$/i.exec(l.text);
 
-        if (likelihoodM && cur) { cur.likelihood = parseSeverity(likelihoodM[1]); continue; }
-        if (impactM && cur) { cur.impact = parseSeverity(impactM[1]); continue; }
+        if (exposureM && cur) { cur.exposure = exposureM[1].trim(); continue; }
+        if (ratingM && cur) continue;
         if (signalM && cur) { cur.signal = signalM[1].trim(); continue; }
         if (consequenceM && cur) { cur.consequence = consequenceM[1].trim(); continue; }
 

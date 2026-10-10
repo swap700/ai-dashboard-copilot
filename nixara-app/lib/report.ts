@@ -95,10 +95,9 @@ Rules: under 500 words. Operational language. Every point references data. The t
   "Risk Report": `Structure your response EXACTLY as:
 
 Top Risks Identified
-(EXACTLY 3 risks, numbered 1-3. For EACH risk use this format:
+(UP TO 3 risks, numbered from 1. Fewer is correct when the data supports fewer — a report with one traced risk is worth more than three with two invented. For EACH risk use this format:
 [Number]. Risk name
-Likelihood: High / Medium / Low
-Impact: High / Medium / Low
+Exposure: [copy a figure from the RISK EVIDENCE or DERIVED FIGURES block, exactly as written, and say what it is a share of]
 Signal: [the specific metric or number from the data that flags this]
 Consequence: [what happens if unaddressed, with a number]
 _Strategic Risk_ or _Operational Risk_
@@ -110,9 +109,16 @@ Rank from highest to lowest combined risk level.
 CRITICAL RULES for risk identification:
 — A large number of customers in one category is NOT concentration risk — that is distribution breadth, which is positive. Concentration risk only applies when a small number of CUSTOMERS generate a disproportionate share of REVENUE (e.g. top 5 customers = 70% of sales). Never flag healthy distribution as a risk.
 — Do not flag things that are performing well as risks.
-— Likelihood must describe a FUTURE event, not a current state. If something is already true (e.g. margins are already low), the risk is that it worsens — not that it exists. Rephrase as: "Likelihood of further margin deterioration: High, given no current pricing intervention." Never assign Likelihood: High to something that is already a present fact.
+— A risk is a FUTURE event, not a current state. If something is already true (e.g. margins are already low), the risk is that it worsens — so name the worsening, not the present fact. "Margins are low" is a finding; "margins keep falling with no pricing intervention in place" is a risk. Do not dress up a present fact as a risk by adding a rating to it.
 — NEVER invent dollar amounts. Any specific dollar figure in this report must come directly from the data summary. If no specific amount is computable from the data, use directional language instead — "significant profit erosion" not "$8,000 at risk." Fabricated dollar figures are worse than no figures at all.
-— Every Signal must be a direct business metric (revenue, profit, margin %, discount %, units, customer/order counts). NEVER cite a correlation coefficient, statistical test value, or count of "anomalous rows" as a Signal — describe the underlying business fact instead (e.g. "a 65.60% discount applied to this order" not "an anomalous row").)
+— Every Signal must be a direct business metric (revenue, profit, margin %, discount %, units, customer/order counts). NEVER cite a correlation coefficient, statistical test value, or count of "anomalous rows" as a Signal — describe the underlying business fact instead (e.g. "a 65.60% discount applied to this order" not "an anomalous row").
+— NEVER rate a risk as High, Medium or Low on likelihood or impact, and never write the words "Likelihood" or "Impact" as a label. Nothing in a single file supports a probability of a future event. Report the Exposure figure instead, copied from the summary.
+— A risk MUST trace to a figure in the data summary. If you cannot name the figure, drop the risk and report fewer. This is not a failure of the report; an untraceable risk is the failure.
+— Where the RISK EVIDENCE block marks a column SPREAD, that column being topped by one value is NOT a risk. Do not report it as concentration, exposure or dependence.
+— Only the figures Nixara marked CONCENTRATED support a concentration risk.
+— Where the summary says NO DIRECTION AVAILABLE, do not describe anything as rising, falling, worsening, deteriorating, accelerating or a trend. A snapshot has no direction.
+— Where the summary marks a PARTIAL PERIOD, never compare it against a complete one and never report it as a decline.
+— Any claim you keep that does not trace to a figure must carry the exact words "assumption, not from your data" in the same sentence. Use this sparingly; it is not a licence to guess.)
 
 Early Warning Signs
 (3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them. Each metric must be a direct business measure, described in plain business language — write "number of unique customers" not "distinct count of Customer ID". Never list a correlation coefficient or other statistical output as an early warning sign.)
@@ -205,25 +211,37 @@ function normalizeCurrency(text: string): string {
     (_m, num: string) => `-$${formatTwoDecimals(num)}`
   );
 
-  // 2. Parenthesized dollar amounts. Only treat as a negative (accounting-style)
-  //    figure when an explicit minus sign is present inside the parens, e.g.
-  //    "(-$1,234.5)" or "(-1,234.50)" → "-$1,234.50". A bare "($1,234.5)" with no
-  //    minus is NOT assumed to be negative — some models use parentheses as a
+  // 2. Parenthesized dollar amounts. Two conditions, both required, and the
+  //    second one was missing: there must be a currency marker or an explicit
+  //    minus sign INSIDE the parens. Without that check this pass rewrote any
+  //    bare parenthesised number as money, so "(2023)" became "$2,023.00" and
+  //    a footnote "(3)" became "$3.00". A bare "($1,234.5)" with no minus is
+  //    still NOT assumed to be negative -- some models use parentheses as a
   //    stylistic aside rather than an accounting negative, and forcing a sign
   //    there would silently turn a positive figure into a wrong negative one.
-  //    Either way, the brackets themselves are always stripped per the "never
-  //    use brackets around numbers" rule.
+  //    Either way, the brackets themselves are stripped per the "never use
+  //    brackets around numbers" rule.
   out = out.replace(
-    /\(\s*(-?)\$?\s*([\d,]+(?:\.\d+)?)\s*\)/g,
-    (_m, sign: string, num: string) => `${sign === "-" ? "-" : ""}$${formatTwoDecimals(num)}`
+    /\(\s*(-?)\s*(\$?)\s*([\d,]+(?:\.\d+)?)\s*\)/g,
+    (m, sign: string, dollar: string, num: string) =>
+      sign === "-" || dollar === "$"
+        ? `${sign === "-" ? "-" : ""}$${formatTwoDecimals(num)}`
+        : m
   );
 
   // 3. Any remaining "$" amount (optionally already minus-prefixed) →
   //    enforce exactly two decimal places, e.g. "$1,234" → "$1,234.00",
-  //    "-$1,234.5" → "-$1,234.50", "$1,234.567" → "$1,234.57" (rounded)
+  //    "-$1,234.5" → "-$1,234.50", "$1,234.567" → "$1,234.57" (rounded).
+  //
+  //    EXCEPT when a magnitude word follows. "$238 million" was being turned
+  //    into "$238.00 million", which reads as a precision the figure does not
+  //    have and was the single most-noticed cosmetic fault in a real report.
+  //    Two decimals are right for an exact amount and wrong for a rounded one,
+  //    and the magnitude word is what tells them apart.
   out = out.replace(
-    /(-?)\$([\d,]+(?:\.\d+)?)/g,
-    (_m, sign: string, num: string) => `${sign}$${formatTwoDecimals(num)}`
+    /(-?)\$([\d,]+(?:\.\d+)?)(\s*(?:million|billion|trillion|thousand|bn|mn|[kKmMbB])\b)?/g,
+    (_m, sign: string, num: string, magnitude: string | undefined) =>
+      magnitude ? `${sign}$${num}${magnitude}` : `${sign}$${formatTwoDecimals(num)}`
   );
 
   return out;
@@ -258,8 +276,9 @@ export type ReportLine =
  * "Top Risks Identified" is NOT in this set even though its risks are the
  * Risk Report's primary decision options: unlike the other two report types,
  * its prompt (see REPORT_CONFIGS above) never required the model to number
- * the risk name itself -- only structured Likelihood/Impact/Signal/
- * Consequence fields plus a mandatory closing "_Strategic Risk_" /
+ * the risk name itself -- only structured Exposure/Signal/Consequence
+ * fields (Likelihood/Impact until the ratings were dropped for being
+ * ungrounded) plus a mandatory closing "_Strategic Risk_" /
  * "_Operational Risk_" tag. Numbered-line extraction therefore found zero
  * items for every Risk Report, and the recommendation picker (DecisionPanel)
  * hid itself entirely whenever recs.length === 0. It gets bespoke handling in

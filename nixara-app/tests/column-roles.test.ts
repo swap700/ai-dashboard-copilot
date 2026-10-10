@@ -449,5 +449,54 @@ check("a scatter never pairs an identifier with a metric", (() => {
   return !sc || (sc.scatter?.x !== "Row ID" && sc.scatter?.y !== "Row ID");
 })());
 
+
+const blockRole = (columns: string[], rows: Record<string, unknown>[], col: string) =>
+  roleInfo({ columns, rows } as Dataset, col)?.role;
+
+// ── An allocation block is a label, not a measurement ───────────────────────
+// Room Number on a real hospital export (55,500 rows, rooms 101-500) was
+// classified as a metric. It then averaged, charted, and appeared in the
+// correlation list as "Age ~ Room Number". The fix must not catch the
+// counts that sit beside it in the same file.
+console.log("\nidentifiers - a dense block of codes is not an amount");
+
+check("Room Number is an identifier, not a metric", (() => {
+  const rows = Array.from({ length: 4000 }, (_, i) => ({
+    "Room Number": 101 + (i % 400),
+    "Billing Amount": 1000 + (i % 913),
+  }));
+  return blockRole(["Room Number", "Billing Amount"], rows, "Room Number") === "identifier";
+})(), String(blockRole(["Room Number", "Billing Amount"],
+  Array.from({ length: 4000 }, (_, i) => ({ "Room Number": 101 + (i % 400), "Billing Amount": 1000 + (i % 913) })),
+  "Room Number")));
+
+check("and the amount beside it is still a metric", (() => {
+  const rows = Array.from({ length: 4000 }, (_, i) => ({
+    "Room Number": 101 + (i % 400),
+    "Billing Amount": 1000 + (i % 913),
+  }));
+  return blockRole(["Room Number", "Billing Amount"], rows, "Billing Amount") === "metric";
+})());
+
+check("Patient Count stays a metric: a count starts near zero", (() => {
+  const rows = Array.from({ length: 4000 }, (_, i) => ({ "Patient Count": i % 40 }));
+  return blockRole(["Patient Count"], rows, "Patient Count") === "metric";
+})(), String(blockRole(["Patient Count"], Array.from({ length: 4000 }, (_, i) => ({ "Patient Count": i % 40 })), "Patient Count")));
+
+check("Platelet Count stays a metric: its range is sparse, not a block", (() => {
+  const rows = Array.from({ length: 4000 }, (_, i) => ({ "Platelet Count": 150000 + ((i * 97) % 300000) }));
+  return blockRole(["Platelet Count"], rows, "Platelet Count") === "metric";
+})(), String(blockRole(["Platelet Count"], Array.from({ length: 4000 }, (_, i) => ({ "Platelet Count": 150000 + ((i * 97) % 300000) })), "Platelet Count")));
+
+check("an index series stays a metric: one value per row, not a reused pool", (() => {
+  const rows = Array.from({ length: 300 }, (_, i) => ({ "Consumer Price Index": 100 + i }));
+  return blockRole(["Consumer Price Index"], rows, "Consumer Price Index") === "metric";
+})(), String(blockRole(["Consumer Price Index"], Array.from({ length: 300 }, (_, i) => ({ "Consumer Price Index": 100 + i })), "Consumer Price Index")));
+
+check("a small ordered scale stays a metric", (() => {
+  const rows = Array.from({ length: 4000 }, (_, i) => ({ "Number of Children": i % 6 }));
+  return blockRole(["Number of Children"], rows, "Number of Children") === "metric";
+})(), String(blockRole(["Number of Children"], Array.from({ length: 4000 }, (_, i) => ({ "Number of Children": i % 6 })), "Number of Children")));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);

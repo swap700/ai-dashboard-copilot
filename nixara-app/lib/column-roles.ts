@@ -87,11 +87,24 @@ const ID_NAME_PATTERNS = [
   /\bid\b/i,
   /\bids\b/i,
   /\bkey\b/i,
-  /\bcount\b/i,
+  // NOT /\bcount\b/ and NOT /\bindex\b/. Both were here and both are
+  // quantity words, not label words. "Platelet Count" on a lab export has one
+  // value per patient, so it is near-unique, and the name-plus-uniqueness rule
+  // below turned it into an identifier -- which took the headline clinical
+  // measurement out of every chart and every breakdown. "Consumer Price Index"
+  // went the same way. A genuine row index is caught by its SHAPE a few lines
+  // down (consecutive, one per row, starting at 0 or 1), which is a stronger
+  // signal than its name anyway, and the pre-aggregated forms that really
+  // cannot be summed are matched by "distinct", "unique" and "rank".
   /\bdistinct\b/i,
   /\bunique\b/i,
-  /\bindex\b/i,
   /\brank\b/i,
+  // "index" only where it is plainly structural. "row index", "sort index"
+  // and a bare "index" are labels; "Consumer Price Index" is a measurement,
+  // and a trailing-word match cannot tell them apart.
+  /^index$/i,
+  /\b(?:row|sort|array|line)\s*index\b/i,
+  /\bidx\b/i,
   /\bnumber\b/i,
   /\bno\b\.?$/i,
   /\bcode\b/i,
@@ -274,6 +287,30 @@ function valuesLookLikeIdentifier(col: string, s: ColumnStats): boolean {
 
   // A row index: effectively one consecutive value per row, starting at 0 or 1.
   if (s.numeric >= 10 && uniqueRatio >= 0.99 && rangeDensity >= 0.99 && s.min <= 1) return true;
+
+  // A code drawn from an allocation block. "Room Number" on a hospital export
+  // runs 101 to 500 across 55,000 rows: averaging it is meaningless and it
+  // was turning up as a metric, as a chart axis and in the correlation list
+  // ("Age ~ Room Number"). Four conditions, and all four are needed to keep
+  // "Patient Count" a metric:
+  //
+  //   the name suggests a code         "Patient Count" passes this too
+  //   at least 10 distinct values      excludes a 0-5 ordered scale
+  //   the integers are DENSE           a count's range has gaps; a block does not
+  //   the block does not start near 0  a count starts at 0 or 1, a room at 101
+  //   values repeat across many rows   a measurement is one value per row
+  //
+  // Patient Count fails the fourth, Platelet Count fails the third, a Consumer
+  // Price Index series fails the last. Room Number fails none.
+  if (
+    nameSuggestsIdentifier(col) &&
+    s.distinctNumbers >= 10 &&
+    rangeDensity >= 0.9 &&
+    s.min >= 10 &&
+    s.numeric >= s.distinctNumbers * 3
+  ) {
+    return true;
+  }
 
   return nameSuggestsIdentifier(col) && uniqueRatio >= 0.9;
 }

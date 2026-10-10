@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, isNonMetricName, groupingColumns, hasUsableGroupSize, dashboardScore, type Dataset, type Row } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, isNonMetricName, groupingColumns, hasUsableGroupSize, dashboardScore, type Dataset, type Row, smartAggBasis } from "../lib/data-analysis.ts";
 import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
 import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
@@ -452,8 +452,12 @@ console.log("\nDerived figures - margins and shares are computed, listed, and ve
   check("no 'share of total Profit' when a category's profit is negative",
     negDerived.filter((d) => d.set?.startsWith("Share of total Profit")).length === 0);
 
-  // The budget guard: a very wide dataset must never get a derived block that
-  // could push the summary past the server's 8,000-char cap.
+  // The budget guard: a very wide dataset must never produce a summary past
+  // the server's 8,000-char cap. This used to be tested as "a wide file gets
+  // no derived block", which was the old workaround rather than the goal --
+  // the column lists and the stats block are capped now, and the whole
+  // summary passes through fitSummaryToBudget, so a wide file can keep its
+  // derived figures AND fit. The assertion is the cap, not the absence.
   const wideCols = Array.from({ length: 150 }, (_, i) => `m${i}`);
   const wideRows: Row[] = rows.slice(0, 30).map((r, i) => {
     const o: Row = { Category: r.Category, Sales: r.Sales, Profit: r.Profit };
@@ -461,7 +465,7 @@ console.log("\nDerived figures - margins and shares are computed, listed, and ve
     return o;
   });
   const wide = buildDataSummary({ rows: wideRows, columns: ["Category", "Sales", "Profit", ...wideCols] });
-  check("a very wide dataset gets no derived block (budget guard)", !wide.includes("DERIVED FIGURES"));
+  check("a very wide dataset still fits under the server's cap", wide.length <= 7500, String(wide.length));
 
   // The checker and the prompt now agree: a correct computed margin is NOT flagged.
   const facts = buildEvidenceFacts(ds);
@@ -721,6 +725,35 @@ check("complete coordinate columns are reported as not-a-quantity",
 check("an empty dataset reports nothing", describeUnmeasuredColumns({ columns: ["A"], rows: [] }).length === 0);
 check("the coverage bar the panel quotes is the one the filter uses", MIN_METRIC_COVERAGE === 0.8,
   String(MIN_METRIC_COVERAGE));
+
+
+// ── Aggregation across languages ────────────────────────────────────────────
+// The sum/mean lexicon was English only, and the default for an unrecognised
+// name is mean. A German export's "Umsatz" (revenue) was therefore AVERAGED,
+// and every figure built on it was wrong in a way that looks right.
+console.log("smartAgg - a revenue column is additive in any language");
+
+for (const [name, expected] of [
+  ["Umsatz", "sum"], ["Gesamtbetrag", "sum"], ["Kosten_EUR", "sum"],
+  ["Ventas", "sum"], ["Receita_Total", "sum"], ["Chiffre_Affaires", "sum"],
+  ["Montant", "sum"], ["Omzet", "sum"], ["Fatturato", "sum"],
+  ["Durchschnittsalter", "mean"], ["Durchschnittsbetrag", "mean"], ["Promedio_Edad", "mean"], ["Taux_Marge", "mean"],
+  ["Percentuale", "mean"], ["Gemiddelde_Score", "mean"],
+] as [string, "sum" | "mean"][]) {
+  check(`smartAgg("${name}") is ${expected}`, smartAgg(name) === expected, smartAgg(name));
+}
+
+check("a name in neither list is reported as a guess, not as a fact",
+  smartAggBasis("Zrqx_Werte").basis === "default", smartAggBasis("Zrqx_Werte").basis);
+check("a recognised name is reported as decided by name",
+  smartAggBasis("Umsatz").basis === "name", smartAggBasis("Umsatz").basis);
+check("and the summary says so rather than averaging in silence", (() => {
+  const ds: Dataset = {
+    columns: ["Region", "Zrqx_Werte"],
+    rows: Array.from({ length: 60 }, (_, i) => ({ Region: ["N", "S"][i % 2], Zrqx_Werte: 100 + i * 7 })),
+  };
+  return buildDataSummary(ds).includes("could not tell whether this column is additive");
+})());
 
 // ── Identifier names survive underscores ────────────────────────────────────
 console.log("isNonMetricName - \\b word boundaries and the underscore problem");

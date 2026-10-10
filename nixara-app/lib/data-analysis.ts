@@ -24,6 +24,8 @@ import { detectColumnDateFormat, parseDateLike } from "./date-format";
 import { compareGroups, describeMateriality, describeMeasureDisagreement } from "./materiality";
 import { checkAnswerability, stem } from "./answerability";
 import { computeScenarios, describeScenarios } from "./scenario";
+import { checkConfounding, describeConfoundingBlock, type ConfoundingResult } from "./confounding";
+import { collectRiskEvidence, describeRiskEvidence } from "./risk-evidence";
 import {
   columnsWithRole,
   isMissingValue,
@@ -1205,6 +1207,37 @@ const SUM_KEYWORDS = new Set(
     // Additive things whose names are single compound words, so they can no
     // longer be caught by a substring match on "count" and friends.
     "headcount", "hours", "items", "tickets", "claims", "invoices",
+
+    // Not English. A German export's "Umsatz" column is revenue, and it was
+    // being AVERAGED, because the default for an unrecognised name is mean.
+    // Every figure downstream of that is wrong and none of them look wrong:
+    // an average revenue per row is a perfectly plausible number. The
+    // column-role resolver was already made language-aware for identifiers
+    // (Bestellnummer); this is the same gap on the aggregation side.
+    // German
+    "umsatz", "erloes", "erlös", "einnahmen", "kosten", "preis", "betrag", "summe",
+    "menge", "anzahl", "gebuehr", "gebühr", "zahlung", "ausgaben", "gewinn",
+    "verkauf", "stueck", "stück", "honorar", "rechnung", "aufwand",
+    // Spanish and Portuguese
+    "ventas", "venta", "ingresos", "ingreso", "receita", "receitas", "beneficio",
+    "lucro", "coste", "costo", "custo", "precio", "preco", "preço", "importe",
+    "cantidad", "quantidade", "monto", "gasto", "gastos", "pago", "pagos",
+    "factura", "facturacion", "despesa", "despesas", "unidades", "faturamento",
+    // French
+    "ventes", "vente", "recettes", "recette", "revenu", "revenus", "cout", "coût",
+    "couts", "coûts", "prix", "montant", "quantite", "quantité", "depense",
+    "dépense", "depenses", "dépenses", "paiement", "benefice", "bénéfice",
+    "frais", "honoraires", "chiffre",
+    // Italian
+    "vendite", "ricavi", "costi", "prezzo", "quantita", "quantità", "spesa",
+    "spese", "pagamento", "utile", "fatturato",
+    // Dutch
+    "omzet", "opbrengst", "prijs", "bedrag", "aantal", "hoeveelheid", "uitgaven",
+    "winst", "betaling",
+    // Nordic
+    "omsaettning", "omsättning", "omsetning", "intaekter", "intäkter", "indtaegter",
+    "kostnad", "kostnader", "pris", "belop", "beløp", "belopp", "antal", "antall",
+    "mengde", "utgifter", "vinst", "fortjeneste",
   ].map(singularize)
 );
 
@@ -1214,11 +1247,62 @@ const MEAN_KEYWORDS = new Set(
     "percentage", "age", "duration", "tenure", "bmi", "height", "weight", "index",
     "level", "days", "years", "months", "rating", "satisfaction", "length",
     "distance", "temperature", "speed", "density", "concentration",
+
+    // Not English, same reason as the sum list above. These are checked
+    // FIRST, so anything here beats the sum list on a collision.
+    // German
+    "durchschnitt", "mittelwert", "quote", "anteil", "prozent", "alter", "dauer",
+    "groesse", "größe", "gewicht", "bewertung", "stufe", "tage", "jahre", "monate",
+    "geschwindigkeit", "laenge", "länge", "verhaeltnis", "verhältnis",
+    // Spanish and Portuguese
+    "promedio", "media", "medio", "medio", "medios", "tasa", "porcentaje",
+    "percentual", "proporcion", "proporción", "proporcao", "proporção", "margen",
+    "margem", "edad", "idade", "duracion", "duración", "duracao", "duração",
+    "altura", "puntuacion", "puntuación", "nota", "calificacion", "nivel", "dias",
+    "días", "anos", "años", "meses", "velocidad", "velocidade",
+    // French
+    "moyenne", "moyen", "taux", "pourcentage", "proportion", "marge", "âge",
+    "duree", "durée", "poids", "taille", "niveau", "jours", "annees", "années",
+    "mois", "vitesse",
+    // Italian
+    "tasso", "percentuale", "proporzione", "margine", "eta", "età", "durata",
+    "altezza", "voto", "livello", "giorni", "anni", "mesi", "velocita", "velocità",
+    // Dutch
+    "gemiddelde", "gemiddeld", "tarief", "percentage", "verhouding", "leeftijd",
+    "duur", "lengte", "niveau", "dagen", "jaren", "maanden", "snelheid",
   ].map(singularize)
 );
 
 function matchesVocabulary(tokens: string[], vocabulary: Set<string>): boolean {
   return tokens.some((token) => vocabulary.has(token));
+}
+
+/**
+ * Stems matched as SUBSTRINGS, not as words.
+ *
+ * German and the Nordic languages build one word where English uses two:
+ * "Gesamtbetrag" is "total amount" with no boundary to tokenise on, so no
+ * word list can reach it. Only stems distinctive enough that a chance
+ * substring hit is implausible belong here -- the same reasoning the
+ * identifier lexicon uses for "nummer" inside "Bestellnummer".
+ *
+ * Mean stems are checked before sum stems, so "Durchschnittsbetrag" (average
+ * amount) resolves to mean rather than being caught by "betrag".
+ */
+const MEAN_SUBSTRINGS = [
+  "durchschnitt", "mittelwert", "gemiddeld", "promedio", "moyenne",
+  "percent", "prozent", "prosent", "percentuale", "porcentaje",
+];
+const SUM_SUBSTRINGS = [
+  "umsatz", "betrag", "kosten", "erloes", "erlös", "einnahme", "ausgabe",
+  "gewinn", "anzahl", "gebuehr", "gebühr", "zahlung", "rechnung", "honorar",
+  "fatturato", "faturamento", "omzet", "opbrengst", "importe", "montant",
+  "bedrag", "omsaettning", "omsättning", "omsetning", "kostnad",
+];
+
+function matchesSubstring(name: string, stems: string[]): boolean {
+  const lower = name.toLowerCase();
+  return stems.some((stem) => lower.includes(stem));
 }
 
 /**
@@ -1264,12 +1348,31 @@ export function looksLikeProportion(values: number[]): boolean {
  *   with them and unchanged in behaviour without.
  */
 export function smartAgg(colName: string, values?: number[]): "mean" | "sum" {
+  return smartAggBasis(colName, values).agg;
+}
+
+/**
+ * The same decision, plus WHY it was made.
+ *
+ * No keyword list covers every column name in every industry in every
+ * language, so some columns fall through to the default, which is mean. That
+ * default is invisible in the output: an average of a column that should have
+ * been totalled is a plausible-looking number with nothing to mark it as a
+ * guess. Returning the basis lets the summary say so, which is the honest
+ * alternative to pretending the list is complete.
+ */
+export function smartAggBasis(
+  colName: string,
+  values?: number[]
+): { agg: "mean" | "sum"; basis: "name" | "shape" | "default" } {
   const tokens = tokenize(colName);
 
-  if (matchesVocabulary(tokens, MEAN_KEYWORDS)) return "mean";
-  if (values && looksLikeProportion(values)) return "mean";
-  if (matchesVocabulary(tokens, SUM_KEYWORDS)) return "sum";
-  return "mean";
+  if (matchesVocabulary(tokens, MEAN_KEYWORDS)) return { agg: "mean", basis: "name" };
+  if (matchesSubstring(colName, MEAN_SUBSTRINGS)) return { agg: "mean", basis: "name" };
+  if (values && looksLikeProportion(values)) return { agg: "mean", basis: "shape" };
+  if (matchesVocabulary(tokens, SUM_KEYWORDS)) return { agg: "sum", basis: "name" };
+  if (matchesSubstring(colName, SUM_SUBSTRINGS)) return { agg: "sum", basis: "name" };
+  return { agg: "mean", basis: "default" };
 }
 
 export interface AggregatedPoint {
@@ -2067,6 +2170,146 @@ export interface DataSummaryOptions {
 }
 
 /** Mirrors build_data_summary: produces the text block sent to the AI report generator. */
+
+/**
+ * The order blocks are given up in when the summary will not fit.
+ *
+ * The server rejects a summary over 8,000 characters with a 413, and the user
+ * sees "report failed" with nothing to act on. A 200-column export produced
+ * 15,934 characters and failed every time. Capping the widest lines was most
+ * of the fix; this is the backstop, so that no file can produce a summary the
+ * server refuses, whatever its shape.
+ *
+ * Priority is by what the report cannot be written without. The blocks that
+ * constrain what the model is ALLOWED to claim come first -- a report missing
+ * its answerability note is worse than wrong, because the model will reason
+ * across the gap. Correlations and anomalies go first: they are context, and
+ * the prompt forbids quoting them as business figures anyway.
+ */
+const SUMMARY_BLOCK_PRIORITY: { match: RegExp; priority: number }[] = [
+  { match: /^NOT IN THIS FILE/, priority: 1 },
+  { match: /^TARGET ARITHMETIC/, priority: 2 },
+  { match: /^RISK EVIDENCE/, priority: 3 },
+  { match: /^NO MEASURABLE METRIC/, priority: 3 },
+  { match: /^CONTROLLED COMPARISON/, priority: 4 },
+  { match: /^NUMERIC SUMMARY/, priority: 5 },
+  { match: /^BREAKDOWN BY /, priority: 6 },
+  { match: /^DERIVED FIGURES/, priority: 7 },
+  { match: /^TOP\/BOTTOM BY /, priority: 8 },
+  { match: /^CROSS-BREAKDOWN/, priority: 9 },
+  { match: /^ROW COUNT BY /, priority: 10 },
+  { match: /^ANOMALIES DETECTED/, priority: 11 },
+  { match: /^TOP CORRELATIONS/, priority: 12 },
+];
+
+function blockPriority(heading: string): number {
+  for (const { match, priority } of SUMMARY_BLOCK_PRIORITY) {
+    if (match.test(heading)) return priority;
+  }
+  // An unrecognised block sits between the breakdowns and the context blocks:
+  // worth keeping, not worth keeping ahead of the claim constraints.
+  return 7;
+}
+
+/**
+ * Drops and trims whole blocks, lowest priority first, until the summary fits.
+ * The first block (dataset shape) is never dropped, and a block that is kept
+ * but too long keeps its heading so the model is not left with orphan lines.
+ */
+export function fitSummaryToBudget(lines: string[], budget: number): string[] {
+  const text = lines.join("\n");
+  if (text.length <= budget) return lines;
+
+  const blocks: string[][] = [[]];
+  for (const line of lines) {
+    if (line === "") blocks.push([]);
+    else blocks[blocks.length - 1].push(line);
+  }
+  const populated = blocks.filter((b) => b.length > 0);
+  if (populated.length === 0) return lines;
+
+  const header = populated[0];
+  const rest = populated.slice(1).map((b, i) => ({
+    block: b,
+    index: i,
+    priority: blockPriority(b[0]),
+    size: b.join("\n").length + 2,
+  }));
+
+  // Measured rather than estimated. An earlier version tracked a running
+  // byte count and was 130 characters out by the end, which on a cap this
+  // tight is the difference between a report and a 413. Each candidate block
+  // is added only if the ACTUAL joined length still fits.
+  const keptIndexes = new Set<number>();
+  const trimmed = new Map<number, string[]>();
+  let dropped = 0;
+
+  const assemble = (): string[] => {
+    const out = [...header, ""];
+    for (const entry of rest) {
+      if (!keptIndexes.has(entry.index)) continue;
+      out.push(...(trimmed.get(entry.index) ?? entry.block), "");
+    }
+    return out;
+  };
+  const fits = () => assemble().join("\n").length <= budget;
+  if (!fits()) {
+    // Not even the header fits. Nothing to negotiate: hand back the header
+    // alone and let the caller's own cap do the rest.
+    return [...header];
+  }
+
+  for (const entry of [...rest].sort((a, b) => a.priority - b.priority || a.index - b.index)) {
+    keptIndexes.add(entry.index);
+    if (fits()) continue;
+
+    // Keep the heading plus as many of its lines as fit.
+    let partial = [entry.block[0]];
+    trimmed.set(entry.index, partial);
+    if (!fits()) {
+      keptIndexes.delete(entry.index);
+      trimmed.delete(entry.index);
+      dropped += 1;
+      continue;
+    }
+    for (const line of entry.block.slice(1)) {
+      const next = [...partial, line];
+      trimmed.set(entry.index, next);
+      if (!fits()) {
+        trimmed.set(entry.index, partial);
+        break;
+      }
+      partial = next;
+    }
+    // A heading on its own is worse than nothing: it reads as a section that
+    // came back empty rather than one that did not fit.
+    if (partial.length < 2) {
+      keptIndexes.delete(entry.index);
+      trimmed.delete(entry.index);
+      dropped += 1;
+      continue;
+    }
+    const omitted = entry.block.length - partial.length;
+    if (omitted > 0) {
+      const withNote = [...partial, `  (${omitted} more line${omitted === 1 ? "" : "s"} omitted to fit)`];
+      trimmed.set(entry.index, withNote);
+      if (!fits()) trimmed.set(entry.index, partial);
+    } else {
+      trimmed.delete(entry.index);
+    }
+  }
+
+  const out = assemble();
+  if (dropped > 0) {
+    const note =
+      `(${dropped} further section${dropped === 1 ? "" : "s"} of this summary were left out ` +
+      `because this file is too wide to describe in full. Report only what is above.)`;
+    const withNote = [...out, note, ""];
+    if (withNote.join("\n").length <= budget) return withNote;
+  }
+  return out;
+}
+
 export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}): string {
   const { columns } = dataset;
   let { rows } = dataset;
@@ -2080,20 +2323,32 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   const numericCols = numericColumns(filtered);
   const catCols = categoricalColumns(filtered);
 
+  // A column-name list is one line, and on a 200-column export one line was
+  // 2,400 characters. Three of those lines alone put the summary most of the
+  // way to the server's 8,000-character cap, which the server answers with a
+  // 413 and the user sees as "report failed" with no explanation. Naming the
+  // first 40 and counting the rest tells the model everything it can act on.
+  const MAX_NAMED_COLUMNS = 40;
+  const listColumns = (cols: string[]): string => {
+    if (cols.length <= MAX_NAMED_COLUMNS) return cols.join(", ");
+    const rest = cols.length - MAX_NAMED_COLUMNS;
+    return `${cols.slice(0, MAX_NAMED_COLUMNS).join(", ")}, and ${rest} more`;
+  };
+
   const lines: string[] = [];
   lines.push(`Rows: ${rows.length} | Columns: ${columns.length}`);
   if (filterCol && filterVal) lines.push(`Filtered to: ${filterCol} = ${filterVal}`);
-  lines.push(`Numeric columns: [${numericCols.join(", ")}]`);
+  lines.push(`Numeric columns: [${listColumns(numericCols)}]`);
   // Label columns are the subset of non-numeric columns that can legitimately
   // key a breakdown (see groupingColumns): not dates, not half-numeric. The
   // rest are listed separately so the model is never left to assume a date or
   // a malformed amount column is a category it can group by.
   const labelCols = breakdownColumns(filtered).filter((col) => hasUsableGroupSize(filtered, col));
   const otherCatCols = catCols.filter((col) => !labelCols.includes(col));
-  lines.push(`Label columns (safe to group by): [${labelCols.join(", ")}]`);
+  lines.push(`Label columns (safe to group by): [${listColumns(labelCols)}]`);
   if (otherCatCols.length > 0) {
     lines.push(
-      `Other non-numeric columns (dates, free text, near-unique values, or columns mixing text and numbers - do not group by these): [${otherCatCols.join(", ")}]`
+      `Other non-numeric columns (dates, free text, near-unique values, or columns mixing text and numbers - do not group by these): [${listColumns(otherCatCols)}]`
     );
   }
   lines.push("");
@@ -2104,12 +2359,15 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // in NUMERIC SUMMARY and aggregated another way in a breakdown.
   const columnStats = new Map<string, NumericStats>();
   const aggTypes = new Map<string, "mean" | "sum">();
+  const aggBases = new Map<string, "name" | "shape" | "default">();
   for (const col of numericCols) {
     const values = rows
       .map((r) => r[col])
       .filter((v): v is number => typeof v === "number");
     columnStats.set(col, numericStats(values));
-    aggTypes.set(col, smartAgg(col, values));
+    const { agg, basis } = smartAggBasis(col, values);
+    aggTypes.set(col, agg);
+    aggBases.set(col, basis);
   }
   const aggTypeOf = (col: string) => aggTypes.get(col) ?? smartAgg(col);
 
@@ -2129,9 +2387,37 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // the metric-based blocks are skipped and row counts are sent instead.
   let primaryMetric = rankedPrimary;
 
+  // The question is read here rather than further down, because it decides
+  // which columns are DESCRIBED as well as which are broken down. On a wide
+  // file the stats block has to be capped, and capping it in file order means
+  // the one column the question names can fall off the end.
+  const question = opts.decisionText ?? "";
+  const qTokens = question.trim() === "" ? null : new Set(tokenize(question));
+  const byQuestion = (a: string, b: string) =>
+    qTokens === null
+      ? 0
+      : columnMatchScore(filtered, b, question, qTokens) -
+        columnMatchScore(filtered, a, question, qTokens);
+
   if (numericCols.length > 0) {
+    // Ranked metrics first, then the question, then whatever is left: the most
+    // useful columns are described and the tail is counted.
+    const rankOf = new Map(rankedMetrics.map((c, i) => [c, i]));
+    const describable = [...numericCols]
+      .sort((a, b) => (rankOf.get(a) ?? 1e6) - (rankOf.get(b) ?? 1e6))
+      .sort(byQuestion);
+    const MAX_DESCRIBED_COLUMNS = 25;
+    const described = describable.slice(0, MAX_DESCRIBED_COLUMNS);
+    const omitted = describable.length - described.length;
     lines.push("NUMERIC SUMMARY");
-    for (const col of numericCols) {
+    if (omitted > 0) {
+      lines.push(
+        `  (${described.length} of ${describable.length} numeric columns described, ` +
+          `chosen by relevance to the question. The other ${omitted} are in the file but not ` +
+          `summarised here, so do not state figures for them.)`
+      );
+    }
+    for (const col of described) {
       const st = columnStats.get(col)!;
       if (st.count === 0) continue;
       // Show an absolute total only where adding the column up means
@@ -2146,7 +2432,17 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
       // if it were a dollar figure.
       const isBusinessMetric = businessMetricSet.has(col);
       const total = isBusinessMetric && aggTypeOf(col) === "sum" ? st.total : null;
-      const note = isBusinessMetric ? "" : " [identifier/count column - per-row value only, never sum or total this]";
+      // Where Nixara could not tell from the name whether the column is
+      // additive, it says so instead of quietly averaging. An average of a
+      // column that should have been totalled is a plausible-looking figure
+      // with nothing to mark it as a guess, and a German export's "Umsatz"
+      // went out that way.
+      const basis = aggBases.get(col) ?? "name";
+      const note = !isBusinessMetric
+        ? " [identifier/count column - per-row value only, never sum or total this]"
+        : basis === "default"
+          ? " [Nixara could not tell whether this column is additive, so it is shown as an average. Call it an average, never a total, and say the basis is unclear if you build a recommendation on it]"
+          : "";
       lines.push(
         `  ${col}: count=${st.count} mean=${st.mean.toFixed(2)} std=${st.std.toFixed(2)} ` +
         `min=${st.min.toFixed(2)} max=${st.max.toFixed(2)}` +
@@ -2174,12 +2470,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
   // materiality verdict and the whole target calculation came out about the
   // wrong column. Nothing downstream can recover from that: the figures are
   // all internally consistent and all about something nobody asked about.
-  const question = opts.decisionText ?? "";
-  if (question.trim() !== "") {
-    const qTokens = new Set(tokenize(question));
-    const byQuestion = (a: string, b: string) =>
-      columnMatchScore(filtered, b, question, qTokens) -
-      columnMatchScore(filtered, a, question, qTokens);
+  if (qTokens !== null) {
     labelCols.sort(byQuestion);
     breakdownMetrics.sort(byQuestion);
     const named = [...businessMetrics].sort(byQuestion)[0];
@@ -2235,6 +2526,10 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
 
   // Standard breakdowns for low-cardinality categories
   let breakdownCount = 0;
+  // Groupings whose differences are real, in question-ranked order. Only
+  // these are worth adjusting: holding age steady on a grouping whose own
+  // gap is noise produces a precise answer to a question nobody asked.
+  const materialCats: string[] = [];
   for (const cat of lowCardCats) {
     if (breakdownCount >= 4) break;
     const breakdownLines: string[] = [];
@@ -2259,6 +2554,7 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
           lines.push(`  ${describeMateriality(c)}`);
           const disagree = describeMeasureDisagreement(c);
           if (disagree) lines.push(`  ${disagree}`);
+          if (c.verdict !== "tied") materialCats.push(cat);
         }
       }
       lines.push("");
@@ -2391,6 +2687,46 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     }
   }
 
+  // Concentration, direction and double counting, so a risk can be built out
+  // of arithmetic instead of out of a High/Medium/Low rating the model had no
+  // inputs for. Placed before the controlled comparison because it is the
+  // cheaper, more widely applicable of the two.
+  if (primaryMetric) {
+    const evidence = collectRiskEvidence(
+      filtered,
+      primaryMetric,
+      [...lowCardCats, ...highCardCats],
+      columnsWithRole(filtered, "date")
+    );
+    if (evidence) {
+      lines.push(describeRiskEvidence(evidence));
+      lines.push("");
+    }
+  }
+
+  // Does the difference survive when the other columns are held steady?
+  // This is the one thing a BI tool cannot do and the thing a user asked for
+  // outright ("say which differences might be caused by age, BMI or plan
+  // mix"). Run on the groupings whose gaps are real, holding every other
+  // measurable column and every other small category steady.
+  if (primaryMetric && materialCats.length > 0) {
+    const numericConfounders = businessMetrics.filter((m) => m !== primaryMetric);
+    const confoundingResults: ConfoundingResult[] = [];
+    for (const cat of materialCats.slice(0, 3)) {
+      const catConfounders = lowCardCats.filter((c) => c !== cat);
+      const r = checkConfounding(filtered, primaryMetric, cat, numericConfounders, catConfounders);
+      // With nothing to hold steady there is nothing to report: an
+      // "adjusted" gap identical to the raw one is noise in the output.
+      if (r && (r.confounders.length > 0 || r.categoricalConfounders.length > 0)) {
+        confoundingResults.push(r);
+      }
+    }
+    if (confoundingResults.length > 0) {
+      lines.push(describeConfoundingBlock(confoundingResults));
+      lines.push("");
+    }
+  }
+
   // What the question asks about that this file does not contain. Placed
   // near the end so it is the last thing read before the model writes, and
   // phrased as an instruction rather than a note, because a model handed a
@@ -2410,6 +2746,10 @@ export function buildDataSummary(dataset: Dataset, opts: DataSummaryOptions = {}
     }
   }
 
-  lines.push(`Data Quality Score: ${dashboardScore(filtered)}/100`);
-  return lines.join("\n");
+  const scoreLine = `Data Quality Score: ${dashboardScore(filtered)}/100`;
+  // The score is one line and the report quotes it, so it is appended AFTER
+  // the budget pass rather than being something the pass could drop.
+  const fitted = fitSummaryToBudget(lines, DERIVED_SUMMARY_BUDGET - scoreLine.length - 2);
+  fitted.push(scoreLine);
+  return fitted.join("\n");
 }

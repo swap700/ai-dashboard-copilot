@@ -16,7 +16,7 @@
  * whether or not the model numbers the risk name.
  */
 
-import { parseRecommendations } from "../lib/report.ts";
+import { parseRecommendations, cleanAiOutput } from "../lib/report.ts";
 
 let pass = 0;
 let fail = 0;
@@ -185,6 +185,34 @@ Data quality is strong.`;
   }
   check("(f) an empty Top Risks Identified section does not throw", !threw);
   check("(f) an empty Top Risks Identified section produces no recommendations", recs.length === 0, JSON.stringify(recs));
+}
+
+
+// ── Currency normalisation: two faults seen in a real report ────────────────
+// "$238.00 million" shipped to a user. Two decimals belong on an exact
+// amount and read as false precision on a rounded one, and the magnitude
+// word is what tells them apart. Separately, the parenthesis pass had no
+// currency-marker requirement, so any bracketed number became money.
+{
+  const clean = (t: string) => cleanAiOutput(t);
+  check("a magnitude word keeps the figure rounded",
+    clean("Billing totals $238 million this year.").includes("$238 million"),
+    clean("Billing totals $238 million this year."));
+  check("and no .00 is inserted before it",
+    !clean("Billing totals $238 million this year.").includes("$238.00"));
+  check("an exact amount still gets two decimals",
+    clean("Recover $48,300 by trimming discounts.").includes("$48,300.00"));
+  check("a bare parenthesised year is left alone",
+    clean("Revenue grew through (2023) without a price rise.").includes("(2023)"),
+    clean("Revenue grew through (2023) without a price rise."));
+  check("a bare parenthesised footnote number is left alone",
+    clean("Three sites are affected (3).").includes("(3)"),
+    clean("Three sites are affected (3)."));
+  check("a parenthesised amount WITH a currency marker is still unwrapped",
+    clean("The shortfall ($1,234.5) is material.").includes("$1,234.50"));
+  check("and a parenthesised accounting negative is still read as negative",
+    clean("The adjustment (-1,234.50) lands in Q3.").includes("-$1,234.50"),
+    clean("The adjustment (-1,234.50) lands in Q3."));
 }
 
 // ── Result ──────────────────────────────────────────────────────────────────
