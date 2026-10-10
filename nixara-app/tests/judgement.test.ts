@@ -503,6 +503,42 @@ check("a measurement is never correlated against an identifier", (() => {
 // because nothing in the summary could support either word.
 console.log("\nrisk evidence - a risk has to come from a figure");
 
+check("a many-level column with a fat head is concentrated", (() => {
+  // 39 states, the top 8 carrying 70% of sales. The first threshold used an
+  // absolute 25% floor on the LARGEST group, written with a handful of groups
+  // in mind, and called this spread - which would have contradicted the
+  // curve drawn beside it.
+  const rows: Dataset["rows"] = [];
+  for (let i = 0; i < 39; i++) {
+    const weight = i < 8 ? 70 : 3;
+    for (let j = 0; j < 20; j++) rows.push({ state: `S${i}`, sales: weight });
+  }
+  const c = measureConcentration({ columns: ["state", "sales"], rows }, "state", "sales");
+  return c !== null && c.concentrated && c.topFifthCount === 8;
+})(), JSON.stringify((() => {
+  const rows: Dataset["rows"] = [];
+  for (let i = 0; i < 39; i++) { const w = i < 8 ? 70 : 3; for (let j = 0; j < 20; j++) rows.push({ state: `S${i}`, sales: w }); }
+  const c = measureConcentration({ columns: ["state", "sales"], rows }, "state", "sales");
+  return { conc: c?.concentrated, fifth: c?.topFifthShare };
+})()));
+
+check("a two-level split is never called concentrated, whatever the gap", (() => {
+  const rows: Dataset["rows"] = [
+    ...Array.from({ length: 100 }, () => ({ g: "A", v: 90 })),
+    ...Array.from({ length: 100 }, () => ({ g: "B", v: 10 })),
+  ];
+  const c = measureConcentration({ columns: ["g", "v"], rows }, "g", "v");
+  return c !== null && !c.concentrated;
+})());
+
+check("the curve is returned for the chart, and ends at 100%", (() => {
+  const rows: Dataset["rows"] = Array.from({ length: 300 }, (_, i) => ({ g: `G${i % 6}`, v: 10 + (i % 6) * 5 }));
+  const c = measureConcentration({ columns: ["g", "v"], rows }, "g", "v");
+  return c !== null && c.cumulative.length === 6 &&
+    Math.abs(c.cumulative[5].cumulativeShare - 1) < 1e-9 &&
+    c.cumulative[0].cumulativeShare < c.cumulative[1].cumulativeShare;
+})());
+
 check("an even split is reported as SPREAD, not as concentration", (() => {
   const ds: Dataset = {
     columns: ["insurer", "billing"],

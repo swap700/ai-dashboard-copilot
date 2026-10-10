@@ -35,8 +35,18 @@ export interface Concentration {
   topShare: number;
   /** Share carried by the top five levels, 0 to 1. */
   topFiveShare: number;
+  /** Share carried by the top fifth of levels: the scale-free concentration test. */
+  topFifthShare: number;
+  /** How many levels that fifth is. */
+  topFifthCount: number;
   /** What each level would carry if the metric were spread evenly. */
   evenShare: number;
+  /**
+   * The cumulative curve, biggest group first. An even split plots as a
+   * straight diagonal; concentration bows above it, and the gap between the
+   * two is the finding.
+   */
+  cumulative: { rank: number; key: string; share: number; cumulativeShare: number }[];
   /** True only when a few groups really do carry a disproportionate share. */
   concentrated: boolean;
 }
@@ -78,16 +88,27 @@ export interface RiskEvidence {
 }
 
 /**
- * Top level carries at least a quarter of the metric AND at least twice what
- * an even split would give it. Both halves are needed: a quarter across four
- * groups is an even split, and twice an even split across fifty groups is 4%.
+ * Concentration, measured the way the curve draws it: what share do the top
+ * fifth of the groups carry?
+ *
+ * The first version tested the top level against an absolute 25% floor plus a
+ * multiple of the even split. That works for four groups and breaks for
+ * forty. On a real superstore export one state carried 22.4% of sales out of
+ * 39 states - nearly nine times an even split, with the top five carrying
+ * 55% - and it was reported as SPREAD because 22.4% missed a 25% floor
+ * written with a handful of groups in mind. Any reader looking at the curve
+ * would have called that concentrated, and the label would have contradicted
+ * the picture beside it.
+ *
+ * The top-fifth share is scale-free: an even split always gives it 20%,
+ * whether there are five groups or five hundred, so the multiple against an
+ * even split means the same thing at every size. It is also the classic
+ * 80/20 test, which is what a commercial reader already has in their head.
  */
-const CONCENTRATED_TOP_SHARE = 0.25;
-const CONCENTRATED_MULTIPLE = 2;
-/** Or the classic version: a handful of groups carry most of it. */
-const CONCENTRATED_TOP_FIVE = 0.6;
-const MIN_LEVELS_FOR_TOP_FIVE = 10;
-/** A last period under this share of a typical one is treated as unfinished. */
+const CONCENTRATED_TOP_FIFTH_MULTIPLE = 2.5;
+/** And it has to be a real slice of the whole, not a large multiple of a tiny one. */
+const CONCENTRATED_TOP_FIFTH_FLOOR = 0.4;
+
 const PARTIAL_PERIOD_RATIO = 0.6;
 
 function totalsByLevel(dataset: Dataset, column: string, metric: string): Map<string, number> {
@@ -113,16 +134,34 @@ export function measureConcentration(dataset: Dataset, column: string, metric: s
   const topShare = entries[0][1] / grand;
   const topFiveShare = entries.slice(0, 5).reduce((s, [, v]) => s + v, 0) / grand;
   const evenShare = 1 / entries.length;
+
+  // The top fifth of the groups, at least one.
+  const fifthCount = Math.max(1, Math.round(entries.length * 0.2));
+  const topFifthShare = entries.slice(0, fifthCount).reduce((s, [, v]) => s + v, 0) / grand;
+  const evenFifthShare = fifthCount / entries.length;
   const concentrated =
-    (topShare >= CONCENTRATED_TOP_SHARE && topShare >= evenShare * CONCENTRATED_MULTIPLE) ||
-    (entries.length >= MIN_LEVELS_FOR_TOP_FIVE && topFiveShare >= CONCENTRATED_TOP_FIVE);
+    topFifthShare >= CONCENTRATED_TOP_FIFTH_FLOOR &&
+    topFifthShare >= evenFifthShare * CONCENTRATED_TOP_FIFTH_MULTIPLE;
+
+  // The cumulative curve, for the chart and for the figures in the text. Each
+  // point is "the top N groups carry this much", so an even split is a
+  // straight diagonal and concentration is a curve bowing above it.
+  let running = 0;
+  const cumulative = entries.map(([key, value], i) => {
+    running += value;
+    return { rank: i + 1, key, share: value / grand, cumulativeShare: running / grand };
+  });
+
   return {
     column,
     levels: entries.length,
     topLevel: entries[0][0],
     topShare,
     topFiveShare,
+    topFifthShare,
+    topFifthCount: fifthCount,
     evenShare,
+    cumulative,
     concentrated,
   };
 }
@@ -250,9 +289,11 @@ export function describeRiskEvidence(e: RiskEvidence): string {
   for (const c of e.concentration) {
     if (c.concentrated) {
       lines.push(
-        `  CONCENTRATED: ${c.topLevel} carries ${pct(c.topShare)} of total ${e.metric} across ` +
-          `${c.levels} ${c.column} values, against ${pct(c.evenShare)} for an even split. ` +
-          `Top five carry ${pct(c.topFiveShare)}. Exposure if this group is lost or repriced: ${pct(c.topShare)} of ${e.metric}.`
+        `  CONCENTRATED: the top ${c.topFifthCount} of ${c.levels} ${c.column} values carry ` +
+          `${pct(c.topFifthShare)} of total ${e.metric}, against ${pct(c.topFifthCount / c.levels)} if it were ` +
+          `spread evenly. The largest, ${c.topLevel}, carries ${pct(c.topShare)} on its own ` +
+          `(an even split would give it ${pct(c.evenShare)}). Exposure if ${c.topLevel} is lost or ` +
+          `repriced: ${pct(c.topShare)} of ${e.metric}.`
       );
     } else {
       lines.push(
