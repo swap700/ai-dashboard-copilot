@@ -202,6 +202,20 @@ export function numericDensity(dataset: Dataset, col: string): number {
  */
 export { MIN_METRIC_COVERAGE, NUMERIC_THRESHOLD };
 export { resolveColumnRoles, columnsWithRole, roleInfo } from "./column-roles";
+
+/**
+ * Below this many columns, an exact full-row match is not evidence of a
+ * duplicated record. On four columns, two customers in the same region buying
+ * the same product for the same amount are two real sales. Past about eight
+ * columns a coincidental full-row match is implausible.
+ *
+ * Exported because two surfaces ask the same question and they must not
+ * disagree: the quality score deducts for duplicates, and the RISK EVIDENCE
+ * block prices them in the metric's own units. The score had this gate and
+ * the risk block did not, which is the same class of fault as the anomaly
+ * banner disagreeing with the summary.
+ */
+export const MIN_COLUMNS_FOR_DUPLICATE_CHECK = 8;
 export type { ColumnRole, ColumnRoleInfo } from "./column-roles";
 
 /** Columns numeric enough to be read as numbers. */
@@ -1107,7 +1121,6 @@ export function dashboardScoreBreakdown(dataset: Dataset): DashboardScoreBreakdo
   // the same amount are two real sales, not a duplicated record. Past about
   // eight columns a full-row match by coincidence is implausible, so the
   // match is evidence of a duplicated record rather than of similar events.
-  const MIN_COLUMNS_FOR_DUPLICATE_CHECK = 8;
   const seen = new Set<string>();
   let duplicates = 0;
   for (const row of columns.length >= MIN_COLUMNS_FOR_DUPLICATE_CHECK ? rows : []) {

@@ -25,7 +25,7 @@
  * Every number here is arithmetic on the file. None of them is a rating.
  */
 
-import type { Dataset } from "./data-analysis";
+import { MIN_COLUMNS_FOR_DUPLICATE_CHECK, type Dataset } from "./data-analysis";
 
 export interface Concentration {
   column: string;
@@ -192,10 +192,17 @@ export function measureIntegrity(dataset: Dataset, metric: string): IntegrityExp
 
   // Exact repeats across every column. The value at stake is the metric on
   // the repeats beyond the first, because that is what a total double counts.
+  //
+  // Gated on column count, with the same constant the quality score uses. On
+  // a narrow file an exact full-row match is an ordinary coincidence, and
+  // without the gate this block would have reported "double counting" on
+  // files the score correctly left alone.
   const seen = new Map<string, number>();
   let duplicateRows = 0;
   let duplicateValue = 0;
-  for (const row of dataset.rows) {
+  const duplicateCheckRows =
+    dataset.columns.length >= MIN_COLUMNS_FOR_DUPLICATE_CHECK ? dataset.rows : [];
+  for (const row of duplicateCheckRows) {
     const key = dataset.columns.map((c) => String(row[c] ?? "")).join("\u0001");
     const n = seen.get(key) ?? 0;
     seen.set(key, n + 1);

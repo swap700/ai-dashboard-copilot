@@ -27,6 +27,7 @@ import { compareGroups, describeMateriality, describeMeasureDisagreement } from 
 import { checkAnswerability } from "../lib/answerability.ts";
 import { parseTarget, computeScenarios, describeScenarios } from "../lib/scenario.ts";
 import { checkConfounding, describeConfounding, describeConfoundingBlock } from "../lib/confounding.ts";
+import { collectRiskEvidence, describeRiskEvidence, measureConcentration, measureDirection } from "../lib/risk-evidence.ts";
 import { buildDataSummary, dashboardScoreBreakdown, breakdownColumns, fitSummaryToBudget, outcomeRegion, type Dataset } from "../lib/data-analysis.ts";
 
 let pass = 0;
@@ -494,6 +495,95 @@ check("a measurement is never correlated against an identifier", (() => {
   };
   const out = buildDataSummary(ds);
   return !out.includes("Room Number:") || !out.includes("~ Room Number");
+})());
+
+
+// ── Risk evidence: a share, a direction, and what is double counted ─────────
+// This replaced "Likelihood: High / Impact: High", which the model invented
+// because nothing in the summary could support either word.
+console.log("\nrisk evidence - a risk has to come from a figure");
+
+check("an even split is reported as SPREAD, not as concentration", (() => {
+  const ds: Dataset = {
+    columns: ["insurer", "billing"],
+    rows: Array.from({ length: 500 }, (_, i) => ({ insurer: `I${i % 5}`, billing: 1000 + (i % 7) })),
+  };
+  const c = measureConcentration(ds, "insurer", "billing");
+  return c !== null && !c.concentrated && Math.abs(c.topShare - 0.2) < 0.01;
+})());
+
+check("a genuinely concentrated column is reported as CONCENTRATED", (() => {
+  const ds: Dataset = {
+    columns: ["customer", "billing"],
+    rows: Array.from({ length: 500 }, (_, i) => ({ customer: i < 50 ? "Big" : `C${i}`, billing: i < 50 ? 10000 : 100 })),
+  };
+  const c = measureConcentration(ds, "customer", "billing");
+  return c !== null && c.concentrated && c.topShare > 0.5;
+})());
+
+check("shares are refused where a group is negative, since they would not add up", (() => {
+  const ds: Dataset = {
+    columns: ["region", "profit"],
+    rows: [{ region: "N", profit: 100 }, { region: "S", profit: -40 }, { region: "E", profit: 60 }],
+  };
+  return measureConcentration(ds, "region", "profit") === null;
+})());
+
+check("a half-filled final month is excluded, not reported as a fall", (() => {
+  const rows: Dataset["rows"] = [];
+  for (let m = 0; m < 6; m++) {
+    const n = m === 5 ? 5 : 100;
+    for (let i = 0; i < n; i++) rows.push({ when: new Date(Date.UTC(2026, m, 1 + (i % 27))), amount: 100 });
+  }
+  const d = measureDirection({ columns: ["when", "amount"], rows }, "when", "amount");
+  return d !== null && d.lastPeriodPartial && d.periods === 5 && d.trend === "flat";
+})());
+
+check("and the block says so in words", (() => {
+  const rows: Dataset["rows"] = [];
+  for (let m = 0; m < 6; m++) {
+    const n = m === 5 ? 5 : 100;
+    for (let i = 0; i < n; i++) rows.push({ when: new Date(Date.UTC(2026, m, 1 + (i % 27))), amount: 100 });
+  }
+  const e = collectRiskEvidence({ columns: ["when", "amount"], rows }, "amount", [], ["when"]);
+  return e !== null && describeRiskEvidence(e).includes("PARTIAL PERIOD");
+})());
+
+check("a file with no dates forbids the word trend rather than leaving it open", (() => {
+  const ds: Dataset = {
+    columns: ["region", "billing"],
+    rows: Array.from({ length: 100 }, (_, i) => ({ region: `R${i % 4}`, billing: 500 + i })),
+  };
+  const e = collectRiskEvidence(ds, "billing", ["region"], []);
+  return e !== null && describeRiskEvidence(e).includes("NO DIRECTION AVAILABLE");
+})());
+
+check("duplicates are priced in the metric's own units on a wide file", (() => {
+  const cols = Array.from({ length: 10 }, (_, i) => `c${i}`);
+  const rows = Array.from({ length: 100 }, (_, i) =>
+    Object.fromEntries([...cols.map((c, j) => [c, `v${(i * (j + 1)) % 53}`]), ["billing", 100 + i]]));
+  rows.push({ ...rows[0] }, { ...rows[1] });
+  const e = collectRiskEvidence({ columns: [...cols, "billing"], rows: rows as Dataset["rows"] }, "billing", [], []);
+  return e !== null && e.integrity !== null && e.integrity.duplicateRows === 2 && e.integrity.duplicateValue > 0;
+})());
+
+check("and a narrow file is NOT accused of double counting", (() => {
+  const ds: Dataset = {
+    columns: ["Region", "Category", "Sales"],
+    rows: Array.from({ length: 200 }, (_, i) => ({ Region: ["N", "S"][i % 2], Category: ["A", "B"][i % 2], Sales: 100 })),
+  };
+  const e = collectRiskEvidence(ds, "Sales", ["Region"], []);
+  return e === null || e.integrity === null || e.integrity.duplicateRows === 0;
+})());
+
+check("negative amounts are named with their total", (() => {
+  const ds: Dataset = {
+    columns: ["region", "billing"],
+    rows: [...Array.from({ length: 50 }, (_, i) => ({ region: "N", billing: 100 + i })),
+           { region: "S", billing: -200 }],
+  };
+  const e = collectRiskEvidence(ds, "billing", ["region"], []);
+  return e !== null && describeRiskEvidence(e).includes("NEGATIVE AMOUNTS");
 })());
 
 console.log(`\n${pass} passed, ${fail} failed`);
