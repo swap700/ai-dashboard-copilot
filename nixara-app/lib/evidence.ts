@@ -305,38 +305,62 @@ export function buildEvidenceFacts(dataset: Dataset, opts: EvidenceFactOptions =
  *
  * THE BUG THIS EXISTS FOR. The tolerance was a flat 0.05, absolute, at every
  * magnitude. That asks a model to reproduce a thirteen-million-dollar figure
- * to the cent, which it will not do and which the summary does not even print
- * to the cent. On a real healthcare report the duplicate-billing total came
- * back unverified because Nixara computed $13,363,704.06 and the report said
- * $13,363,704.00 - a six-cent disagreement on thirteen million dollars,
- * flagged to the reader as a figure that could not be confirmed. The negative
- * total missed by 47 cents and the stated target by 20.
+ * to the cent, which it will not do and which the summary does not print to
+ * the cent either. On a real healthcare report the duplicate-billing total
+ * came back unverified because Nixara computed $13,363,704.06 and the report
+ * said $13,363,704.00 - six cents on thirteen million dollars, shown to the
+ * reader as a figure that could not be confirmed. The negative total missed
+ * by forty-seven cents and the stated target by twenty.
  *
- * Three allowances, and a match needs only the largest of them:
+ * Two allowances, and a match needs only the larger:
  *
- *   HALF THE LAST WRITTEN DIGIT. "20.3%" is anything from 20.25 to 20.35, and
- *   "$5" is anything from $4.50 to $5.50. This is what rounding means.
- *   ONE PART IN 100,000, for a non-percentage. Covers dropped cents on a
- *   large total without letting a different figure through: at thirteen
- *   million that is a hundred and thirty dollars, so 13,370,000 still fails.
- *   HALF A UNIT, for a non-percentage, so rounding to the nearest whole
- *   currency unit always passes.
+ *   ONE WHOLE UNIT, for a non-percentage. Covers dropped or rounded cents on
+ *   a total of any size, and nothing else: at thirteen million it is still
+ *   one dollar, so a fabricated 13,370,000 fails by six thousand.
+ *   HALF THE LAST WRITTEN DIGIT, scaled by any magnitude word. "20.3%" is
+ *   anything from 20.25 to 20.35. "$13.4 million" is anything from 13.35m to
+ *   13.45m, which is what writing it that way means.
  *
- * A percentage gets neither of the last two: percentages are small numbers
- * written to one or two decimals, and 20.3 against 20.8 is a real difference
- * that should be flagged.
+ * A percentage gets only the second: percentages are small numbers written to
+ * one or two decimals, and a whole-unit allowance would let 20.3 match 21.
+ *
+ * (An earlier version of this fix used a relative tolerance of one part in
+ * 100,000. That was looser than it needed to be - 134 dollars of slack at
+ * thirteen million - and the one-unit floor covers every real case without
+ * it. Kept as a note because loosening a verifier is a trade worth recording:
+ * every widening here lets some fabricated figure through, so each one has to
+ * buy back a false alarm that was doing more damage.)
  */
-function closeEnough(a: number, b: number, written?: string): boolean {
-  const diff = Math.abs(a - b);
-  // Half of the place value of the last digit the report actually wrote.
-  let precisionTol = 0;
-  if (written) {
-    const decimals = /\.(\d+)/.exec(written)?.[1].length ?? 0;
-    precisionTol = 0.5 * Math.pow(10, -decimals);
-  }
+const MAGNITUDE_SCALE: Record<string, number> = {
+  thousand: 1e3, k: 1e3,
+  million: 1e6, m: 1e6, mn: 1e6,
+  billion: 1e9, bn: 1e9, b: 1e9,
+  trillion: 1e12,
+};
+
+/** The magnitude word, if any, written straight after this figure. */
+function magnitudeAfter(written: string, context?: string): number {
+  if (!context) return 1;
+  const at = context.indexOf(written);
+  if (at < 0) return 1;
+  const after = context.slice(at + written.length, at + written.length + 14);
+  const word = /^\s*(thousand|million|billion|trillion|bn|mn|[kmb])\b/i.exec(after)?.[1]?.toLowerCase();
+  return word ? MAGNITUDE_SCALE[word] ?? 1 : 1;
+}
+
+function closeEnough(a: number, b: number, written?: string, context?: string): boolean {
   const isPercentToken = written !== undefined && written.trim().endsWith("%");
-  const magnitudeTol = isPercentToken ? 0 : Math.max(0.5, Math.abs(b) * 1e-5);
-  return diff <= Math.max(0.05, precisionTol, magnitudeTol);
+  // "13.4 million" is thirteen point four MILLION, and it is precise to a
+  // hundred thousand rather than to a tenth. The word scales both the figure
+  // and what counts as agreement with it.
+  const scale = written && !isPercentToken ? magnitudeAfter(written, context) : 1;
+  const target = b * scale;
+  const diff = Math.abs(a - target);
+
+  const decimals = written ? (/\.(\d+)/.exec(written)?.[1].length ?? 0) : 0;
+  const precisionTol = written ? 0.5 * Math.pow(10, -decimals) * scale : 0;
+  const unitTol = isPercentToken ? 0 : 1;
+  return diff <= Math.max(0.05, precisionTol, unitTol);
 }
 
 export type EvidenceResult =
@@ -367,13 +391,13 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   const dollarM = /\$([\d,]+\.\d{2})/.exec(text);
   if (dollarM) {
     const target = Number(dollarM[1].replace(/,/g, ""));
-    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, dollarM[1]));
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, dollarM[0], text));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   const pctM = /(\d+(?:\.\d+)?)%/.exec(text);
   if (pctM) {
     const target = Number(pctM[1]);
-    const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target, `${pctM[1]}%`));
+    const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target, pctM[0], text));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   // Bare decimal with no $ or % — e.g. "11.70 years", "3.03", "12.47".
@@ -383,7 +407,7 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   const bareM = new RegExp(`(${BARE_DECIMAL})(?!%)`).exec(text);
   if (bareM) {
     const target = Number(bareM[1]);
-    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, bareM[1]));
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, bareM[0], text));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   return { status: "none" };
@@ -394,7 +418,12 @@ function figurePattern(): RegExp {
   return new RegExp(String.raw`\$[\d,]+\.\d{2}|\d+(?:\.\d+)?%|` + BARE_DECIMAL, "g");
 }
 
-function figureIsVerified(token: string, facts: EvidenceFact[]): boolean {
+/**
+ * `context` is the whole line the token came from, so a magnitude word
+ * written after the figure ("13.4 million") can be seen. Without it every
+ * figure written that way is compared against its face value and fails.
+ */
+function figureIsVerified(token: string, facts: EvidenceFact[], context?: string): boolean {
   let value: number;
   let isPercent = false;
   if (token.startsWith("$")) {
@@ -405,7 +434,7 @@ function figureIsVerified(token: string, facts: EvidenceFact[]): boolean {
   } else {
     value = Number(token.replace(/,/g, ""));
   }
-  return facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value, token));
+  return facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value, token, context ?? token));
 }
 
 /**
@@ -427,7 +456,7 @@ export function findUnverifiedLines(text: string, facts: EvidenceFact[]): string
     const line = rawLine.trim();
     if (!line || seen.has(line)) continue;
     const tokens = [...line.matchAll(figurePattern())].map((m) => m[0]);
-    if (tokens.some((t) => !figureIsVerified(t, facts))) {
+    if (tokens.some((t) => !figureIsVerified(t, facts, line))) {
       seen.add(line);
       flagged.push(line);
     }
@@ -447,7 +476,7 @@ export function findUnverifiedFigures(text: string, facts: EvidenceFact[]): stri
     const token = m[0];
     if (seen.has(token)) continue;
     seen.add(token);
-    if (!figureIsVerified(token, facts)) out.push(token);
+    if (!figureIsVerified(token, facts, text)) out.push(token);
   }
   return out;
 }

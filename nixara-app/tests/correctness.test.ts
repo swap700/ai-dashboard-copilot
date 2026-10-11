@@ -805,6 +805,27 @@ check("but a genuinely different large figure does not", (() => {
   return findUnverifiedFigures("Duplicates carry $13,370,000.00 in billing.", facts).length === 1;
 })());
 
+check("the slack is one unit, not a share of the figure", (() => {
+  // Thirteen million with a hundred dollars of error is a different number.
+  const facts = [{ value: 13363704.06, isPercent: false, description: "Duplicate billing" }];
+  return findUnverifiedFigures("Duplicates carry $13,363,804.00 in billing.", facts).length === 1;
+})());
+
+check("a figure written in millions is held to that precision, not to the cent", (() => {
+  const facts = [{ value: 13363704.06, isPercent: false, description: "Duplicate billing" }];
+  return findUnverifiedFigures("Duplicates carry $13.4 million in billing.", facts).length === 0;
+})());
+
+check("and a wrong figure in millions is still caught", (() => {
+  const facts = [{ value: 13363704.06, isPercent: false, description: "Duplicate billing" }];
+  return findUnverifiedFigures("Duplicates carry $19.8 million in billing.", facts).length === 1;
+})());
+
+check("a percentage never gets the one-unit allowance", (() => {
+  const facts = [{ value: 20.26, isPercent: true, description: "Cigna share" }];
+  return findUnverifiedFigures("Cigna carries 21% of billing.", facts).length === 1;
+})());
+
 check("a percentage rounded to one decimal matches", (() => {
   const facts = [{ value: 20.26, isPercent: true, description: "Cigna share" }];
   return findUnverifiedFigures("Cigna carries 20.3% of billing.", facts).length === 0;

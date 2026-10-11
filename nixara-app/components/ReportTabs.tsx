@@ -355,13 +355,22 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
               </div>
             )}
 
-            {/* The Risk Report's computed half, above the model's prose. The
-                3x3 likelihood-by-impact matrix that used to sit here was
-                drawn from two words a model invented; everything in this
-                panel is arithmetic on the file, and a figure the file cannot
-                support simply does not render. */}
-            {active === "Risk Report" && dataset && (
-              <RiskEvidencePanel dataset={dataset} question={context.decision} />
+            {/* The computed half of every report, above the model's prose.
+                The 3x3 likelihood-by-impact matrix that used to sit on the
+                Risk Report was drawn from two words a model invented;
+                everything in this panel is arithmetic on the file, and a
+                figure the file cannot support does not render at all.
+
+                Charts only on the Risk Report, because that is the tab whose
+                subject is where the exposure sits. The other two get the
+                figures without them, so no tab looks thinner than its
+                neighbour. */}
+            {dataset && (
+              <RiskEvidencePanel
+                dataset={dataset}
+                question={context.decision}
+                variant={active === "Risk Report" ? "full" : "compact"}
+              />
             )}
             <ReportVisualBody sections={sections} />
 

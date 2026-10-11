@@ -215,7 +215,34 @@ export function measureDirection(dataset: Dataset, dateColumn: string, metric: s
   };
 }
 
+/**
+ * Integrity is the expensive half of the risk evidence: it builds a join key
+ * from every column of every row to find exact repeats, so it is O(rows x
+ * columns) with a string allocation per row. It also does not depend on the
+ * question, only on the dataset and the metric, so it is memoised per
+ * dataset object in a WeakMap - the same pattern resolveColumnRoles uses, and
+ * safe for the same reason: datasets are replaced rather than mutated, so a
+ * stale entry is unreachable and collectable.
+ *
+ * Without this it ran again on every report tab switch. On a 55,500-row file
+ * that is unnoticeable; on 500,000 rows it is a visible stall every time the
+ * user clicks between Executive Summary and Risk Report.
+ */
+const integrityCache = new WeakMap<Dataset, Map<string, IntegrityExposure | null>>();
+
 export function measureIntegrity(dataset: Dataset, metric: string): IntegrityExposure | null {
+  let byMetric = integrityCache.get(dataset);
+  if (!byMetric) {
+    byMetric = new Map();
+    integrityCache.set(dataset, byMetric);
+  }
+  if (byMetric.has(metric)) return byMetric.get(metric)!;
+  const result = computeIntegrity(dataset, metric);
+  byMetric.set(metric, result);
+  return result;
+}
+
+function computeIntegrity(dataset: Dataset, metric: string): IntegrityExposure | null {
   let total = 0;
   let negativeRows = 0;
   let negativeValue = 0;

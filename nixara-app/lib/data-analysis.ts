@@ -2283,7 +2283,29 @@ export function collectConfounding(
  * come from one computation. Two surfaces answering one question from two
  * definitions is this engine's most repeated fault.
  */
+/**
+ * Memoised per dataset and question. The panel calls this on every report tab
+ * switch, and it walks every row several times (concentration per label
+ * column, direction by month, integrity across all columns).
+ */
+const riskEvidenceCache = new WeakMap<Dataset, Map<string, ReturnType<typeof collectRiskEvidence>>>();
+
 export function collectRiskEvidenceFor(
+  dataset: Dataset,
+  question: string
+): ReturnType<typeof collectRiskEvidence> {
+  let byQuestion = riskEvidenceCache.get(dataset);
+  if (!byQuestion) {
+    byQuestion = new Map();
+    riskEvidenceCache.set(dataset, byQuestion);
+  }
+  if (byQuestion.has(question)) return byQuestion.get(question)!;
+  const result = computeRiskEvidenceFor(dataset, question);
+  byQuestion.set(question, result);
+  return result;
+}
+
+function computeRiskEvidenceFor(
   dataset: Dataset,
   question: string
 ): ReturnType<typeof collectRiskEvidence> {

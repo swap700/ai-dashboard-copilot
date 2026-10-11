@@ -30,6 +30,16 @@ interface Props {
   dataset: Dataset;
   /** What the user asked, so the panel measures the metric the report is about. */
   question: string;
+  /**
+   * "full" draws the curves; "compact" is tiles and the integrity bar only.
+   *
+   * The panel started on the Risk Report alone, which made the other two
+   * tabs look thinner by comparison the moment it shipped - the opposite of
+   * the problem it was built to solve. Every tab now carries the figures;
+   * only the Risk Report carries the charts, because that is the tab whose
+   * whole subject is where the exposure sits.
+   */
+  variant?: "full" | "compact";
 }
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -222,18 +232,21 @@ function IntegrityBar({
   );
 }
 
-export default function RiskEvidencePanel({ dataset, question }: Props) {
+export default function RiskEvidencePanel({ dataset, question, variant = "full" }: Props) {
   const evidence = useMemo(() => collectRiskEvidenceFor(dataset, question), [dataset, question]);
   if (!evidence) return null;
 
   const metricLabel = humanizeColumnName(evidence.metric);
   const concentrated = evidence.concentration.filter((c) => c.concentrated);
-  // The most lopsided column if any is, otherwise the closest to lopsided, so
-  // the curve is drawn either way: "nothing is concentrated" is a finding and
-  // deserves its picture as much as the opposite.
-  const curveFor = concentrated[0] ?? evidence.concentration[0] ?? null;
+  // Up to four curves, most lopsided first. One curve answered "is THIS
+  // column concentrated" and left the reader to wonder about the other seven;
+  // four answers "is anything here concentrated", which is the question. The
+  // list is already sorted by how far the top share sits above an even split.
+  const curves = (concentrated.length > 0 ? concentrated : evidence.concentration).slice(0, 4);
+  const curveFor = curves[0] ?? null;
   const integrity = evidence.integrity;
   const direction = evidence.direction;
+  const showCharts = variant === "full";
 
   return (
     <motion.section
@@ -303,8 +316,18 @@ export default function RiskEvidencePanel({ dataset, question }: Props) {
         )}
       </div>
 
+      {showCharts && curves.length > 0 && (
+        <div
+          className="grid gap-5 mb-5"
+          style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${curves.length > 2 ? 260 : 300}px, 1fr))` }}
+        >
+          {curves.map((c) => (
+            <ConcentrationCurve key={c.column} c={c} metric={evidence.metric} />
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
-        {curveFor && <ConcentrationCurve c={curveFor} metric={evidence.metric} />}
         {integrity && (
           <div className="flex flex-col gap-4">
             <IntegrityBar
@@ -330,10 +353,14 @@ export default function RiskEvidencePanel({ dataset, question }: Props) {
         )}
       </div>
 
-      {curveFor && !curveFor.concentrated && (
+      {curveFor && !curveFor.concentrated && evidence.concentration.every((c) => !c.concentrated) && (
         <p className="text-text-mute text-[0.8rem] leading-relaxed mt-4 pt-3 border-t border-border">
-          <b className="text-text">Nothing in this file is concentrated enough to target.</b> The top{" "}
-          {curveFor.topFifthCount} of {curveFor.levels}{" "}
+          <b className="text-text">
+            Nothing in this file is concentrated enough to target
+          </b>
+          , across all {evidence.concentration.length} groupable columns. The widest of them is{" "}
+          {humanizeColumnName(curveFor.column).toLowerCase()}, where the top {curveFor.topFifthCount} of{" "}
+          {curveFor.levels}{" "}
           {humanizeColumnName(curveFor.column).toLowerCase()} values carry {pct(curveFor.topFifthShare)},
           against {pct(curveFor.topFifthCount / curveFor.levels)} if the total were spread evenly. Picking
           a leader from a list this flat would be reading noise.
