@@ -27,14 +27,22 @@
 
 import {
   aggregateBy,
+  breakdownColumns,
   categoricalColumns,
+  collectConfounding,
+  columnsWithRole,
   computeDerivedFigures,
+  hasUsableGroupSize,
   looksLikeProportion,
   numericStats,
   rankedBusinessMetrics,
   smartAgg,
+  columnMatchScore,
+  tokenize,
   type Dataset,
 } from "./data-analysis";
+import { collectRiskEvidence } from "./risk-evidence";
+import { computeScenarios } from "./scenario";
 
 /**
  * A bare decimal, but never one that is part of a date or a version string.
@@ -91,7 +99,138 @@ function pushColumnStatFacts(facts: EvidenceFact[], col: string, values: number[
  * already hardened against multi-hundred-thousand-row files (see their
  * bug-fix notes), so keeping this bounded matters on the same files.
  */
-export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
+/**
+ * Figures Nixara computed itself, outside the per-column statistics.
+ *
+ * THE BUG THIS EXISTS FOR. The summary hands the model a RISK EVIDENCE block,
+ * a TARGET ARITHMETIC block and a CONTROLLED COMPARISON block, and instructs
+ * it to copy those figures exactly rather than recompute them. The model did
+ * exactly that. The evidence checker then knew nothing about any of them, so
+ * it marked Nixara's own arithmetic "could not be confirmed against your
+ * data" and the verify-and-correct pass DELETED some of it.
+ *
+ * On a real healthcare report that produced: "$13,363,704.00 — unverified"
+ * for the duplicate billing Nixara had computed, "$53,925.00 — unverified"
+ * for the negative total it had computed, and a correction notice saying it
+ * had removed 0.9% from the first draft, which was its own duplicate share.
+ * Three of the most solid numbers in the report, each flagged as doubtful by
+ * the component whose whole job is telling the reader which numbers to
+ * trust. For a product whose argument is "every figure is worth checking",
+ * nothing is more damaging than failing to recognise its own.
+ */
+function pushComputedBlockFacts(
+  facts: EvidenceFact[],
+  dataset: Dataset,
+  question: string,
+  consequenceColumns: string[]
+): void {
+  const { primaryMetric } = rankedBusinessMetrics(dataset);
+  if (!primaryMetric) return;
+
+  const labelCols = breakdownColumns(dataset).filter((c) => hasUsableGroupSize(dataset, c));
+  const lowCardCats = labelCols.filter((col) => {
+    const u = new Set(dataset.rows.map((r) => r[col])).size;
+    return u >= 2 && u <= 20;
+  });
+
+  // ── RISK EVIDENCE ────────────────────────────────────────────────────────
+  const evidence = collectRiskEvidence(
+    dataset,
+    primaryMetric,
+    labelCols,
+    columnsWithRole(dataset, "date")
+  );
+  if (evidence) {
+    for (const c of evidence.concentration) {
+      facts.push({ value: round2(c.topShare * 100), isPercent: true,
+        description: `${c.topLevel} share of total ${evidence.metric}`, formula: "group total / overall total" });
+      facts.push({ value: round2(c.topFiveShare * 100), isPercent: true,
+        description: `Top five ${c.column} share of total ${evidence.metric}`, formula: "top five total / overall total" });
+      facts.push({ value: round2(c.topFifthShare * 100), isPercent: true,
+        description: `Top ${c.topFifthCount} of ${c.levels} ${c.column} share of total ${evidence.metric}`, formula: "top fifth total / overall total" });
+      facts.push({ value: round2(c.evenShare * 100), isPercent: true,
+        description: `An even split across ${c.levels} ${c.column} values` });
+    }
+    const d = evidence.direction;
+    if (d) {
+      facts.push({ value: round2(d.firstValue), isPercent: false, description: `Total ${d.metric} in ${d.firstPeriod}` });
+      facts.push({ value: round2(d.lastValue), isPercent: false, description: `Total ${d.metric} in ${d.lastPeriod}` });
+      facts.push({ value: round2(d.change * 100), isPercent: true,
+        description: `Change in total ${d.metric} from ${d.firstPeriod} to ${d.lastPeriod}`, formula: "(last - first) / first" });
+      facts.push({ value: round2(Math.abs(d.change * 100)), isPercent: true,
+        description: `Change in total ${d.metric} from ${d.firstPeriod} to ${d.lastPeriod}`, formula: "(last - first) / first" });
+      facts.push({ value: d.lastPeriodRows, isPercent: false, description: `Rows in the latest period, ${d.lastPeriod}` });
+      facts.push({ value: d.typicalPeriodRows, isPercent: false, description: `Rows in a typical period of ${d.dateColumn}` });
+    }
+    const i = evidence.integrity;
+    if (i) {
+      // Both signs for the negative total: the model writes it as "-$53,925"
+      // in one sentence and "$53,925" in the next, and both are the same fact.
+      facts.push({ value: round2(i.duplicateValue), isPercent: false,
+        description: `${i.duplicateRows.toLocaleString()} duplicate rows carry this much ${i.metric}`, formula: "sum of the metric on every repeat beyond the first" });
+      facts.push({ value: round2(i.total === 0 ? 0 : (i.duplicateValue / i.total) * 100), isPercent: true,
+        description: `Duplicate rows as a share of total ${i.metric}`, formula: "duplicate total / overall total" });
+      facts.push({ value: round2(i.negativeValue), isPercent: false,
+        description: `${i.negativeRows.toLocaleString()} rows hold a negative ${i.metric}, totalling this` });
+      facts.push({ value: round2(Math.abs(i.negativeValue)), isPercent: false,
+        description: `${i.negativeRows.toLocaleString()} rows hold a negative ${i.metric}, totalling this` });
+      facts.push({ value: i.duplicateRows, isPercent: false, description: `Exact duplicate rows` });
+      facts.push({ value: i.negativeRows, isPercent: false, description: `Rows with a negative ${i.metric}` });
+      facts.push({ value: round2(i.total), isPercent: false, description: `Total ${i.metric}` });
+    }
+  }
+
+  // ── TARGET ARITHMETIC ────────────────────────────────────────────────────
+  if (question.trim() !== "") {
+    const scenario = computeScenarios(dataset, primaryMetric, labelCols, question);
+    if (scenario) {
+      facts.push({ value: round2(scenario.overallTotal), isPercent: false, description: `Total ${scenario.metric}` });
+      facts.push({ value: round2(scenario.overallMean), isPercent: false, description: `Average ${scenario.metric} per row` });
+      facts.push({ value: round2(scenario.targetTotal), isPercent: false,
+        description: `The stated target in ${scenario.metric}`, formula: "total x the percentage asked for" });
+      facts.push({ value: round2(scenario.targetPerRow), isPercent: false,
+        description: `The stated target per row`, formula: "target total / rows" });
+      facts.push({ value: round2(scenario.target.fraction * 100), isPercent: true, description: `The reduction the question asks for` });
+      for (const lever of scenario.levers) {
+        facts.push({ value: round2(lever.gapPerRow), isPercent: false,
+          description: `${lever.label}: gap between ${lever.worse} and ${lever.better} per affected row` });
+        facts.push({ value: round2(lever.valuePerRow), isPercent: false,
+          description: `${lever.label}: value per row of the whole file if that gap closed` });
+        facts.push({ value: round2(lever.shareOfTotal * 100), isPercent: true,
+          description: `${lever.label}: share of total ${scenario.metric} if that gap closed` });
+        facts.push({ value: round2(lever.coverOfTarget * 100), isPercent: true,
+          description: `${lever.label}: share of the stated target it would cover` });
+        facts.push({ value: round2(lever.affectedShare * 100), isPercent: true,
+          description: `${lever.label}: share of rows in ${lever.worse}` });
+      }
+    }
+  }
+
+  // ── CONTROLLED COMPARISON ────────────────────────────────────────────────
+  if (lowCardCats.length > 0) {
+    for (const c of collectConfounding(dataset, question, consequenceColumns)) {
+      facts.push({ value: round2(c.rawGap), isPercent: false,
+        description: `${c.group}: raw gap between ${c.highGroup} and ${c.lowGroup} on ${c.metric}` });
+      facts.push({ value: round2(c.adjustedGap), isPercent: false,
+        description: `${c.group}: adjusted gap between ${c.highGroup} and ${c.lowGroup} on ${c.metric}`, formula: "least squares, holding the other columns steady" });
+      facts.push({ value: round2(c.adjustedGapLow), isPercent: false, description: `${c.group}: low end of the 95% range` });
+      facts.push({ value: round2(c.adjustedGapHigh), isPercent: false, description: `${c.group}: high end of the 95% range` });
+      if (c.adjustedGapExcludingMediators !== null) {
+        facts.push({ value: round2(c.adjustedGapExcludingMediators), isPercent: false,
+          description: `${c.group}: adjusted gap with the possible consequences left out` });
+      }
+    }
+  }
+}
+
+export interface EvidenceFactOptions {
+  /** What the user asked. The target arithmetic and the controlled comparison both depend on it. */
+  question?: string;
+  /** Columns the user marked as consequences, so the facts match the comparison that was run. */
+  consequenceColumns?: string[];
+}
+
+export function buildEvidenceFacts(dataset: Dataset, opts: EvidenceFactOptions = {}): EvidenceFact[] {
   const facts: EvidenceFact[] = [];
   // Same ranking buildDataSummary() uses to decide which metrics the model
   // sees first in BREAKDOWN/CROSS-BREAKDOWN sections (see rankedBusinessMetrics
@@ -112,12 +251,26 @@ export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
     pushColumnStatFacts(facts, col, values);
   }
 
+  // Ranked by the question before the cap, exactly as buildDataSummary ranks
+  // them. Taking the first four in FILE order excluded Admission Type on a
+  // real healthcare file -- a column the question named, whose breakdown the
+  // summary therefore showed and whose figures the report duly quoted, every
+  // one of them coming back unverified because the checker had never built a
+  // fact for it. This is the same fault the metric list was fixed for in
+  // October: the checker and the summary ranking differently.
+  const question = opts.question ?? "";
+  const qTokens = question.trim() === "" ? null : new Set(tokenize(question));
   const lowCardCats = catCols
     .filter((col) => {
       const u = new Set(dataset.rows.map((r) => r[col])).size;
       return u >= 2 && u <= 20;
     })
-    .slice(0, 4);
+    .sort((a, b) =>
+      qTokens === null
+        ? 0
+        : columnMatchScore(dataset, b, question, qTokens) - columnMatchScore(dataset, a, question, qTokens)
+    )
+    .slice(0, 6);
 
   for (const cat of lowCardCats) {
     for (const metric of metricCols.slice(0, 4)) {
@@ -141,11 +294,49 @@ export function buildEvidenceFacts(dataset: Dataset): EvidenceFact[] {
     facts.push({ value: d.value, isPercent: true, description: d.label, formula: d.formula });
   }
 
+  // And every figure the judgement blocks put in front of the model.
+  pushComputedBlockFacts(facts, dataset, opts.question ?? "", opts.consequenceColumns ?? []);
+
   return facts;
 }
 
-function closeEnough(a: number, b: number): boolean {
-  return Math.abs(a - b) < 0.05;
+/**
+ * Does a cited figure match a computed one?
+ *
+ * THE BUG THIS EXISTS FOR. The tolerance was a flat 0.05, absolute, at every
+ * magnitude. That asks a model to reproduce a thirteen-million-dollar figure
+ * to the cent, which it will not do and which the summary does not even print
+ * to the cent. On a real healthcare report the duplicate-billing total came
+ * back unverified because Nixara computed $13,363,704.06 and the report said
+ * $13,363,704.00 - a six-cent disagreement on thirteen million dollars,
+ * flagged to the reader as a figure that could not be confirmed. The negative
+ * total missed by 47 cents and the stated target by 20.
+ *
+ * Three allowances, and a match needs only the largest of them:
+ *
+ *   HALF THE LAST WRITTEN DIGIT. "20.3%" is anything from 20.25 to 20.35, and
+ *   "$5" is anything from $4.50 to $5.50. This is what rounding means.
+ *   ONE PART IN 100,000, for a non-percentage. Covers dropped cents on a
+ *   large total without letting a different figure through: at thirteen
+ *   million that is a hundred and thirty dollars, so 13,370,000 still fails.
+ *   HALF A UNIT, for a non-percentage, so rounding to the nearest whole
+ *   currency unit always passes.
+ *
+ * A percentage gets neither of the last two: percentages are small numbers
+ * written to one or two decimals, and 20.3 against 20.8 is a real difference
+ * that should be flagged.
+ */
+function closeEnough(a: number, b: number, written?: string): boolean {
+  const diff = Math.abs(a - b);
+  // Half of the place value of the last digit the report actually wrote.
+  let precisionTol = 0;
+  if (written) {
+    const decimals = /\.(\d+)/.exec(written)?.[1].length ?? 0;
+    precisionTol = 0.5 * Math.pow(10, -decimals);
+  }
+  const isPercentToken = written !== undefined && written.trim().endsWith("%");
+  const magnitudeTol = isPercentToken ? 0 : Math.max(0.5, Math.abs(b) * 1e-5);
+  return diff <= Math.max(0.05, precisionTol, magnitudeTol);
 }
 
 export type EvidenceResult =
@@ -176,13 +367,13 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   const dollarM = /\$([\d,]+\.\d{2})/.exec(text);
   if (dollarM) {
     const target = Number(dollarM[1].replace(/,/g, ""));
-    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, dollarM[1]));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   const pctM = /(\d+(?:\.\d+)?)%/.exec(text);
   if (pctM) {
     const target = Number(pctM[1]);
-    const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target));
+    const fact = facts.find((f) => f.isPercent && closeEnough(f.value, target, `${pctM[1]}%`));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   // Bare decimal with no $ or % — e.g. "11.70 years", "3.03", "12.47".
@@ -192,7 +383,7 @@ export function findEvidence(text: string, facts: EvidenceFact[]): EvidenceResul
   const bareM = new RegExp(`(${BARE_DECIMAL})(?!%)`).exec(text);
   if (bareM) {
     const target = Number(bareM[1]);
-    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target));
+    const fact = facts.find((f) => !f.isPercent && closeEnough(f.value, target, bareM[1]));
     return fact ? { status: "matched", fact } : { status: "unverified" };
   }
   return { status: "none" };
@@ -214,7 +405,7 @@ function figureIsVerified(token: string, facts: EvidenceFact[]): boolean {
   } else {
     value = Number(token.replace(/,/g, ""));
   }
-  return facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value));
+  return facts.some((f) => f.isPercent === isPercent && closeEnough(f.value, value, token));
 }
 
 /**

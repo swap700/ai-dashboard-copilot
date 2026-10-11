@@ -8,7 +8,7 @@
  * with a finance-trained reader.
  */
 
-import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, isNonMetricName, groupingColumns, hasUsableGroupSize, dashboardScore, type Dataset, type Row, smartAggBasis } from "../lib/data-analysis.ts";
+import { smartAgg, numericStats, aggregateBy, pairwiseCorrelation, humanizeColumnName, schemaOverlapRatio, SCHEMA_OVERLAP_THRESHOLD, looksLikeBoundedCount, buildDataSummary, detectMissingValuesByColumn, dashboardScoreBreakdown, describeAnomalies, detectAnomalies, computeDerivedFigures, numericColumns, numericDensity, businessMetricColumns, isNonQuantityColumn, pickChartSpecs, aggWord, describeUnmeasuredColumns, MIN_METRIC_COVERAGE, isNonMetricName, groupingColumns, hasUsableGroupSize, dashboardScore, type Dataset, type Row, smartAggBasis, collectRiskEvidenceFor } from "../lib/data-analysis.ts";
 import { buildEvidenceFacts, findUnverifiedLines, findUnverifiedFigures } from "../lib/evidence.ts";
 import { suggestOutcomeRating } from "../lib/outcome-rating.ts";
 
@@ -726,6 +726,94 @@ check("an empty dataset reports nothing", describeUnmeasuredColumns({ columns: [
 check("the coverage bar the panel quotes is the one the filter uses", MIN_METRIC_COVERAGE === 0.8,
   String(MIN_METRIC_COVERAGE));
 
+
+
+// ── The checker must recognise Nixara's own arithmetic ─────────────────────
+// A real healthcare report flagged $13,363,704.00, $53,925.00 and 0.9% as
+// "could not be confirmed against your data", and the verify-and-correct
+// pass DELETED the 0.9%. All three were figures Nixara had computed itself
+// and instructed the model to copy. For a product whose argument is "every
+// figure is worth checking", nothing is more damaging than failing to
+// recognise its own.
+console.log("evidence - Nixara's own figures are verifiable");
+
+const billingFile = (): Dataset => {
+  const cols = ["Name", "Gender", "Medical Condition", "Insurance Provider", "Admission Type",
+                "Doctor", "Hospital", "Medication", "Test Results", "Billing Amount"];
+  const rows: Dataset["rows"] = Array.from({ length: 600 }, (_, i) => ({
+    Name: `P${i}`,
+    Gender: ["Male", "Female"][i % 2],
+    "Medical Condition": ["Cancer", "Obesity", "Diabetes"][i % 3],
+    "Insurance Provider": ["Cigna", "Aetna", "Medicare"][i % 3],
+    "Admission Type": ["Elective", "Urgent", "Emergency"][i % 3],
+    Doctor: `D${i % 40}`,
+    Hospital: `H${i % 25}`,
+    Medication: ["Aspirin", "Ibuprofen"][i % 2],
+    "Test Results": ["Normal", "Abnormal"][i % 2],
+    "Billing Amount": 20000 + ((i * 977) % 15000),
+  }));
+  // Exact duplicates and negatives, the two integrity findings.
+  for (let i = 0; i < 12; i++) rows.push({ ...rows[i] });
+  for (let i = 0; i < 5; i++) rows[i * 7]["Billing Amount"] = -400;
+  return { columns: cols, rows };
+};
+
+const billingQuestion = "We need to cut billing exposure by 10% next year. Which condition, insurer or admission type should we target first?";
+
+check("the duplicate total Nixara computed is verifiable", (() => {
+  const ds = billingFile();
+  const facts = buildEvidenceFacts(ds, { question: billingQuestion });
+  const ev = collectRiskEvidenceFor(ds, billingQuestion);
+  if (!ev?.integrity) return false;
+  const written = `$${ev.integrity.duplicateValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return findUnverifiedFigures(`Duplicates carry ${written} of billing.`, facts).length === 0;
+})());
+
+check("and so is the negative total, written without its cents", (() => {
+  const ds = billingFile();
+  const facts = buildEvidenceFacts(ds, { question: billingQuestion });
+  const ev = collectRiskEvidenceFor(ds, billingQuestion);
+  if (!ev?.integrity) return false;
+  const rounded = Math.round(Math.abs(ev.integrity.negativeValue));
+  return findUnverifiedFigures(`Negative amounts total -$${rounded.toLocaleString("en-US")}.00`, facts).length === 0;
+})());
+
+check("the stated target is verifiable", (() => {
+  const ds = billingFile();
+  const facts = buildEvidenceFacts(ds, { question: billingQuestion });
+  const total = ds.rows.reduce((a, r) => a + (typeof r["Billing Amount"] === "number" ? (r["Billing Amount"] as number) : 0), 0);
+  const target = Math.round(total * 0.1);
+  return findUnverifiedFigures(`The target is $${target.toLocaleString("en-US")}.00`, facts).length === 0;
+})());
+
+check("a column the question names gets breakdown facts even if it is late in the file", (() => {
+  const ds = billingFile();
+  const facts = buildEvidenceFacts(ds, { question: billingQuestion });
+  const elective = aggregateBy(ds, "Admission Type", "Billing Amount").points.find((p) => p.key === "Elective");
+  if (!elective) return false;
+  const written = `$${elective.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return findUnverifiedFigures(`Elective at ${written}`, facts).length === 0;
+})());
+
+check("dropped cents on a large figure still match", (() => {
+  const facts = [{ value: 13363704.06, isPercent: false, description: "Duplicate billing" }];
+  return findUnverifiedFigures("Duplicates carry $13,363,704.00 in billing.", facts).length === 0;
+})());
+
+check("but a genuinely different large figure does not", (() => {
+  const facts = [{ value: 13363704.06, isPercent: false, description: "Duplicate billing" }];
+  return findUnverifiedFigures("Duplicates carry $13,370,000.00 in billing.", facts).length === 1;
+})());
+
+check("a percentage rounded to one decimal matches", (() => {
+  const facts = [{ value: 20.26, isPercent: true, description: "Cigna share" }];
+  return findUnverifiedFigures("Cigna carries 20.3% of billing.", facts).length === 0;
+})());
+
+check("a percentage half a point out does NOT match", (() => {
+  const facts = [{ value: 20.26, isPercent: true, description: "Cigna share" }];
+  return findUnverifiedFigures("Cigna carries 20.8% of billing.", facts).length === 1;
+})());
 
 // ── Aggregation across languages ────────────────────────────────────────────
 // The sum/mean lexicon was English only, and the default for an unrecognised

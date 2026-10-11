@@ -122,7 +122,8 @@ CRITICAL RULES for risk identification:
 — Only the figures Nixara marked CONCENTRATED support a concentration risk.
 — Where the summary says NO DIRECTION AVAILABLE, do not describe anything as rising, falling, worsening, deteriorating, accelerating or a trend. A snapshot has no direction.
 — Where the summary marks a PARTIAL PERIOD, never compare it against a complete one and never report it as a decline.
-— Any claim you keep that does not trace to a figure must carry the exact words "assumption, not from your data" in the same sentence. Use this sparingly; it is not a licence to guess.)
+— Any claim you keep that does not trace to a figure must carry the exact words "assumption, not from your data" in the same sentence. Use this sparingly; it is not a licence to guess. Those words belong inside a Signal or a Consequence sentence. NEVER put them in the Exposure field and never use them as a risk name: Exposure is always a figure, and a risk whose exposure would be an assumption is a risk to drop.
+— Report every risk you can trace, up to 3. If you can only trace one or two, give one or two and stop; Nixara tells the reader why the list is short, so you do not need to explain it.)
 
 Early Warning Signs
 (3-4 specific metrics to monitor as leading indicators. Include threshold values where the data supports them. Each metric must be a direct business measure, described in plain business language — write "number of unique customers" not "distinct count of Customer ID". Never list a correlation coefficient or other statistical output as an early warning sign.)

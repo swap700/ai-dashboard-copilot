@@ -9,11 +9,19 @@ import { dashboardScore, describeUnmeasuredColumns, detectMissingValuesByColumn,
 import type { ReportSetupValue } from "./ReportSetup";
 import DecisionPanel from "./DecisionPanel";
 import ReportVisualBody from "./ReportVisual";
+import RiskEvidencePanel from "./RiskEvidencePanel";
 
 interface Props {
   reports: ReportSet;
   errors: ReportFailures;
   context: ReportSetupValue & { datasetName: string };
+  /**
+   * Columns the user marked as consequences in ConfoundingPanel. Needed here
+   * because the evidence facts have to be built from the SAME inputs the
+   * summary was, or the checker will not recognise figures it handed the
+   * model itself.
+   */
+  consequenceColumns?: string[];
   /**
    * Evidence Trail needs the source rows to rebuild the same stats the report
    * was generated from. Optional so ReportTabs still renders (minus evidence
@@ -58,12 +66,18 @@ async function downloadExport(
   URL.revokeObjectURL(url);
 }
 
-export default function ReportTabs({ reports, errors, context, dataset, jumpToDataQuality }: Props) {
+export default function ReportTabs({ reports, errors, context, dataset, jumpToDataQuality, consequenceColumns = [] }: Props) {
   // Computed once per dataset (not per report/tab render) — buildEvidenceFacts
   // walks every business-metric column plus a few category breakdowns, which
   // is the same order of work buildDataSummary already does at generate time,
   // not something to redo on every tab switch.
-  const evidenceFacts = useMemo(() => (dataset ? buildEvidenceFacts(dataset) : []), [dataset]);
+  const evidenceFacts = useMemo(
+    () =>
+      dataset
+        ? buildEvidenceFacts(dataset, { question: context.decision, consequenceColumns })
+        : [],
+    [dataset, context.decision, consequenceColumns]
+  );
 
   // The Risk Report's Data Quality section is fed this directly instead of
   // trusting the model to have restated it correctly in its own prose — see
@@ -341,6 +355,14 @@ export default function ReportTabs({ reports, errors, context, dataset, jumpToDa
               </div>
             )}
 
+            {/* The Risk Report's computed half, above the model's prose. The
+                3x3 likelihood-by-impact matrix that used to sit here was
+                drawn from two words a model invented; everything in this
+                panel is arithmetic on the file, and a figure the file cannot
+                support simply does not render. */}
+            {active === "Risk Report" && dataset && (
+              <RiskEvidencePanel dataset={dataset} question={context.decision} />
+            )}
             <ReportVisualBody sections={sections} />
 
             <div className="grid grid-cols-2 gap-3 mt-4">

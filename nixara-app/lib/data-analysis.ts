@@ -496,7 +496,7 @@ export function outcomeRegion(question: string): string {
  *        data rather than a word list.
  *   1/token  shared words, which is what the old score did on its own
  */
-function columnMatchScore(
+export function columnMatchScore(
   dataset: Dataset,
   column: string,
   question: string,
@@ -2272,6 +2272,40 @@ export function collectConfounding(
     if (r && (r.confounders.length > 0 || r.categoricalConfounders.length > 0)) out.push(r);
   }
   return out;
+}
+
+
+/**
+ * The risk evidence for a dataset, computed the same way the summary does.
+ *
+ * Exported for the same reason collectConfounding is: the Risk Report panel
+ * draws these figures and the prose beside it quotes them, and the two must
+ * come from one computation. Two surfaces answering one question from two
+ * definitions is this engine's most repeated fault.
+ */
+export function collectRiskEvidenceFor(
+  dataset: Dataset,
+  question: string
+): ReturnType<typeof collectRiskEvidence> {
+  const businessMetrics = businessMetricColumns(dataset);
+  if (businessMetrics.length === 0) return null;
+
+  const { primaryMetric: ranked } = rankedBusinessMetrics(dataset);
+  let primaryMetric = ranked;
+  if (question.trim() !== "") {
+    const outcomeText = outcomeRegion(question);
+    const outcomeTokens = new Set(tokenize(outcomeText));
+    const scoreOf = (c: string) => columnMatchScore(dataset, c, outcomeText, outcomeTokens);
+    const named = businessMetrics
+      .filter((m) => scoreOf(m) > 0)
+      .sort((a, b) => scoreOf(b) - scoreOf(a));
+    const pick = named.find((m) => !looksLikeBoundedCount(dataset, m)) ?? named[0];
+    if (pick) primaryMetric = pick;
+  }
+  if (!primaryMetric) return null;
+
+  const labelCols = breakdownColumns(dataset).filter((c) => hasUsableGroupSize(dataset, c));
+  return collectRiskEvidence(dataset, primaryMetric, labelCols, columnsWithRole(dataset, "date"));
 }
 
 /** Mirrors build_data_summary: produces the text block sent to the AI report generator. */

@@ -189,17 +189,18 @@ function parseActionVerb(text: string): ActionItem["verb"] {
  * doesn't need that restated on each one; the struck-through number itself
  * (see emphasizeParts/ReportVisual.tsx) is still what marks WHICH one.
  */
+/**
+ * How many figures the banner is about to list.
+ *
+ * Derived from the list rather than counted separately. The two used to be
+ * computed independently and drifted the moment exposure was added to one of
+ * them: a real report's banner read "1 figure in this version could not be
+ * confirmed" directly above a list of two. A banner that cannot count its own
+ * list is worse than no banner, because it is the component the reader is
+ * meant to use to decide what to trust.
+ */
 export function countUnverifiedFigures(sections: VisualSection[]): number {
-  let count = 0;
-  for (const s of sections) {
-    if (s.kind === "quickWins") {
-      count += s.items.filter((i) => i.evidence.status === "unverified").length;
-    } else if (s.kind === "topRisks") {
-      count += s.risks.filter((r) => r.signalEvidence.status === "unverified").length;
-      count += s.risks.filter((r) => r.consequenceEvidence.status === "unverified").length;
-    }
-  }
-  return count;
+  return listUnverifiedFigures(sections).length;
 }
 
 export interface UnverifiedFigure {
@@ -483,9 +484,10 @@ function parseSection(
       const flush = (c: Partial<RiskCard>) => {
         risks.push({
           // With no name line, the exposure sentence is the best headline
-          // available. The card detects that the two are the same and renders
-          // the sentence once, keeping the bar and the evidence tag.
-          name: c.name ?? c.exposure ?? "Risk",
+          // available, then the signal. The card detects when the headline
+          // IS the exposure and renders the sentence once, keeping the bar
+          // and the evidence tag.
+          name: c.name ?? c.exposure ?? c.signal ?? "Risk",
           exposure: c.exposure ?? null,
           exposureEvidence: c.exposure ? findEvidence(c.exposure, evidenceFacts) : { status: "none" as const },
           exposureShare: c.exposure ? exposureShareOf(c.exposure, evidenceFacts) : null,
@@ -523,7 +525,17 @@ function parseSection(
         // bar and no evidence tag. Open a risk instead of losing the field.
         if (!cur && (exposureM || signalM || consequenceM)) cur = {};
 
-        if (exposureM && cur) { cur.exposure = exposureM[1].trim(); continue; }
+        if (exposureM && cur) {
+          // An Exposure has to be a FIGURE. The prompt offers the phrase
+          // "assumption, not from your data" for a claim that cannot be
+          // traced, and a model put that phrase in the Exposure field, where
+          // it became the risk's headline: a card titled "assumption, not
+          // from your data". A field with no digit in it is not an exposure,
+          // so it is dropped rather than shown as one.
+          const text = exposureM[1].trim();
+          if (/\d/.test(text)) cur.exposure = text;
+          continue;
+        }
         if (ratingM && cur) continue;
         if (signalM && cur) { cur.signal = signalM[1].trim(); continue; }
         if (consequenceM && cur) { cur.consequence = consequenceM[1].trim(); continue; }

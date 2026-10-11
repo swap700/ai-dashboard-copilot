@@ -332,10 +332,21 @@ function TopRisksSection({ heading, risks }: Extract<VisualSection, { kind: "top
           </div>
         </div>
       ))}
+      {/* A short list is a decision, not a gap. The prompt drops any risk it
+          cannot trace to a figure, so a two-risk report means two risks were
+          traceable - which reads as a broken report unless it is said. */}
+      {risks.length < 3 && (
+        <p className="text-text-mute text-[0.8rem] leading-relaxed pt-3 mt-1 border-t border-border">
+          <b className="text-text">
+            {risks.length === 1 ? "One risk" : `${risks.length} risks`}, not three.
+          </b>{" "}
+          Nixara lists a risk only where it traces to a figure in your file. The rest of what could be
+          said here would be guesswork, so it is not said.
+        </p>
+      )}
     </Card>
   );
 }
-
 function EarlyWarningSection({ heading, items }: Extract<VisualSection, { kind: "earlyWarning" }>) {
   return (
     <Card heading={heading}>

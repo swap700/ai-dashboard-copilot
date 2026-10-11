@@ -115,7 +115,14 @@ export default function DashboardPage() {
       // sending it lets the server run the identical check and give the
       // model one chance to correct a fabricated figure before the report
       // is ever shown, instead of only flagging it after the fact.
-      const evidenceFacts = buildEvidenceFacts(dataset);
+      // The question and the consequence marks decide what the TARGET
+      // ARITHMETIC and CONTROLLED COMPARISON blocks contain, so the checker
+      // has to be built from the same two inputs or it will not recognise
+      // the figures it is about to be asked to verify.
+      const evidenceFacts = buildEvidenceFacts(dataset, {
+        question: setup.decision,
+        consequenceColumns,
+      });
 
       // One UUID per button click - shared across all report-type calls so the
       // server counts this as a single generate SESSION, not 3 separate uses.
@@ -305,6 +312,7 @@ export default function DashboardPage() {
               errors={reportErrors}
               context={{ ...setup, datasetName: fileName }}
               dataset={dataset}
+              consequenceColumns={consequenceColumns}
               jumpToDataQuality={dqJumpToken}
             />
           )}
